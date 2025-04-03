@@ -591,6 +591,7 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftFLIMGraph *graph,
     // extract neighbor information and compute the iftDataSet
     iftDataSet *Z = iftGFLIMExtractMarkerDataSet(graph, S, kernel_size, attention_opt, aggregation_opt);
 
+    // not using it
     if (dimReduction == IFT_GFLIM_DIMREDUCTION_PCA)
     {
         if (ncomponents < 1)
@@ -598,6 +599,8 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftFLIMGraph *graph,
         else
             ncomponents = iftMin(ncomponents, Z->nfeats);
     }
+    
+    // not using it
     if (dimReduction == IFT_GFLIM_DIMREDUCTION_TSNE && (ncomponents < 2 || ncomponents > 3))
         iftError("Invalid number of components for tSNE: %d. The options are 2 or 3", __func__, ncomponents);
 

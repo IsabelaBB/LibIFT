@@ -546,9 +546,9 @@ iftMatrix *ConsensusKernelbankGraph(iftFileSet *fs_seeds,
  * @param layer_index layer index
  * @param arch architecture
  * @param output_dir directory to write the output files
- * @note The activation files must be graphs in .json format
- * @note The seeds files must be in .txt format
- * @note The output_dir must be a valid directory
+ * @note The input files must be graphs in .json format
+ * @note The seeds files must be in .txt format (*-seeds_graph.txt)
+ * @note The output_dir must be an existing directory
  * @note The architecture must be in .json format
  */
 void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
