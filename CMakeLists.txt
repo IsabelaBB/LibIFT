@@ -117,4 +117,4 @@ install (TARGETS ift
         ARCHIVE DESTINATION lib
         LIBRARY DESTINATION lib)
 
-add_subdirectory(demo)
+#add_subdirectory(demo)
