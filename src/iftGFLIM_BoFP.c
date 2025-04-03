@@ -1,0 +1,2718 @@
+/**
+ * @file iftGFLIM_BoFP.c
+ * @author Isabela Borlido Barcelos
+ * @date dec 2024
+ * @brief GFLIM: Graph-based Feature Learning From Image Markers -- version with Bag of Feature Points (BoFP).
+ * @note Programs:
+ * * @ref iftGFLIMConvertSeeds.c = Convert image markers to graph markers and reduce the seed set to a maximum number of points per marker.
+ * * @ref iftGFLIMCreateLayerModel.c = Create a layer model.
+ * * @ref iftGFLIMMergeLayerModels.c = Merge layer models.
+ * * @ref iftGFLIMEncodeLayer.c = Encode a layer.
+ * * @ref iftGFLIMEncodeMergedLayer.c = Encode a merged layer.
+ * * @ref iftGFLIMDecodeLayer.c = Decode a layer.
+ * * @ref iftGFLIMExtract.c = Extract features from a graph using a trained model
+ */
+
+#include "iftGFLIM_BoFP.h"
+
+// ============ AUXILIAR FUNCTIONS ============ //
+/**
+ * @fn GetVoxelCoord
+ * @brief Convert an image index to a voxel coordinate.
+ * @param xsize The xsize of the image.
+ * @param ysize The ysize of the image.
+ * @param zsize The zsize of the image.
+ * @param p The image index.
+ * @return The voxel coordinate.
+ */
+iftVoxel GetVoxelCoord(int xsize, int ysize, int zsize, int p)
+{
+    iftVoxel u;
+    div_t res1 = div(p, xsize * ysize);
+    div_t res2 = div(res1.rem, xsize);
+
+    u.x = res2.rem;
+    u.y = res2.quot;
+    u.z = res1.quot;
+    u.t = 0;
+    return (u);
+}
+
+/**
+ * @fn iftGFLIMNumberOfTruelabels
+ * @brief Get the number of true labels in the truelabels array.
+ * @param truelabels An array with the kernel labels.
+ * @param n The number of elements in truelabels.
+ * @return The maximum value in truelabels.
+ */
+int iftGFLIMNumberOfTruelabels(int *truelabels, int n)
+{
+    int nlabels = 0;
+    for (int i = 0; i < n; i++)
+        if (truelabels[i] > nlabels)
+            nlabels = truelabels[i];
+    return (nlabels);
+}
+
+// ============ FUNCTIONS TO VALIDATE TYPES ============ //
+
+/**
+ * @fn iftGFLIMGetStrideType
+ * @brief Get the stride type from a string.
+ * @param name The name of the stride type.
+ * @return a iftGFLIMStrideType. @see iftGFLIMStrideType.
+ */
+iftGFLIMStrideType iftGFLIMGetStrideType(const char *name)
+{
+    if (strcmp(name, "none") == 0)
+        return IFT_GFLIM_NOSTRIDE;
+    if (strcmp(name, "image-based") == 0)
+        return IFT_GFLIM_IMAGESTRIDE;
+    if (strcmp(name, "graph-based") == 0)
+        return IFT_GFLIM_GRAPHSTRIDE;
+    iftError("Invalid stride type: %s. The options are none, image-based, and graph-based", __func__, name);
+    return IFT_GFLIM_NOSTRIDE;
+}
+
+/**
+ * @fn iftGLFLIMGetDecoderType
+ * @brief Get the decoder type from a string.
+ * @param name The name of the decoder type.
+ * @return a iftGFLIMDecoderType. @see iftGFLIMDecoderType.
+ */
+iftGFLIMDecoderType iftGLFLIMGetDecoderType(const char *name)
+{
+    if (strcmp(name, "tristate") == 0)
+        return IFT_GFLIM_TRISTATE_DECODER;
+    if (strcmp(name, "hybrid") == 0)
+        return IFT_GFLIM_HYBRID_DECODER;
+    if (strcmp(name, "graph-adaptive") == 0)
+        return IFT_GFLIM_GRAPHADAPTIVE_DECODER;
+    if (strcmp(name, "gaussian") == 0)
+        return IFT_GFLIM_GAUSSIAN_DECODER;
+    iftError("Invalid decoder type: %s. The options are tristate, hybrid, graph-adaptive, and gaussian", __func__, name);
+    return IFT_GFLIM_TRISTATE_DECODER;
+}
+
+/**
+ * @fn iftGLFLIMGetDimReductionType
+ * @brief Get the dimensionality reduction type from a string.
+ * @param name The name of the dimensionality reduction type.
+ * @return a iftGFLIMDimReductionType. @see iftGFLIMDimReductionType.
+ */
+iftGFLIMDimReductionType iftGLFLIMGetDimReductionType(const char *name)
+{
+    if (strcmp(name, "none") == 0)
+        return IFT_GFLIM_DIMREDUCTION_NONE;
+    if (strcmp(name, "tsne") == 0)
+        return IFT_GFLIM_DIMREDUCTION_TSNE;
+    if (strcmp(name, "pca") == 0)
+        return IFT_GFLIM_DIMREDUCTION_PCA;
+    iftError("Invalid dimensionality reduction type: %s. The options are none, tsne, and pca", __func__, name);
+    return IFT_GFLIM_DIMREDUCTION_NONE;
+}
+
+// ============ FUNCTIONS TO READ AND SAVE MODEL FILES ============ //
+
+/**
+ * @fn iftGFLIMSaveBias
+ * @brief Save bias values in a txt file.
+ * @param basepath The base path of the file.
+ * @param bias An array with the bias values.
+ * @param number_of_kernels The number of kernels. Size of the bias array.
+ * @note The bias values are saved in a txt file with the name basepath-bias.txt.
+ */
+void iftGFLIMSaveBias(char *basepath, float *bias, int number_of_kernels)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    printf("\t basepath: %s\n", basepath == NULL ? "NULL" : basepath);
+    printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
+    printf("\t number_of_kernels: %d\n", number_of_kernels);
+#endif
+
+    char filename[512];
+    FILE *fp;
+
+    sprintf(filename, "%s-bias.txt", basepath);
+    fp = fopen(filename, "w");
+    if (fp == NULL)
+        iftError("Error opening file %s", filename);
+    fprintf(fp, "%d\n", number_of_kernels);
+    for (int k = 0; k < number_of_kernels; k++)
+        fprintf(fp, "%f ", bias[k]);
+    fclose(fp);
+}
+
+/**
+ * @fn iftGFLIMSaveKernelLabels
+ * @brief Save the kernel labels in a txt file.
+ * @param basepath The base path of the file.
+ * @param truelabel An array with the kernel labels.
+ * @param number_of_kernels The number of kernels. Size of the truelabel array.
+ * @note The kernel labels are saved in a txt file with the name BASEPATH-labels.txt.
+ * @note The kernel labels come from the labels of the graph markers.
+ */
+void iftGFLIMSaveKernelLabels(char *basepath, int *truelabel, int number_of_kernels)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    printf("\t basepath: %s\n", basepath == NULL ? "NULL" : basepath);
+    printf("\t truelabel: %s\n", truelabel == NULL ? "NULL" : "not NULL");
+    printf("\t number_of_kernels: %d\n", number_of_kernels);
+#endif
+
+    char filename[512];
+    FILE *fp;
+
+    sprintf(filename, "%s-labels.txt", basepath);
+    fp = fopen(filename, "w");
+    if (fp == NULL)
+        iftError("Error opening file %s", filename);
+    fprintf(fp, "%d\n", number_of_kernels);
+    for (int k = 0; k < number_of_kernels; k++)
+        fprintf(fp, "%d ", truelabel[k]);
+
+    fclose(fp);
+}
+
+/**
+ * @fn iftGFLIMLoadBias
+ * @brief Load the bias values from a txt file.
+ * @param basepath The base path of the file.
+ * @return An array with the bias values.
+ * @note The bias values are loaded from a txt file with the name basepath-bias.txt.
+ * @note The number of kernels is stored in the first line of the file.
+ */
+float *iftGFLIMLoadBias(char *basepath)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    printf("\t basepath: %s\n", basepath == NULL ? "NULL" : basepath);
+#endif
+
+    int number_of_kernels;
+    char filename[512];
+    FILE *fp;
+    float *bias;
+
+    sprintf(filename, "%s-bias.txt", basepath);
+    if (!iftFileExists(filename))
+        return NULL;
+    fp = fopen(filename, "r");
+    if (fp == NULL)
+        iftError("Error opening file %s", filename);
+    if (fscanf(fp, "%d", &number_of_kernels) != 1)
+        iftError("Error reading number of kernels from file %s", filename);
+    bias = iftAllocFloatArray(number_of_kernels);
+    for (int k = 0; k < number_of_kernels; k++)
+    {
+        if (fscanf(fp, "%f ", &bias[k]) != 1)
+            iftError("Error reading bias values from file %s", filename);
+    }
+    fclose(fp);
+    return bias;
+}
+
+/**
+ * @fn iftGFLIMLoadKernelLabels
+ * @brief Load the kernel labels from a txt file.
+ * @param[in] basepath The base path of the file.
+ * @param[out] nkernels Integer pointer to the number of kernels.
+ * @return An array with the kernel labels.
+ * @note The kernel labels are loaded from a txt file with the name basepath-labels.txt.
+ * @note The number of kernels is stored in the first line of the file.
+ * @note The kernel labels come from the labels of the graph markers.
+ */
+int *iftGFLIMLoadKernelLabels(char *filename, int *nkernels)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    printf("\t filename: %s\n", filename == NULL ? "NULL" : filename);
+    printf("\t nkernels: %s\n", nkernels == NULL ? "NULL" : "not NULL");
+#endif
+
+    int number_of_kernels;
+    FILE *fp;
+    int *truelabels;
+
+    fp = fopen(filename, "r");
+    if (fp == NULL)
+        iftError("Error opening file %s", filename);
+    if (fscanf(fp, "%d", &number_of_kernels) != 1)
+        iftError("Error reading number of kernels from file %s", filename);
+    truelabels = iftAllocIntArray(number_of_kernels);
+    for (int k = 0; k < number_of_kernels; k++)
+    {
+        if (fscanf(fp, "%d ", &truelabels[k]) != 1)
+            iftError("Error reading kernel labels from file %s", filename);
+    }
+    fclose(fp);
+    (*nkernels) = number_of_kernels;
+    return truelabels;
+}
+
+/**
+ * @fn iftGFLIMSaveMergedModel
+ * @brief Save the kernels, bias and labels of a layer from the merged model.
+ * @param basepath The base path of the file.
+ * @param K The matrix with the kernels.
+ * @param bias An array with the bias values.
+ * @param truelabels An array with the kernel labels.
+ * @note The kernels are saved in a npy file with the name basepath-kernels.npy.
+ * @note The bias values are saved in a txt file with the name basepath-bias.txt.
+ * @note The kernel labels are saved in a txt file with the name basepath-labels.txt.
+ * @note The number of kernels is stored in the first line of the bias and labels files.
+ * @note The kernel labels come from the labels of the graph markers.
+ */
+void iftGFLIMSaveMergedModel(char *basepath, iftMatrix *K, float *bias, int *truelabels)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    printf("\t basepath: %s\n", basepath == NULL ? "NULL" : basepath);
+    printf("\t K: %s\n", K == NULL ? "NULL" : "not NULL");
+    printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
+    printf("\t truelabels: %s\n", truelabels == NULL ? "NULL" : "not NULL");
+#endif
+
+    char filename[512];
+    sprintf(filename, "%s-kernels.npy", basepath);
+    iftWriteMatrix(K, filename);
+    iftGFLIMSaveBias(basepath, bias, K->ncols);
+    iftGFLIMSaveKernelLabels(basepath, truelabels, K->ncols);
+}
+
+/**
+ * @fn iftGFLIMLoadMergedModel
+ * @brief Load the kernels, bias and labels of a layer from the merged model.
+ * @param basepath The base path of the file.
+ * @param K The kernels matrix.
+ * @param bias An array with the bias values.
+ * @param truelabels An array with the kernel labels.
+ * @note The kernels are loaded from a npy file with the name basepath-kernels.npy.
+ * @note The bias values are loaded from a txt file with the name basepath-bias.txt.
+ * @note The kernel labels are loaded from a txt file with the name basepath-labels.txt.
+ * @note The number of kernels is stored in the first line of the bias and labels files.
+ * @note The kernel labels come from the labels of the graph markers.
+ */
+void iftGFLIMLoadMergedModel(char *basepath, iftMatrix **K, float **bias)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    printf("\t basepath: %s\n", basepath == NULL ? "NULL" : basepath);
+    printf("\t K: %s\n", K == NULL ? "NULL" : "not NULL");
+    printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
+#endif
+
+    char filename[512];
+    sprintf(filename, "%s-kernels.npy", basepath);
+    *K = iftReadMatrix(filename);
+    *bias = iftGFLIMLoadBias(basepath);
+    if (*bias == NULL)
+        iftError("Bias is NULL", __func__);
+}
+
+// ============ CREATE, CONVERT, AND UPDATE GRAPH-BASED MARKERS ============ //
+
+/**
+ * @fn iftGFLIMImageMarkersToGraphMarkers
+ * @brief Transform the image markers into graph markers.
+ * @param label_img The image with the superpixels. It maps from image pixels to graph nodes.
+ * @param S The set of image markers.
+ * @param stride The stride to map the image markers to the graph markers.
+ * @param img_xsize The xsize of the image.
+ * @param img_ysize The ysize of the image.
+ * @return The set of graph markers.
+ */
+iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
+                                                  iftLabeledSet *S,
+                                                  iftGFLIMStrideType stride,
+                                                  int img_xsize, int img_ysize)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (label_img == NULL)
+        printf("\t label_img: NULL \n");
+    else
+        printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
+    if (S == NULL)
+        printf("\t S: NULL \n");
+    else
+        printf("\t S size: %d \n", iftLabeledSetSize(S));
+    switch (stride)
+    {
+    case IFT_GFLIM_NOSTRIDE:
+        printf("\t stride: IFT_GFLIM_NOSTRIDE \n");
+        break;
+
+    case IFT_GFLIM_IMAGESTRIDE:
+        printf("\t stride: IFT_GFLIM_IMAGESTRIDE \n");
+        break;
+
+    case IFT_GFLIM_GRAPHSTRIDE:
+        printf("\t stride: IFT_GFLIM_GRAPHSTRIDE \n");
+        break;
+    }
+    printf("\t img_xsize: %d\n", img_xsize);
+    printf("\t img_ysize: %d\n", img_ysize);
+#endif
+
+    iftLabeledSet *graph_seeds = NULL;
+    int nclasses = 0, minclass = IFT_INFINITY_INT;
+    iftLabeledSet *tmp;
+    float scale[] = {1.0, 1.0, 1.0};
+
+    // compute number of nodes
+    int num_nodes = iftMaximumValue(label_img);
+    if (num_nodes < 1)
+        iftError("Number of nodes must be positive: %d", __func__, num_nodes);
+
+    // find number of classes and minimum class value
+    tmp = S;
+    while (tmp != NULL)
+    {
+        if (tmp->label > nclasses)
+            nclasses = tmp->label;
+        if (tmp->label < minclass)
+            minclass = tmp->label;
+        tmp = tmp->next;
+    }
+    if (minclass == 0)
+        nclasses++;
+
+    // compute scale if its necessary
+    if (stride == IFT_GFLIM_IMAGESTRIDE)
+    {
+        scale[0] = (float)img_xsize / (float)label_img->xsize;
+        scale[1] = (float)img_ysize / (float)label_img->ysize;
+    }
+
+    // count the number of pixels per graph node and per class (label)
+    int **classes_count = iftAlloc(num_nodes, sizeof(int *));
+    for (int i = 0; i < num_nodes; i++)
+        classes_count[i] = iftAlloc(nclasses, sizeof(int *));
+    tmp = S;
+
+    while (tmp != NULL)
+    {
+        int p = tmp->elem;
+        iftVoxel u = GetVoxelCoord((int)(label_img->xsize * scale[0]),
+                                   (int)(label_img->ysize * scale[1]), 1, p);
+        u.x = u.x / scale[0];
+        u.y = u.y / scale[1];
+        u.z = 1.0;
+
+        p = u.y * label_img->xsize + u.x;
+
+        classes_count[label_img->val[p] - 1][tmp->label - minclass]++;
+        tmp = tmp->next;
+    }
+
+    // insert the graph seeds in the graph_seeds set based on the class with the highest count
+    for (int p = 0; p < num_nodes; p++)
+    {
+        int max_class = 0;
+        int max_count = classes_count[p][0];
+        for (int c = 1; c < nclasses; c++)
+        {
+            if (classes_count[p][c] > classes_count[p][max_class])
+            {
+                max_class = c;
+                max_count = classes_count[p][c];
+            }
+        }
+        if (max_count > 0)
+            iftInsertLabeledSetMarkerAndHandicap(&graph_seeds, p, max_class, max_class, 0);
+    }
+
+    for (int i = 0; i < num_nodes; i++)
+        iftFree(classes_count[i]);
+    iftFree(classes_count);
+
+    return graph_seeds;
+}
+
+/**
+ * @fn iftGFLIMUpdateGraphMarkers
+ * @brief Update graph markers considering the superpixel image size of the network's input and the current layer's input.
+ * @param S The set of graph markers.
+ * @param label_img The image with the superpixels. It maps the image pixels to the graph nodes (from 1).
+ * @param label_img0 The image with the superpixels in "layer 0" (network's input). It maps the image pixels to the graph nodes (from 1).
+ * @return The set of updated graph markers.
+ */
+iftLabeledSet *iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage *label_img0)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (S == NULL)
+        printf("\t S: NULL \n");
+    else
+        printf("\t S size: %d \n", iftLabeledSetSize(S));
+    if (label_img == NULL)
+        printf("\t label_img: NULL \n");
+    else
+        printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
+    if (label_img0 == NULL)
+        printf("\t label_img0: NULL \n");
+    else
+        printf("\t label_img0 size: %d %d %d \n", label_img0->xsize, label_img0->ysize, label_img0->zsize);
+#endif
+    int num_nodes = iftMaximumValue(label_img);
+    int num_nodes0 = iftMaximumValue(label_img0);
+
+    // compute scale
+    int scale[3];
+    scale[0] = (float)label_img0->xsize / (float)label_img->xsize;
+    scale[1] = (float)label_img0->ysize / (float)label_img->ysize;
+    scale[2] = (float)label_img0->zsize / (float)label_img->zsize;
+
+    // find number of classes and minimum class value
+    int nclasses = 0, minclass = INT_MAX;
+    iftLabeledSet *tmp = S;
+    while (tmp != NULL)
+    {
+        if (tmp->label > nclasses)
+            nclasses = tmp->label;
+        if (tmp->label < minclass)
+            minclass = tmp->label;
+        tmp = tmp->next;
+    }
+    if (minclass == 0)
+        nclasses++;
+
+    // map nodes from label_img0 to label_img (nodes_map) and compute the number of pixels per node (spxSize)
+    int *nodes_map = iftAllocIntArray(num_nodes0); // num_nodes0 is always greater than or equal to num_nodes
+    for (int i = 0; i < label_img0->n; i++)
+    {
+        if (nodes_map[label_img0->val[i] - 1] != 0)
+            continue;
+
+        iftVoxel u;
+        int p = i;
+        if (iftIs3DImage(label_img))
+        {
+            u = GetVoxelCoord((int)(label_img->xsize * scale[0]),
+                              (int)(label_img->ysize * scale[1]),
+                              (int)(label_img->zsize * scale[2]), p);
+        }
+        else
+        {
+            u = GetVoxelCoord((int)(label_img->xsize * scale[0]),
+                              (int)(label_img->ysize * scale[1]), 1, p);
+        }
+        u.x = u.x / scale[0];
+        u.y = u.y / scale[1];
+        u.z = u.z / scale[2];
+
+        p = iftGetVoxelIndex(label_img, u);
+        nodes_map[label_img0->val[i] - 1] = label_img->val[p];
+    }
+
+    int **class_count = iftAlloc(num_nodes, sizeof(int *)); // pixels per class at each node
+    for (int i = 0; i < num_nodes; i++)
+        class_count[i] = iftAlloc(nclasses, sizeof(int));
+
+    // compute the number of pixels per class at each node
+    tmp = S;
+    while (tmp != NULL)
+    {
+        int node = nodes_map[tmp->elem] - 1;
+        class_count[node][tmp->label - minclass]++;
+        tmp = tmp->next;
+    }
+    free(nodes_map);
+
+    iftLabeledSet *T = NULL;
+    for (int p = 0; p < num_nodes; p++)
+    {
+        int max_class = 0;
+        int max_count = class_count[p][0];
+        for (int c = 1; c < nclasses; c++)
+        {
+            if (class_count[p][c] > max_count)
+            {
+                max_class = c;
+                max_count = class_count[p][c];
+            }
+        }
+        if (max_count > 0)
+            iftInsertLabeledSetMarkerAndHandicap(&T, p, max_class + minclass, max_class + minclass, 0);
+    }
+    return T;
+}
+
+
+// ============ CONVERT FROM SEEDS/GRAPH TO DATASET ============ //
+
+/**
+ * @fn iftGFLIMSelectClusterCenters
+ * @brief Selects the cluster centers from the seeds in the graph.
+ * @param graph The input graph where the seeds are defined.
+ * @param S The set of graph seeds.
+ * @param kernel_size The kernel size for the feature extraction.
+ * @param nclusters_per_marker The number of cluster centers per marker.
+ * @param attention_opt The attention option. @see iftFLIMGraphAttention.
+ * @param dimReduction The dimensionality reduction option. @see iftGFLIMDimReductionType.
+ * @param ncomponents The number of components/dimensions for the dimensionality reduction.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregationType.
+ * @return The set of cluster centers.
+ * @note The function assign a value to each connected set of labeled nodes in the marker field of the iftLabeledSet S.
+ */
+iftLabeledSet *iftGFLIMSelectClusterCenters(iftFLIMGraph *graph,
+                                            iftLabeledSet *S,
+                                            int kernel_size,
+                                            int nclusters_per_marker,
+                                            iftFLIMGraphAttention attention_opt,
+                                            iftGFLIMDimReductionType dimReduction, int ncomponents,
+                                            iftGFLIMAggregationType aggregation_opt)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (S == NULL)
+        printf("\t S: NULL \n");
+    else
+        printf("\t S size: %d \n", iftLabeledSetSize(S));
+    printf("\t kernel_size: %d\n", kernel_size);
+    printf("\t nclusters_per_marker: %d\n", nclusters_per_marker);
+    printf("\t attention_opt: %d\n", attention_opt);
+    printf("\t dimReduction: %d\n", dimReduction);
+    printf("\t ncomponents: %d\n", ncomponents);
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+#endif
+
+    iftLabeledSet *T = NULL;
+    int obj_label_map[graph->num_nodes];
+    iftGFLIMRelabelConnectedComponentsInPlace(graph, S, obj_label_map);
+
+    // extract neighbor information and compute the iftDataSet
+    iftDataSet *Z = iftGFLIMExtractMarkerDataSet(graph, S, kernel_size, attention_opt, aggregation_opt);
+
+    if (dimReduction == IFT_GFLIM_DIMREDUCTION_PCA)
+    {
+        if (ncomponents < 1)
+            iftError("Invalid number of components for PCA: %d. The minimum is 1", __func__, ncomponents);
+        else
+            ncomponents = iftMin(ncomponents, Z->nfeats);
+    }
+    if (dimReduction == IFT_GFLIM_DIMREDUCTION_TSNE && (ncomponents < 2 || ncomponents > 3))
+        iftError("Invalid number of components for tSNE: %d. The options are 2 or 3", __func__, ncomponents);
+
+    /* Estimate the given number of cluster centers per marker */
+    for (int c = 1; c <= Z->nclasses; c++)
+    {
+        iftDataSet *Z1, *Z2;
+
+        switch (dimReduction)
+        {
+        case IFT_GFLIM_DIMREDUCTION_NONE:
+            Z1 = iftExtractSamplesFromClass(Z, c);
+            // iftNormalizeDataSetByZScoreInPlace(Z1, NULL, 0.01);
+            break;
+
+        case IFT_GFLIM_DIMREDUCTION_PCA:
+            Z2 = iftExtractSamplesFromClass(Z, c);
+            iftSetStatus(Z2, IFT_TRAIN);
+
+            // Step 1. Standardize the data to ensure that all variables have a mean of 0 and a standard deviation of 1.
+            iftCentralizeDataSetInPlace(Z2);
+            // iftNormalizeDataSetByZScoreInPlace(Z2, NULL, 0.01);
+
+            // Step 2. Calculate the covariance matrix of the standardized data. This matrix shows how each variable is related to every other variable in the dataset.
+            // Step 3. Calculate the eigenvectors and eigenvalues of the covariance matrix. The eigenvectors represent the directions in which the data varies the most, while the eigenvalues represent the amount of variation along each eigenvector.
+            // Step 4. Choose the principal components which are the eigenvectors with the highest eigenvalues. These components represent the directions in which the data varies the most.
+            // Step 5. Transform the original data into the lower-dimensional space defined by the principal components.
+            Z1 = iftTransFeatSpaceByPCA(Z2, ncomponents);
+            iftDestroyDataSet(&Z2);
+            break;
+
+        case IFT_GFLIM_DIMREDUCTION_TSNE:
+            Z2 = iftExtractSamplesFromClass(Z, c);
+            iftSetStatus(Z2, IFT_TRAIN);
+            // iftNormalizeDataSetByZScoreInPlace(Z2, NULL, 0.01);
+            iftCentralizeDataSetInPlace(Z2);
+            Z1 = iftDimReductionByTSNE(Z2, ncomponents, iftMin(30, (Z2->nsamples - 1) / 3), 1000);
+            iftDestroyDataSet(&Z2);
+            break;
+
+        default:
+            iftError("Invalid dimensionality reduction %d \n", __func__, dimReduction);
+            break;
+        }
+
+        int ngroups = iftMin(Z1->nsamples, nclusters_per_marker);
+        iftKMeans(Z1, ngroups, 100, 0.001, NULL, NULL, iftEuclideanDistance);
+        for (int s = 0; s < Z1->nsamples; s++)
+        {
+            if (iftHasSampleStatus(Z1->sample[s], IFT_PROTOTYPE))
+            {
+                int p = Z1->sample[s].id;
+                iftInsertLabeledSetMarkerAndHandicap(&T, p,
+                                                     obj_label_map[p],
+                                                     obj_label_map[p],
+                                                     0);
+            }
+        }
+        iftDestroyDataSet(&Z1);
+    }
+    iftDestroyDataSet(&Z);
+    return (T);
+}
+
+/**
+ * @fn iftGFLIMExtractMarkerDataSet
+ * @brief Computes a feature matrix from the nodes in a seed set S.
+ * @param graph The input graph.
+ * @param S The set of graph seeds.
+ * @param kernel_size The kernel size for the feature extraction.
+ * @param most_similar If true, the most similar neighbors are selected. Otherwise, the most dissimilar neighbors are selected.
+ * @param attention_opt The attention option to compute the features. @see iftFLIMGraphAttention.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregationType.
+ * @return The dataset with the features extracted from the graph nodes.
+ */
+iftDataSet *iftGFLIMExtractMarkerDataSet(iftFLIMGraph *graph,
+                                         iftLabeledSet *S,
+                                         int kernel_size,
+                                         iftFLIMGraphAttention attention_opt,
+                                         iftGFLIMAggregationType aggregation_opt)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (S == NULL)
+        printf("\t S: NULL \n");
+    else
+        printf("\t S size: %d \n", iftLabeledSetSize(S));
+    printf("\t kernel_size: %d\n", kernel_size);
+    printf("\t most_similar: %s\n", most_similar ? "true" : "false");
+    printf("\t attention_opt: %d\n", attention_opt);
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+#endif
+
+    int nsamples = iftLabeledSetSize(S);
+    int kernel_neighbors = iftMin(graph->num_nodes, kernel_size);
+    int tensor_size = aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT ? graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
+    iftDataSet *Z = iftCreateDataSet(nsamples, tensor_size);
+
+    iftLabeledSet *seed;
+    Z->nclasses = 0;
+    int s = 0;
+    seed = S;
+
+    while (seed != NULL)
+    {
+        Z->sample[s].id = seed->elem;
+        Z->sample[s].truelabel = seed->marker;
+        if (Z->sample[s].truelabel > Z->nclasses)
+            Z->nclasses = Z->sample[s].truelabel;
+
+        iftIntArray *neighbors = iftGetKNeighborsFLIMGraph(seed->elem, graph, kernel_neighbors, 1, true, attention_opt);
+        double *feature_vector = iftFLIMgraphAggregateFeatures(seed->elem, neighbors, graph, kernel_size, aggregation_opt);
+
+        for (int i = 0; i < tensor_size; i++)
+            Z->sample[s].feat[i] = (float)feature_vector[i];
+
+        iftFree(feature_vector);
+        iftDestroyIntArray(&neighbors);
+
+        s++;
+        seed = seed->next;
+    }
+
+    iftSetStatus(Z, IFT_TRAIN);
+    iftAddStatus(Z, IFT_SUPERVISED);
+    return (Z);
+}
+
+// ============ FUNCTIONS TO CREATE A LAYER ============ //
+
+/**
+ * @fn iftGFLIMComputeKernelsAndTrueLabels
+ * @brief Compute the kernels and the true labels from the dataset.
+ * @param Z The dataset with graph markers.
+ * @param truelabel The true labels.
+ * @return The matrix with the kernels.
+ */
+iftMatrix *iftGFLIMComputeKernelsAndTrueLabels(iftDataSet *Z, int *truelabel)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (Z == NULL)
+        printf("\t Z: NULL \n");
+    else
+        printf("\t Z samples: %d, feats: %d, classes: %d \n", Z->nsamples, Z->nfeats, Z->nclasses);
+    printf("\t truelabel: %s\n", truelabel == NULL ? "NULL" : "not NULL");
+#endif
+    iftMatrix *kernels = iftCreateMatrix(Z->nsamples, Z->nfeats);
+    /* compute filters and their truelabels */
+    for (int s = 0, col = 0; s < Z->nsamples; s++)
+    {
+        iftUnitNorm(Z->sample[s].feat, Z->nfeats);
+        truelabel[s] = Z->sample[s].truelabel;
+        for (int row = 0; row < Z->nfeats; row++)
+            iftMatrixElem(kernels, col, row) = Z->sample[s].feat[row] / Z->fsp.stdev[row];
+        col++;
+    }
+    return kernels;
+}
+
+/**
+ * @fn iftGFLIMComputeBias
+ * @brief Compute the bias from the kernels and the dataset.
+ * @param kernels The matrix with the kernels.
+ * @param Z The dataset with graph markers.
+ * @return The bias.
+ */
+float *iftGFLIMComputeBias(iftMatrix *kernels, iftDataSet *Z)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (kernels == NULL)
+        printf("\t kernels: NULL \n");
+    else
+        printf("\t kernels size: %d %d \n", kernels->nrows, kernels->ncols);
+    if (Z == NULL)
+        printf("\t Z: NULL \n");
+    else
+        printf("\t Z samples: %d, feats: %d, classes: %d \n", Z->nsamples, Z->nfeats, Z->nclasses);
+#endif
+
+    float *bias = NULL;
+    bias = iftAllocFloatArray(kernels->ncols);
+    for (int col = 0; col < kernels->ncols; col++)
+    {
+        for (int row = 0; row < Z->nfeats; row++)
+            bias[col] -= (Z->fsp.mean[row] * iftMatrixElem(kernels, col, row));
+    }
+    return bias;
+}
+
+/**
+ * @fn iftGFLIMCreateLayerModel
+ * @brief Create a layer model.
+ * @param graph The input graph.
+ * @param S The set of graph markers.
+ * @param label_img0 The image-graph mapping in "layer 0" (from 1). It can be null if stride is IFT_GFLIM_NOSTRIDE.
+ * @param label_img The image-graph mapping for the input graph (from 1). It can be null if stride is IFT_GFLIM_NOSTRIDE.
+ * @param layer The layer configuration.
+ * @param stdev_factor The standard deviation factor.
+ * @param stride The stride to map the image markers to the graph markers.
+ * @param[out] bias A pointer to an array. After the function, it will be filled with the bias values. Is allocated inside the function.
+ * @param[out] truelabel A pointer to an array. After the function, it will be filled with the bias values. Is allocated inside the function.
+ * @param attention_opt The attention option. @see iftFLIMGraphAttention.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregationType.
+ * @note The function allocates the bias and truelabel arrays. The caller is responsible for freeing them.
+ * @return The matrix with the kernels.
+ */
+iftMatrix *iftGFLIMCreateLayerModel(iftFLIMGraph *graph, iftLabeledSet *S,
+                                    iftImage *label_img0, iftImage *label_img,
+                                    iftFLIMLayer layer, float stdev_factor,
+                                    iftGFLIMStrideType stride,
+                                    float **bias, int **truelabel,
+                                    iftFLIMGraphAttention attention_opt,
+                                    iftGFLIMAggregationType aggregation_opt)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (S == NULL)
+        printf("\t S: NULL \n");
+    else
+        printf("\t S size: %d \n", iftLabeledSetSize(S));
+    if (label_img0 == NULL)
+        printf("\t label_img0: NULL \n");
+    else
+        printf("\t label_img0 size: %d %d %d \n", label_img0->xsize, label_img0->ysize, label_img0->zsize);
+    if (label_img == NULL)
+        printf("\t label_img: NULL \n");
+    else
+        printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
+    printf("\t layer: kernel_size: %d, nclusters_per_bkg_marker: %d, nclusters_per_obj_marker: %d \n", layer.kernel_size[0] * layer.kernel_size[1], layer.nkernels_per_marker, layer.nkernels_per_marker);
+    printf("\t stdev_factor: %f\n", stdev_factor);
+    switch (stride)
+    {
+    case IFT_GFLIM_NOSTRIDE:
+        printf("\t stride: IFT_GFLIM_NOSTRIDE \n");
+        break;
+
+    case IFT_GFLIM_IMAGESTRIDE:
+        printf("\t stride: IFT_GFLIM_IMAGESTRIDE \n");
+        break;
+
+    case IFT_GFLIM_GRAPHSTRIDE:
+        printf("\t stride: IFT_GFLIM_GRAPHSTRIDE \n");
+        break;
+    }
+    printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
+    printf("\t truelabel: %s\n", truelabel == NULL ? "NULL" : "not NULL");
+    printf("\t attention_opt: %d\n", attention_opt);
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+#endif
+
+    iftLabeledSet *T = NULL;
+
+    switch (stride)
+    {
+    case IFT_GFLIM_GRAPHSTRIDE:
+        if (graph->num_nodes != iftMaximumValue(label_img0))
+            T = iftGFLIMUpdateGraphMarkers(S, label_img, label_img0);
+        else
+            T = S;
+        break;
+
+    case IFT_GFLIM_IMAGESTRIDE:
+        if (label_img->xsize != label_img0->xsize || label_img->ysize != label_img0->ysize)
+            T = iftGFLIMUpdateGraphMarkers(S, label_img, label_img0);
+        else
+            T = S;
+        break;
+
+    case IFT_GFLIM_NOSTRIDE:
+        T = S;
+        break;
+
+    default:
+        iftError("Invalid stride %d", __func__, stride);
+        break;
+    }
+
+    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, T, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, aggregation_opt);
+
+#ifdef PRINT_VALS
+    printf("Dataset %s\n", basename);
+    for (int i = 0; i < Z->nsamples; i++)
+    {
+        printf("Sample %d: ", i);
+        for (int j = 0; j < Z->nfeats; j++)
+            printf("%f ", Z->sample[i].feat[j]);
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
+    iftNormalizeDataSetByZScoreInPlace(Z, NULL, stdev_factor);
+
+#ifdef PRINT_VALS
+    printf("Z-norm mean: ");
+    for (int i = 0; i < Z->nfeats; i++)
+        printf("%f ", Z->fsp.mean[i]);
+    printf("\n");
+    printf("Z-norm stdev: ");
+    for (int i = 0; i < Z->nfeats; i++)
+        printf("%f ", Z->fsp.stdev[i]);
+    printf("\n");
+
+    printf("Kernels after z-norm: \n");
+    for (int i = 0; i < Z->nsamples; i++)
+    {
+        for (int j = 0; j < Z->nfeats; j++)
+            printf("%f ", Z->sample[i].feat[j]);
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
+    (*truelabel) = iftAllocIntArray(Z->nsamples);
+    iftMatrix *kernels = iftGFLIMComputeKernelsAndTrueLabels(Z, *truelabel);
+
+#ifdef PRINT_VALS
+    printf("Kernels after unit-norm: \n");
+    for (int i = 0; i < kernels->nrows; i++)
+    {
+        for (int j = 0; j < kernels->ncols; j++)
+            printf("%f ", iftMatrixElem(kernels, i, j));
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
+    /* compute biases and update filters */
+    (*bias) = iftGFLIMComputeBias(kernels, Z);
+
+#ifdef PRINT_VALS
+    printf("Kernels after bias: \n");
+    for (int i = 0; i < kernels->nrows; i++)
+    {
+        for (int j = 0; j < kernels->ncols; j++)
+            printf("%f ", iftMatrixElem(kernels, i, j));
+        printf("\n");
+    }
+    printf("\n");
+
+    printf("Bias: \n");
+    for (int i = 0; i < kernels->ncols; i++)
+        printf("%f ", (*bias)[i]);
+    printf("\n");
+#endif
+
+    iftDestroyDataSet(&Z);
+    if (T != S)
+        iftDestroyLabeledSet(&T);
+    else
+        T = NULL;
+    return kernels;
+}
+
+// ============ FUNCTIONS FOR UNION FIND ALGORITHM IN GRAPH-BASED STRIDE ============ //
+
+int element_link(int x, int y, int *rank, int *parent)
+{
+    // If necessary, rename variables to ensure that
+    // x has rank at least as large as that of y
+    if (rank[x] < rank[y])
+    {
+        int t = x;
+        x = y;
+        y = t;
+    }
+
+    // If necessary, increment the rank of x
+    if (rank[x] == rank[y])
+        rank[x] = rank[x] + 1;
+
+    // Make x the new root
+    parent[y] = x;
+    return x;
+}
+
+int element_find(int x, int *parent)
+{
+    if (parent[x] != x)
+        parent[x] = element_find(parent[x], parent);
+    return parent[x];
+}
+
+int union_set(int x, int y, int *parent, int *rank)
+{
+    // Replace nodes by roots
+    x = element_find(x, parent);
+    y = element_find(y, parent);
+
+    if (x == y)
+    {
+        return -1; // x and y are already in the same set
+    }
+
+    return element_link(x, y, rank, parent);
+}
+
+// ============ FUNCTIONS FOR STRIDE ============ //
+
+/**
+ * @fn iftGFLIMImageStride
+ * @brief Compute the image-based stride
+ * @param graph The input graph.
+ * @param input_labels The input labels image.
+ * @param output_labels The output labels image.
+ * @param stride The stride value.
+ * @return The output graph after stride.
+ */
+iftFLIMGraph *iftGFLIMImageStride(iftFLIMGraph *graph,
+                                  iftImage *input_labels,
+                                  iftImage *output_labels,
+                                  int stride)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (input_labels == NULL)
+        printf("\t input_labels: NULL \n");
+    else
+        printf("\t input_labels size: %d %d %d \n", input_labels->xsize, input_labels->ysize, input_labels->zsize);
+    if (output_labels == NULL)
+        printf("\t output_labels: NULL \n");
+    else
+        printf("\t output_labels size: %d %d %d \n", output_labels->xsize, output_labels->ysize, output_labels->zsize);
+    printf("\t stride: %d\n", stride);
+#endif
+
+    iftBMap *visited = iftCreateBMap(graph->num_nodes);
+    iftAdjRel *A;
+
+    // reduce labels image according to stride and compute mean color
+    int num_nodes = 0;
+    iftVoxel u;
+    for (u.z = 0; u.z < input_labels->zsize; u.z = u.z + stride)
+    {
+        for (u.y = 0; u.y < input_labels->ysize; u.y = u.y + stride)
+        {
+            for (u.x = 0; u.x < input_labels->xsize; u.x = u.x + stride)
+            {
+                int p = iftMGetVoxelIndex(input_labels, u);
+                int label = input_labels->val[p];
+                if (!iftBMapValue(visited, label - 1))
+                {
+                    iftBMapSet1(visited, label - 1);
+                    num_nodes++;
+                }
+            }
+        }
+    }
+
+    int map_nodes[graph->num_nodes]; // map old to new node index
+    int new_index = 0;
+    for (int old_index = 0; old_index < graph->num_nodes; old_index++)
+    {
+        if (iftBMapValue(visited, old_index))
+        {
+            map_nodes[old_index] = new_index;
+            new_index++;
+        }
+        else
+            map_nodes[old_index] = -1;
+    }
+
+    if (new_index != num_nodes)
+        iftError("Number of nodes is different from expected: %d %d", __func__, new_index, num_nodes);
+
+    iftDestroyBMap(&visited);
+
+    iftFLIMGraph *output_graph = iftCreateEmptyFLIMGraph(graph->num_feats, num_nodes);
+    iftBMap *neighbors[num_nodes];
+
+    if (iftIs3DImage(input_labels))
+        A = iftSpheric(sqrtf(3.0));
+    else
+        A = iftCircular(sqrtf(2.0));
+
+    for (int i = 0; i < num_nodes; i++)
+        neighbors[i] = iftCreateBMap(num_nodes);
+
+    int q = 0;
+    for (u.z = 0; u.z < input_labels->zsize; u.z = u.z + stride)
+    {
+        for (u.y = 0; u.y < input_labels->ysize; u.y = u.y + stride)
+        {
+            for (u.x = 0; u.x < input_labels->xsize; u.x = u.x + stride)
+            {
+                int p = iftMGetVoxelIndex(input_labels, u);
+                int old_label = input_labels->val[p] - 1;
+                int new_label = map_nodes[old_label];
+                iftFLIMGraphNode *node = &(output_graph->nodes[new_label]);
+
+                output_labels->val[q] = new_label + 1;
+                int feat = 0;
+                while (feat < graph->num_feats)
+                {
+                    node->feats[feat] += graph->nodes[old_label].feats[feat];
+                    feat++;
+                }
+
+                node->numPixels++;
+                q++;
+            }
+        }
+    }
+
+    q = 0;
+    for (u.z = 0; u.z < input_labels->zsize; u.z = u.z + stride)
+    {
+        for (u.y = 0; u.y < input_labels->ysize; u.y = u.y + stride)
+        {
+            for (u.x = 0; u.x < input_labels->xsize; u.x = u.x + stride)
+            {
+                int p = iftMGetVoxelIndex(input_labels, u);
+                int old_label = input_labels->val[p] - 1;
+                int new_label = map_nodes[old_label];
+                iftFLIMGraphNode *node = &(output_graph->nodes[new_label]);
+
+                iftVoxel p_voxel = iftGetVoxelCoord(output_labels, q);
+                for (int i = 1; i < A->n; i++)
+                {
+                    iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+                    if (iftValidVoxel(output_labels, q_voxel))
+                    {
+                        int q_index = iftMGetVoxelIndex(output_labels, q_voxel);
+                        int q_label = output_labels->val[q_index] - 1;
+                        if (new_label > q_label && !iftBMapValue(neighbors[new_label], q_label))
+                        {
+                            iftInsertFLIMGraphNeighborNode(node, q_label);
+                            iftInsertFLIMGraphNeighborNode(&(output_graph->nodes[q_label]), new_label);
+                            iftBMapSet1(neighbors[new_label], q_label);
+                            output_graph->num_edges++;
+                        }
+                    }
+                }
+                q++;
+            }
+        }
+    }
+
+    //  for each node, compute its mean color
+    iftFLIMGraphNode *node = output_graph->nodes;
+    for (int spx_index = 0; spx_index < num_nodes; spx_index++)
+    {
+        for (int band_index = 0; band_index < output_graph->num_feats; band_index++)
+            node->feats[band_index] /= (double)node->numPixels;
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    node = NULL;
+    iftDestroyAdjRel(&A);
+
+    return output_graph;
+}
+
+/**
+ * @fn iftGFLIMGraphStride
+ * @brief Compute the graph-based stride
+ * @param graph The input graph.
+ * @param stride The stride value.
+ * @param nodes_map Empty array to map from nodes in one layer to another.
+ * @return The graph after stride.
+ * @note nodes_map must be allocated with graph->num_nodes elements.
+ * @note The function will fill nodes_map with the mapping from the input graph to the output graph.
+ */
+iftFLIMGraph *iftGFLIMGraphStride(iftFLIMGraph *graph, int stride, int *nodes_map)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    printf("\t stride: %d\n", stride);
+    printf("\t nodes_map: %s\n", nodes_map == NULL ? "NULL" : "not NULL");
+#endif
+
+    int num_nodes_out = graph->num_nodes / stride;
+    double *distance = iftAllocDoubleArray(graph->num_nodes);
+    int closest_neigh[graph->num_nodes];
+    iftDHeap *heap = iftCreateDHeap(graph->num_nodes, distance);
+
+    int rank[graph->num_nodes];
+    int parent[graph->num_nodes];
+
+    // weight nodes accoding to the minimum distance to their neighbors
+    for (int i = 0; i < graph->num_nodes; i++)
+    {
+        iftFLIMGraphNode *node = &(graph->nodes[i]);
+        iftSet *adj = node->adj;
+
+        double min_dist = INFINITY;
+        int cn = -1;
+        while (adj != NULL)
+        {
+            double val = 0;
+            for (int j = 0; j < graph->num_feats; j++)
+            { // euclidean distance
+                val += (node->feats[j] - graph->nodes[adj->elem].feats[j]) * (node->feats[j] - graph->nodes[adj->elem].feats[j]);
+            }
+            val = sqrt(val);
+            if (val < min_dist)
+            {
+                min_dist = val;
+                cn = adj->elem;
+            }
+            adj = adj->next;
+        }
+
+        closest_neigh[i] = cn;
+        distance[i] = min_dist;
+        iftInsertDHeap(heap, i);
+        rank[i] = 1;
+        parent[i] = i;
+        nodes_map[i] = -1;
+    }
+    iftFree(distance);
+
+    // merge nodes until achieve the required number of nodes
+    int removed_nodes = 0;
+    while (!iftEmptyDHeap(heap) && removed_nodes != graph->num_nodes - num_nodes_out)
+    {
+        int x = iftRemoveDHeap(heap);
+        int y = closest_neigh[x];
+
+        int p = union_set(x, y, parent, rank);
+        if (p == -1)
+            continue;
+        removed_nodes++;
+    }
+    iftDestroyDHeap(&heap);
+
+    if (removed_nodes != graph->num_nodes - num_nodes_out)
+    {
+        iftWarning("The number of output nodes was changed from %d to %d", __func__, num_nodes_out, graph->num_nodes - removed_nodes);
+        num_nodes_out = graph->num_nodes - removed_nodes;
+    }
+
+    iftFLIMGraph *output_graph = iftCreateEmptyFLIMGraph(graph->num_feats, num_nodes_out);
+    int j = 0;
+    for (int i = 0; i < graph->num_nodes; i++)
+    {
+        int p = element_find(i, parent);
+        if (nodes_map[p] == -1)
+        {
+            nodes_map[p] = j;
+            j++;
+        }
+        int q = nodes_map[p];
+        nodes_map[i] = q;
+
+        iftFLIMGraphNode *node = &(output_graph->nodes[q]);
+        iftFLIMGraphNode *remove_node = &(graph->nodes[i]);
+
+        // merge node features
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            node->feats[b] *= node->numPixels;
+            node->feats[b] += (remove_node->feats[b] * remove_node->numPixels);
+            node->feats[b] /= (node->numPixels + remove_node->numPixels);
+        }
+
+        // merge their number of pixels
+        node->numPixels += remove_node->numPixels;
+
+        // merge neighbors
+        iftSet *adj = remove_node->adj;
+        while (adj != NULL)
+        {
+            int adj_label = nodes_map[adj->elem];
+            if (adj->elem < i &&
+                adj_label != q &&
+                (iftUnionSetElem(&(node->adj), adj_label) == 1))
+            {
+                node->numNeighbors++;
+                iftInsertFLIMGraphNeighborNode(&(output_graph->nodes[adj_label]), q);
+            }
+            adj = adj->next;
+        }
+    }
+
+    return output_graph;
+}
+
+/**
+ * @fn iftGFLIMStrideBatch
+ * @brief Perform stride in a batch of graphs.
+ * @param[in,out] graph The input graph array (the batch). After the function, it will be filled with the output graphs.
+ * @param[in] layer The layer configuration.
+ * @param[in] in_labels_dir The input labels directory.
+ * @param[in] out_labels_dir The output labels directory.
+ * @param[in] basename The name of the images.
+ * @param[in] nbasenames The number of names in basename.
+ * @param[in] stride The stride type. @see iftGFLIMStrideType.
+ */
+void iftGFLIMStrideBatch(iftFLIMGraphArray *graph, iftFLIMLayer layer,
+                         char *in_labels_dir, char *out_labels_dir,
+                         char **basename, int nbasenames,
+                         iftGFLIMStrideType stride)
+{
+    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride <= 1)
+        return;
+
+    for (int i = 0; i < nbasenames; i++)
+    {
+        char filename[512];
+        iftFLIMGraph *output_graph = NULL;
+
+        sprintf(filename, "%s/%s.pgm", in_labels_dir, basename[i]);
+        iftImage *input_labels = iftReadImageByExt(filename);
+
+        if (stride == IFT_GFLIM_IMAGESTRIDE)
+        {
+            iftImage *output_labels = NULL;
+            int new_x = ceilf(input_labels->xsize / (float)layer.pool_stride);
+            int new_y = ceilf(input_labels->ysize / (float)layer.pool_stride);
+            int new_z = iftMax(ceilf(input_labels->zsize / (float)layer.pool_stride), 1);
+            output_labels = iftCreateImage(new_x, new_y, new_z);
+            output_graph = iftGFLIMImageStride(graph->val[i], input_labels, output_labels, layer.pool_stride);
+            iftDestroyFLIMGraph(&(graph->val[i]));
+            graph->val[i] = output_graph;
+            output_graph = NULL;
+            /* save output */
+            sprintf(filename, "%s/%s.pgm", out_labels_dir, basename[i]);
+            iftWriteImageByExt(output_labels, filename);
+            iftDestroyImage(&output_labels);
+        }
+        if (stride == IFT_GFLIM_GRAPHSTRIDE)
+        {
+            int nodes_map[graph->val[i]->num_nodes];
+            output_graph = iftGFLIMGraphStride(graph->val[i], layer.pool_stride, nodes_map);
+            for (int j = 0; j < input_labels->n; j++)
+                input_labels->val[j] = nodes_map[input_labels->val[j] - 1] + 1;
+            iftDestroyFLIMGraph(&(graph->val[i]));
+            graph->val[i] = output_graph;
+            output_graph = NULL;
+            /* save output */
+            sprintf(filename, "%s/%s.pgm", out_labels_dir, basename[i]);
+            iftWriteImageByExt(input_labels, filename);
+        }
+        iftDestroyImage(&input_labels);
+    }
+}
+
+void iftGFLIMStrideBatch_v2(iftFLIMGraphArray *graph, iftFLIMLayer layer,
+                            iftImageArray *labels_img, iftGFLIMStrideType stride)
+{
+    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride <= 1)
+        return;
+
+    if (stride == IFT_GFLIM_IMAGESTRIDE)
+    {
+        for (int i = 0; i < graph->n; i++)
+        {
+            int new_x = ceilf(labels_img->val[i]->xsize / (float)layer.pool_stride);
+            int new_y = ceilf(labels_img->val[i]->ysize / (float)layer.pool_stride);
+            int new_z = iftMax(ceilf(labels_img->val[i]->zsize / (float)layer.pool_stride), 1);
+            iftImage *output_labels = iftCreateImage(new_x, new_y, new_z);
+            iftFLIMGraph *output_graph = iftGFLIMImageStride(graph->val[i], labels_img->val[i], output_labels, layer.pool_stride);
+            iftDestroyImage(&labels_img->val[i]);
+            labels_img->val[i] = output_labels;
+            output_labels = NULL;
+            iftDestroyFLIMGraph(&(graph->val[i]));
+            graph->val[i] = output_graph;
+            output_graph = NULL;
+        }
+    }
+    else
+    {
+        if (stride == IFT_GFLIM_GRAPHSTRIDE)
+        {
+            for (int i = 0; i < graph->n; i++)
+            {
+                iftFLIMGraph *output_graph = NULL;
+                int nodes_map[graph->val[i]->num_nodes];
+                output_graph = iftGFLIMGraphStride(graph->val[i], layer.pool_stride, nodes_map);
+                for (int j = 0; j < labels_img->val[i]->n; j++)
+                    labels_img->val[i]->val[j] = nodes_map[labels_img->val[i]->val[j] - 1] + 1;
+                iftDestroyFLIMGraph(&(graph->val[i]));
+                graph->val[i] = output_graph;
+                output_graph = NULL;
+            }
+        }
+    }
+}
+
+// ============ FUNCTIONS TO ENCODE LAYER ============ //
+
+/**
+ * @fn iftGFLIMConvLayer
+ * @brief Compute convolution between a graph and a set of kernels.
+ * @param graph The input graph.
+ * @param kernels The set of kernels.
+ * @param kernel_size The kernel size.
+ * @param attention_opt The attention option. @see iftFLIMGraphAttention.
+ * @param kernel_labels The kernel labels.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregationType.
+ * @param maintain_kernels Used with reduce option. Vector with nnodes size in which each position indicates whether the channel should be maintained or not.
+ * @param reduce If true, use attention values to remove some channels from the output graph.
+ * @return A mimage with the convolution result.
+ */
+iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels, 
+                            int kernel_size, iftFLIMGraphAttention attention_opt, 
+                            int *kernel_labels, iftGFLIMAggregationType aggregation_opt, 
+                            bool *maintain_kernels, bool reduce)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (kernels == NULL)
+        printf("\t kernels: NULL \n");
+    else
+        printf("\t kernels size: %d %d \n", kernels->nrows, kernels->ncols);
+    printf("\t kernel_size: %d\n", kernel_size);
+    printf("\t attention_opt: %d\n", attention_opt);
+    printf("\t kernel_labels: %s\n", kernel_labels == NULL ? "NULL" : "not NULL");
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+    printf("\t maintain_kernels: %s\n", maintain_kernels == NULL ? "NULL" : "not NULL");
+    printf("\t reduce: %s\n", reduce ? "true" : "false");
+#endif
+
+    iftIntArray **neighbors_all = NULL;
+    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
+    {
+        neighbors_all = (iftIntArray **)calloc(graph->num_nodes, sizeof(iftIntArray *));
+        for (int p = 0; p < graph->num_nodes; p++)
+            neighbors_all[p] = iftCreateIntArray(kernel_size);
+    }
+
+    iftMatrix *XI = iftFLIMGraphToFeatureMatrix(graph, kernel_size, attention_opt, aggregation_opt, neighbors_all);
+
+#ifdef PRINT_VALS
+    printf("XI: %d %d \n", XI->nrows, XI->ncols);
+    for (int i = 0; i < XI->nrows; i++)
+    {
+        for (int j = 0; j < XI->ncols; j++)
+            printf("%f ", iftMatrixElem(XI, j, i));
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
+    iftMatrix *XJ = iftMultMatrices(XI, kernels);
+    iftMatrix *A = NULL;
+
+    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
+    {
+        if (kernel_labels == NULL)
+            iftError("kernel_labels is NULL", __func__);
+        iftMatrix *XK = iftCreateMatrix(XJ->ncols, XJ->nrows);
+
+        int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
+        for (int i = 1; i < XJ->ncols; i++)
+        {
+            if (kernel_labels[i] < minLabel)
+                minLabel = kernel_labels[i];
+            if (kernel_labels[i] > nlabels)
+                nlabels = kernel_labels[i];
+        }
+        nlabels = nlabels - minLabel + 1;
+
+        for (int p = 0; p < graph->num_nodes; p++)
+        {
+            for (int l = 0; l < nlabels; l++)
+            {
+                iftMatrix *X = iftFLIMGraphAttentionNeighborSimilarity(XJ, neighbors_all[p], kernel_labels, l + minLabel);
+                iftMatrix *aux = iftCreateMatrix(1, X->ncols);
+
+                int k = 0;
+                for (int b = 0; b < XJ->ncols; b++)
+                {
+                    if (kernel_labels[b] == l + minLabel)
+                    {
+                        iftMatrixElem(aux, 0, k) = iftMatrixElem(XJ, b, p);
+                        k++;
+                    }
+                }
+
+                iftMatrix *H = iftMultMatrices(X, aux);
+                iftDestroyMatrix(&X);
+                iftDestroyMatrix(&aux);
+
+                k = 0;
+                for (int b = 0; b < XJ->ncols; b++)
+                {
+                    if (kernel_labels[b] == l + minLabel)
+                    {
+                        iftMatrixElem(XK, b, p) = iftMatrixElem(H, 0, k) + iftMatrixElem(XJ, b, p);
+                        k++;
+                    }
+                }
+                iftDestroyMatrix(&H);
+            }
+
+            iftDestroyIntArray(&neighbors_all[p]);
+        }
+        iftDestroyMatrix(&XJ);
+        iftFree(neighbors_all);
+        XJ = XK;
+        XK = NULL;
+    }
+
+    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE)
+    {
+        if (kernel_labels == NULL)
+            iftError("kernel_labels is NULL", __func__);
+        A = iftFLIMGraphAttentionClassDominance(XJ, graph, kernel_labels);
+    }
+
+    if (A != NULL)
+    {
+        if (reduce)
+        {
+            iftMatrix *XA = iftMatricesMultiplicationPointWise(XJ, A);
+            for (int i = 0; i < XA->ncols * XA->nrows; i++)
+                XA->val[i] = fabs(XA->val[i] - XJ->val[i]);
+
+            iftMatrix *sumAttention = iftComputeSumVectorBycolumn(A);
+            iftDestroyMatrix(&XA);
+            iftDestroyMatrix(&A);
+
+            // Remove from XJ half of the cols per label with the smallest attention values
+
+            int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
+            for (int i = 1; i < XJ->ncols; i++)
+            {
+                if (kernel_labels[i] < minLabel)
+                    minLabel = kernel_labels[i];
+                if (kernel_labels[i] > nlabels)
+                    nlabels = kernel_labels[i];
+            }
+            nlabels = nlabels - minLabel + 1;
+
+            // iftMatrix *new_XA = iftCreateMatrix(nkernels_maintain, XJ->nrows);
+            iftMatrix *new_XA = iftCreateMatrix(XJ->ncols, XJ->nrows);
+            for (int i = 0; i < XJ->ncols * XJ->nrows; i++)
+                new_XA->val[i] = XJ->val[i];
+
+            int k = 0;
+            for (int l = minLabel; l <= nlabels; l++)
+            {
+                double *att_heap = iftAllocDoubleArray(XJ->ncols);
+                iftDHeap *heap = iftCreateDHeap(XJ->ncols, att_heap);
+                heap->removal_policy = MINVALUE;
+                int nkernels = 0;
+
+                for (int i = 0; i < XJ->ncols; i++)
+                {
+                    if (kernel_labels[i] == l)
+                    {
+                        att_heap[i] = (double)iftMatrixElem(sumAttention, i, 0);
+                        iftInsertDHeap(heap, i);
+                        nkernels++;
+                    }
+                }
+                int nkernels_remove = nkernels / 3;
+
+                // copy to a matrix the rows with the smallest attention values
+                printf("label %d: ", l);
+                for (int j = 0; j < nkernels_remove && !iftEmptyDHeap(heap); j++)
+                {
+                    int channel = iftRemoveDHeap(heap);
+                    printf("k:%d c:%d sum_diff:%f, ", k, channel, att_heap[channel]);
+                    maintain_kernels[channel] = true;
+                    for (int i = 0; i < XJ->nrows; i++)
+                    {
+                        // iftMatrixElem(new_XA, k, i) = iftMatrixElem(XJ, channel, i);
+                        iftMatrixElem(new_XA, channel, i) = 0.0;
+                    }
+                    k++;
+                }
+                printf("\n");
+                iftDestroyDHeap(&heap);
+                iftFree(att_heap);
+            }
+            printf("\n");
+            for (int i = 0; i < XJ->ncols; i++)
+                maintain_kernels[i] = true;
+
+            iftDestroyMatrix(&sumAttention);
+            iftDestroyMatrix(&XJ);
+            XJ = new_XA;
+            new_XA = NULL;
+        }
+        else
+        {
+            iftMatrix *XA = iftMatricesMultiplicationPointWise(XJ, A);
+            iftDestroyMatrix(&A);
+            iftDestroyMatrix(&XJ);
+            XJ = XA;
+            XA = NULL;
+        }
+    }
+
+#ifdef PRINT_VALS
+    printf("XJ: %d %d \n", XJ->nrows, XJ->ncols);
+    for (int i = 0; i < XJ->nrows; i++)
+    {
+        for (int j = 0; j < XJ->ncols; j++)
+            printf("%f ", iftMatrixElem(XJ, j, i));
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
+    iftDestroyMatrix(&XI);
+    iftMImage *activ = iftMatrixToMImage(XJ, XJ->nrows,
+                                         1, 1,
+                                         XJ->ncols, 'c');
+#ifdef PRINT_VALS
+    printf("activ: %d %d %d %ld \n", activ->xsize, activ->ysize, activ->zsize, activ->m);
+    for (int i = 0; i < activ->n; i++)
+    {
+        for (int j = 0; j < activ->m; j++)
+            printf("%f ", activ->val[i][j]);
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
+    iftDestroyMatrix(&XJ);
+    return activ;
+}
+
+/**
+ * @fn iftGFLIMSumMImgArrayToFloatArray
+ * @brief Sum the bias to a mimage array.
+ * @param mimgArray The input mimage array.
+ * @param bias The bias to be summed.
+ * @param inplace If true, the bias is summed in place.
+ */
+iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, float *bias,
+                                                 bool inplace)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (mimgArray == NULL)
+        printf("\t mimgArray: NULL \n");
+    else
+        printf("\t mimgArray size: %d \n", mimgArray->n);
+    printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
+    printf("\t inplace: %s\n", inplace ? "true" : "false");
+#endif
+
+    iftMImageArray *mimgArrayOut = NULL;
+    iftMImage *tmp = NULL;
+
+    if (!inplace)
+        mimgArrayOut = iftCreateMImageArray(mimgArray->n);
+
+    for (int i = 0; i < mimgArray->n; i++)
+    {
+        
+        tmp = iftGFLIMSumMImgToFloatArray(mimgArray->val[i], bias, inplace);
+        if (!inplace)
+        {
+            mimgArrayOut->val[i] = tmp;
+            tmp = NULL;
+        }
+    }
+
+    if (!inplace)
+        return mimgArrayOut;
+    else
+        return mimgArray;
+}
+
+/**
+ * @fn iftGFLIMConvLayerBatch
+ * @brief Convolution layer batch.
+ * @param graph The input graph.
+ * @param kernels The set of kernels.
+ * @param kernel_size The kernel size.
+ * @return The mimage array with the convolution result.
+ */
+iftMImageArray *iftGFLIMConvLayerBatch(iftFLIMGraphArray *graph, iftMatrix *kernels, int kernel_size,
+                                       iftFLIMGraphAttention attention_opt, int *kernel_labels,
+                                       iftGFLIMAggregationType aggregation_opt, bool **maintain_kernels, bool reduce)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph size: %d \n", graph->n);
+    if (kernels == NULL)
+        printf("\t kernels: NULL \n");
+    else
+        printf("\t kernels size: %d %d \n", kernels->nrows, kernels->ncols);
+    printf("\t kernel_size: %d\n", kernel_size);
+#endif
+
+    iftMImageArray *activ = iftCreateMImageArray(graph->n);
+    for (int i = 0; i < graph->n; i++)
+    {
+        activ->val[i] = iftGFLIMConvLayer(graph->val[i], kernels, kernel_size, attention_opt, kernel_labels, aggregation_opt, maintain_kernels[i], reduce);
+    }
+    return activ;
+}
+
+/**
+ * @fn iftGFLIMPoolingArray
+ * @brief Pooling layer.
+ * @param activ_array The input mimage array.
+ * @param graph The input graph.
+ * @param pool_type The pooling type.
+ * @param pool_size The pooling size.
+ * @param pool_stride The pooling stride.
+ * @note The pooling is applied to the graph nodes.
+ */
+void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftFLIMGraphArray *graph,
+                          char *pool_type, int pool_size, int pool_stride)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (activ_array == NULL)
+        printf("\t activ_array: NULL \n");
+    else
+        printf("\t activ_array size: %d \n", activ_array->n);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph size: %d \n", graph->n);
+    printf("\t pool_type: %s\n", pool_type);
+    printf("\t pool_size: %d %d %d\n", pool_size[0], pool_size[1], pool_size[2]);
+    printf("\t pool_stride: %d\n", pool_stride);
+#endif
+
+    for (int i = 0; i < activ_array->n; i++)
+    {
+        iftFLIMGraph *pooling_graph = iftMImageToFLIMGraph(activ_array->val[i], graph->val[i]);
+        iftDestroyFLIMGraph(&(graph->val[i]));
+        iftGFLIMPoolingLayer(pooling_graph, pool_type, pool_size, pool_stride);
+        graph->val[i] = pooling_graph;
+        pooling_graph = NULL;
+    }
+}
+
+/**
+ * @fn iftGFLIMEncodeLayer
+ * @brief Encode a layer. It computes the convolution, pooling and stride (if any).
+ * @param[in] graph The input graph.
+ * @param[in] Kernels The set of kernels.
+ * @param[in] bias The bias.
+ * @param[in] layer The layer configuration.
+ * @param[in] stride The stride.
+ * @param[in] input_labels The image with the superpixels of the input graph. It maps the image pixels to the graph nodes (from 1).
+ * @param[out] output_labels A pointer to an iftImage*. Is allocated inside the function. After the function, it will be filled with the image-graph mapping values (from 1).
+ * @param[in] attention_opt The attention option. @see iftFLIMGraphAttention.
+ * @param[in] kernel_labels The kernel labels.
+ * @param[in] aggregation_opt The aggregation option. @see iftGFLIMAggregationType.
+ * @param[in] reduce If true, use attention values to remove some channels from the output graph.
+ * @return The output graph after encoding the layer.
+ * @note If stride is IFT_GFLIM_NOSTRIDE the input_labels and output_labels can be NULL.
+ */
+iftFLIMGraph *iftGFLIMEncodeLayer(iftFLIMGraph *graph,
+                                  iftMatrix *Kernels, float *bias,
+                                  iftFLIMLayer layer, iftGFLIMStrideType stride,
+                                  iftImage *input_labels, iftImage **output_labels,
+                                  iftFLIMGraphAttention attention_opt, int *kernel_labels,
+                                  iftGFLIMAggregationType aggregation_opt,
+                                  bool reduce)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (Kernels == NULL)
+        printf("\t Kernels: NULL \n");
+    else
+        printf("\t Kernels size: %d %d \n", Kernels->nrows, Kernels->ncols);
+    printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
+    printf("\t stride: %d\n", stride);
+    if (input_labels == NULL)
+        printf("\t input_labels: NULL \n");
+    else
+        printf("\t input_labels size: %d %d %d \n", input_labels->xsize, input_labels->ysize, input_labels->zsize);
+    printf("\t output_labels: %s\n", output_labels == NULL ? "NULL" : "not NULL");
+    printf("\t attention_opt: %d\n", attention_opt);
+    printf("\t kernel_labels: %s\n", kernel_labels == NULL ? "NULL" : "not NULL");
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+    printf("\t reduce: %s\n", reduce ? "true" : "false");
+#endif
+
+    bool *channels_maintain = NULL;
+
+    if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
+        channels_maintain = iftAllocBoolArray(Kernels->ncols);
+
+    iftMImage *activ = iftGFLIMConvLayer(graph, Kernels, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, channels_maintain, reduce);
+
+    float *bias_aux = NULL;
+    if (bias != NULL && channels_maintain != NULL)
+    {
+        bias_aux = iftAllocFloatArray(activ->m);
+        for (int i = 0, j = 0; i < Kernels->ncols; i++)
+        {
+            if (channels_maintain[i])
+            {
+                bias_aux[j] = bias[i];
+                j++;
+            }
+        }
+    }
+    else
+        bias_aux = bias;
+
+    iftFree(channels_maintain);
+
+    iftMImage *activ_relu = NULL;
+    if (layer.relu)
+        activ_relu = iftMReLU(activ, bias_aux, true);
+    else
+    {
+        if (bias_aux != NULL)
+            activ_relu = iftGFLIMSumMImgToFloatArray(activ, bias_aux, true);
+        else
+            activ_relu = activ;
+    }
+    if (bias_aux != NULL && bias_aux != bias)
+        iftFree(bias_aux);
+
+#ifdef PRINT_VALS
+    printf("activ_relu: %d %d %d %ld \n", activ_relu->xsize, activ_relu->ysize, activ_relu->zsize, activ_relu->m);
+    for (int i = 0; i < activ_relu->n; i++)
+    {
+        for (int j = 0; j < activ_relu->m; j++)
+            printf("%f ", activ_relu->val[i][j]);
+        printf("\n");
+    }
+    printf("\n");
+#endif
+
+    /* pooling */
+    iftFLIMGraph *pooling_graph = iftMImageToFLIMGraph(activ_relu, graph);
+    iftDestroyMImage(&activ_relu);
+    iftGFLIMPoolingLayer(pooling_graph, layer.pool_type, layer.pool_size[0]*layer.pool_size[1], 1);
+    
+    /* stride model */
+    iftFLIMGraph *output_graph = NULL;
+    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride == 1)
+    {
+        output_graph = pooling_graph;
+        pooling_graph = NULL;
+    }
+
+    if (stride == IFT_GFLIM_IMAGESTRIDE && layer.pool_stride > 1)
+    {
+        int new_x = ceilf(input_labels->xsize / (float)layer.pool_stride);
+        int new_y = ceilf(input_labels->ysize / (float)layer.pool_stride);
+        int new_z = iftMax(ceilf(input_labels->zsize / (float)layer.pool_stride), 1);
+
+        (*output_labels) = iftCreateImage(new_x, new_y, new_z);
+        output_graph = iftGFLIMImageStride(pooling_graph, input_labels, (*output_labels), layer.pool_stride);
+    }
+
+    if (stride == IFT_GFLIM_GRAPHSTRIDE && layer.pool_stride > 1)
+    {
+        int nodes_map[pooling_graph->num_nodes];
+        (*output_labels) = iftCreateImage(input_labels->xsize, input_labels->ysize, input_labels->zsize);
+        output_graph = iftGFLIMGraphStride(pooling_graph, layer.pool_stride, nodes_map);
+        for (int j = 0; j < input_labels->n; j++)
+            (*output_labels)->val[j] = nodes_map[input_labels->val[j] - 1] + 1;
+    }
+
+    if (pooling_graph != NULL)
+        iftDestroyFLIMGraph(&pooling_graph);
+
+    if (layer.pool_stride == 1 && stride != IFT_GFLIM_NOSTRIDE)
+        (*output_labels) = iftCopyImage(input_labels);
+
+    return output_graph;
+}
+
+/**
+ * @fn iftGFLIMEncodeLayerBatch
+ * @brief Encode a layer for a batch of graphs.
+ * @param[in,out] input The input graph array (the batch). After the function, it will be filled with the output graphs.
+ * @param[in] Kmerged The set of kernels.
+ * @param[in] layer The layer configuration.
+ * @param[in] in_labels_dir The input labels directory. It can be NULL if stride is IFT_GFLIM_NOSTRIDE.
+ * @param[in] out_labels_dir The output labels directory. It can be NULL if stride is IFT_GFLIM_NOSTRIDE.
+ * @param[in] bias_merged An array with bias values.
+ * @param[in] basename An array with the name of the images. It can be NULL if stride is IFT_GFLIM_NOSTRIDE.
+ * @param[in] nbasenames The number of names in basename.
+ * @param[in] stride The stride type.
+ * @param[in] layer_index The layer index.
+ * @param[in] attention_opt The attention option. @see iftFLIMGraphAttention.
+ * @param[in] kernel_labels The kernel labels.
+ * @param[in] aggregation_opt The aggregation option. @see iftGFLIMAggregationType.
+ * @param[in] reduce If true, use attention values to remove some channels from the output graph.
+ * @note The stride is applied only if the pool_stride in layer config. is greater than 1.
+ */
+void iftGFLIMEncodeLayerBatch(iftFLIMGraphArray *input,
+                              iftMatrix *Kmerged, iftFLIMLayer layer,
+                              char *in_labels_dir, char *out_labels_dir,
+                              float *bias_merged,
+                              char **basename, int nbasenames,
+                              iftGFLIMStrideType stride, int layer_index,
+                              iftFLIMGraphAttention attention_opt, int *kernel_labels,
+                              iftGFLIMAggregationType aggregation_opt, bool reduce)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (input == NULL)
+        printf("\t input: NULL \n");
+    else
+        printf("\t input size: %d \n", input->n);
+    if (Kmerged == NULL)
+        printf("\t Kmerged: NULL \n");
+    else
+        printf("\t Kmerged size: %d %d \n", Kmerged->nrows, Kmerged->ncols);
+    if (stride != IFT_GFLIM_NOSTRIDE)
+    {
+        printf("\t in_labels_dir: %s\n", in_labels_dir);
+        printf("\t out_labels_dir: %s\n", out_labels_dir);
+        printf("\t basename: %s\n", basename == NULL ? "NULL" : "not NULL");
+        printf("\t nbasenames: %d\n", nbasenames);
+    }
+    printf("\t bias_merged: %s\n", bias_merged == NULL ? "NULL" : "not NULL");
+    printf("\t stride: %d\n", stride);
+    printf("\t layer_index: %d\n", layer_index);
+#endif
+
+    bool **maintain_kernels = NULL;
+    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
+    {
+        maintain_kernels = iftAlloc(input->n, sizeof(bool *));
+        for (int i = 0; i < input->n; i++)
+            maintain_kernels[i] = iftAlloc(Kmerged->ncols, sizeof(bool));
+    }
+
+    /* convolution */
+    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, maintain_kernels, reduce);
+
+    /* activation and bias */
+    iftMImageArray *activ_relu = activ;
+    if (maintain_kernels != NULL && bias_merged != NULL)
+    {
+        for (int i = 0; i < activ_relu->n; i++)
+        {
+            float *bias_aux = iftAllocFloatArray(activ_relu->val[i]->m);
+            for (int k = 0, j = 0; k < Kmerged->ncols; k++)
+            {
+                if (maintain_kernels[i][k])
+                {
+                    bias_aux[j] = bias_merged[k];
+                    j++;
+                }
+            }
+            if (layer.relu)
+                activ_relu->val[i] = iftMReLU(activ_relu->val[i], bias_aux, true);
+            else
+                activ_relu->val[i] = iftGFLIMSumMImgToFloatArray(activ_relu->val[i], bias_aux, true);
+
+            iftFree(bias_aux);
+        }
+    }
+    else
+    {
+        if (layer.relu)
+            activ_relu = iftMReLUArray(activ, bias_merged, layer.relu);
+        else
+        {
+            if (bias_merged != NULL)
+            {
+                activ_relu = iftGFLIMSumMImgArrayToFloatArray(activ, bias_merged, true);
+            }
+        }
+    }
+
+    if (maintain_kernels != NULL)
+    {
+        for (int i = 0; i < input->n; i++)
+            iftFree(maintain_kernels[i]);
+        iftFree(maintain_kernels);
+    }
+
+    activ = NULL;
+
+    /* pooling */
+    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0]*layer.pool_size[1], 1);
+    iftDestroyMImageArray(&activ_relu);
+
+    /* stride */
+    iftGFLIMStrideBatch(input, layer, in_labels_dir, out_labels_dir, basename, nbasenames, stride);
+}
+
+void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
+                                 iftMatrix *Kmerged, iftFLIMLayer layer,
+                                 iftImageArray *labels_img,
+                                 float *bias_merged,
+                                 iftGFLIMStrideType stride,
+                                 iftFLIMGraphAttention attention_opt, int *kernel_labels,
+                                 iftGFLIMAggregationType aggregation_opt, bool reduce)
+{
+    bool **maintain_kernels = NULL;
+    if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
+    {
+        maintain_kernels = iftAlloc(input->n, sizeof(bool *));
+        for (int i = 0; i < input->n; i++)
+            maintain_kernels[i] = iftAlloc(Kmerged->ncols, sizeof(bool));
+    }
+
+    /* convolution */
+    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, maintain_kernels, reduce);
+
+    /* activation and bias */
+    iftMImageArray *activ_relu = activ;
+    if (maintain_kernels != NULL && bias_merged != NULL)
+    {
+        for (int i = 0; i < activ_relu->n; i++)
+        {
+            float *bias_aux = iftAllocFloatArray(activ_relu->val[i]->m);
+            for (int k = 0, j = 0; k < Kmerged->ncols; k++)
+            {
+                if (maintain_kernels[i][k])
+                {
+                    bias_aux[j] = bias_merged[k];
+                    j++;
+                }
+            }
+            if (layer.relu)
+                activ_relu->val[i] = iftMReLU(activ_relu->val[i], bias_aux, true);
+            else
+                activ_relu->val[i] = iftGFLIMSumMImgToFloatArray(activ_relu->val[i], bias_aux, true);
+
+            iftFree(bias_aux);
+        }
+    }
+    else
+    {
+        if (layer.relu)
+            activ_relu = iftMReLUArray(activ, bias_merged, layer.relu);
+        else
+        {
+            if (bias_merged != NULL)
+            {
+                activ_relu = iftGFLIMSumMImgArrayToFloatArray(activ, bias_merged, true);
+            }
+        }
+    }
+
+    if (maintain_kernels != NULL)
+    {
+        for (int i = 0; i < input->n; i++)
+            iftFree(maintain_kernels[i]);
+        iftFree(maintain_kernels);
+    }
+
+    activ = NULL;
+
+    /* pooling */
+    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0]*layer.pool_size[1], 1);
+    iftDestroyMImageArray(&activ_relu);
+
+    /* stride */
+    iftGFLIMStrideBatch_v2(input, layer, labels_img, stride);
+}
+
+// ============ FUNCTIONS TO DECODE FEATURES ============ //
+
+/**
+ * @brief Decode the MImage using the hybrid adaptive decoder
+ * @param mimg MImage to decode
+ * @param channel_label Array with the channel labels
+ * @return iftFImage* Decoded image
+ */
+iftFImage *HybridAdaptativeDecoder(iftMImage *mimg, float *channel_label)
+{
+    float *weight = TriStateAdaptativeWeigth(mimg); // get the same weigths as the tri-state decoder
+
+    iftFImage *salie = iftCreateFImage(mimg->xsize, mimg->ysize, mimg->zsize);
+
+    /* decode layer */
+    for (int p = 0; p < mimg->n; p++)
+    {
+        for (int b = 0; b < mimg->m; b++)
+        {
+            if (channel_label[b] != -1) // only foreground channels are weigthed
+                salie->val[p] += mimg->val[p][b] * weight[b];
+        }
+        if (salie->val[p] < 0) salie->val[p] = 0; 
+    }
+
+    iftFree(weight);
+
+    return (salie);
+}
+
+/**
+ * @fn iftGFLIMGaussianDecoder
+ * @brief Decode the features using a Gaussian decoder.
+ * @param mimg The input mimage.
+ * @param adj_radius The adjacency radius.
+ * @param channel_label An array with the kernel labels.
+ * @return The decoded image.
+ */
+iftFImage *iftGFLIMGaussianDecoder(iftMImage *mimg, float adj_radius, float *channel_label)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (mimg == NULL)
+        printf("\t mimg: NULL \n");
+    else
+        printf("\t mimg size: %d %d %d %ld \n", mimg->xsize, mimg->ysize, mimg->zsize, mimg->m);
+    printf("\t adj_radius: %f\n", adj_radius);
+    printf("\t channel_label: %s\n", channel_label == NULL ? "NULL" : "not NULL");
+#endif
+
+    iftFImage *salie = iftCreateFImage(mimg->xsize, mimg->ysize, mimg->zsize);
+    float *weight = iftAllocFloatArray(mimg->m);
+    float *maxval = iftAllocFloatArray(mimg->m);
+    int nobj = 0, nbkg = 0;
+
+    /* Normalize activations per channel */
+
+    for (int b = 0; b < mimg->m; b++)
+    {
+        maxval[b] = iftMMaximumValue(mimg, b);
+        if (channel_label[b] > 0)
+        { /* object channel */
+            nobj++;
+        }
+        else
+        { /* background channel */
+            nbkg++;
+        }
+    }
+
+    for (int p = 0; p < mimg->n; p++)
+    {
+        for (int b = 0; b < mimg->m; b++)
+        {
+            if (maxval[b] > IFT_EPSILON)
+                mimg->val[p][b] = mimg->val[p][b] / maxval[b];
+        }
+    }
+    iftFree(maxval);
+
+    /* Estimate saliency of each pixel */
+
+    iftAdjRel *A = NULL;
+    if (iftIs3DMImage(mimg))
+        A = iftSpheric(adj_radius);
+    else
+        A = iftCircular(adj_radius);
+
+    for (int p = 0; p < mimg->n; p++)
+    {
+
+        /* estimate mean and stdev of activations across channels */
+
+        float mean[2] = {0.0, 0.0}, var[2] = {0.0, 0.0};
+        iftVoxel u = iftMGetVoxelCoord(mimg, p);
+
+        for (int i = 0; i < A->n; i++)
+        {
+            iftVoxel v = iftGetAdjacentVoxel(A, u, i);
+
+            if (iftMValidVoxel(mimg, v))
+            {
+                int q = iftMGetVoxelIndex(mimg, v);
+
+                for (int b = 0; b < mimg->m; b++)
+                {
+                    if (channel_label[b] > 0)
+                    { /* object channel */
+                        mean[0] += mimg->val[q][b];
+                    }
+                    else
+                    { /* background channel */
+                        mean[1] += mimg->val[q][b];
+                    }
+                }
+            }
+        }
+        mean[0] /= (nobj * A->n);
+        mean[1] /= (nbkg * A->n);
+
+        for (int i = 0; i < A->n; i++)
+        {
+            iftVoxel v = iftGetAdjacentVoxel(A, u, i);
+
+            if (iftMValidVoxel(mimg, v))
+            {
+                int q = iftMGetVoxelIndex(mimg, v);
+
+                for (int b = 0; b < mimg->m; b++)
+                {
+                    if (channel_label[b] > 0)
+                    { /* object channel */
+                        var[0] += powf(mimg->val[q][b] - mean[0], 2);
+                    }
+                    else
+                    { /* background channel */
+                        var[1] += powf(mimg->val[q][b] - mean[1], 2);
+                    }
+                }
+            }
+        }
+        var[0] = var[0] / (nobj * A->n);
+        var[1] = var[1] / (nbkg * A->n);
+
+        /* It is expected two Gaussian distributions G0 and G1 of
+           activations around mean[0] and mean[1]. We may expect that
+           object pixels generate mean[0] >> mean[1] and the other way
+           around for background pixels. We may use the the probability
+           values of these distributions to estimate weights. */
+
+        float P0, P1;
+        for (int b = 0; b < mimg->m; b++)
+        {
+            if (var[0] > IFT_EPSILON)
+                P0 = exp(-powf(mimg->val[p][b] - mean[0], 2) / (2.0 * var[0]));
+            else
+            {
+                var[0] = 1.0;
+                P0 = exp(-powf(mimg->val[p][b] - mean[0], 2) / (2.0 * var[0]));
+            }
+            if (var[1] > IFT_EPSILON)
+                P1 = exp(-powf(mimg->val[p][b] - mean[1], 2) / (2.0 * var[1]));
+            else
+            {
+                var[1] = 1.0;
+                P1 = exp(-powf(mimg->val[p][b] - mean[1], 2) / (2.0 * var[1]));
+            }
+
+            if ((channel_label[b] > 0) && (P0 > P1))
+            {
+                weight[b] = 1; // P0;
+            }
+            else
+            {
+                if ((channel_label[b] < 0) && (P0 < P1))
+                {
+                    weight[b] = -1; // P1
+                }
+                else
+                {
+                    weight[b] = 0;
+                }
+            }
+        }
+
+        /* Estimate the salience map using one neuron per pixel -- it is
+           no longer a point-wise convolution */
+
+        for (int b = 0; b < mimg->m; b++)
+        {
+            salie->val[p] += mimg->val[p][b] * weight[b];
+        }
+        if (salie->val[p] < 0) 
+            salie->val[p] = 0;
+    }
+    iftDestroyAdjRel(&A);
+    iftFree(weight);
+
+    return (salie);
+}
+
+float *iftGFLIMDecodeNode(iftFLIMGraphNode node, iftFLIMGraph *graph,
+                          int nlabels, int min_label, int *channel_label,
+                          float lambda)
+{
+    /* estimate mean of activations across channels */
+    float *mean = iftAllocFloatArray(nlabels);
+    float *nkernels = iftAllocFloatArray(nlabels);
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        int label = channel_label[b] - min_label;
+        float mean_feat = node.feats[b];
+
+        iftSet *adj = node.adj;
+        while (adj != NULL)
+        {
+            mean_feat += graph->nodes[adj->elem].feats[b];
+            adj = adj->next;
+        }
+        mean[label] += mean_feat;
+        nkernels[label]++;
+    }
+    for (int l = 0; l < nlabels; l++)
+        mean[l] /= (nkernels[l] * (node.numNeighbors + 1));
+
+    float *weight = iftAllocFloatArray(graph->num_feats); // do not compute weight for background
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        int l = channel_label[b] - min_label;
+
+        if (l > 1 && mean[0] < lambda * mean[l])
+            weight[b] = 1;
+        else
+        {
+            if (l == 0 && mean[1] < lambda * mean[0])
+                weight[b] = -1;
+            else
+                weight[b] = 0;
+        }
+    }
+
+    return weight;
+}
+
+// float *iftGFLIMDecodeNode(iftFLIMGraphNode node, iftFLIMGraph *graph,
+//                         int nlabels, int min_label, int *channel_label,
+//                         float lambda)
+// {
+//     /* estimate mean of activations across channels */
+//     float *mean = iftAllocFloatArray(nlabels);
+//     for (int b = 0; b < graph->num_feats; b++)
+//     {
+//         int label = channel_label[b] - min_label;
+//         float mean_feat = node.feats[b];
+
+//         iftSet *adj = node.adj;
+//         while (adj != NULL)
+//         {
+//             mean_feat += graph->nodes[adj->elem].feats[b];
+//             adj = adj->next;
+//         }
+//         mean[label] += (mean_feat / (node.numNeighbors + 1));
+//     }
+
+//     float *weight = iftAllocFloatArray(nlabels-1); // do not compute weight for background
+//     for(int l = 1; l < nlabels; l++)
+//     {
+//         if (lambda * mean[l] >  mean[0]) weight[l-1] = 1;
+//         else{
+//             if(mean[l] < lambda * mean[0]) weight[l-1] = -1;
+//             else weight[l-1] = 0;
+//         }
+//     }
+
+//     return weight;
+// }
+
+/**
+ * @fn iftGFLIMGraphAdaptiveDecoder
+ * @brief Decode the features using a Graph Adaptive Decoder.
+ * @param graph The input graph.
+ * @param channel_label An array with the kernel labels.
+ * @return The decoded graph.
+ * @note The channel_label is used to define the object and background channels.
+ * @note This function normalizes the graph node features.
+ */
+float **iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_label)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (label_img == NULL)
+        printf("\t label_img: NULL \n");
+    else
+        printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
+    printf("\t channel_label: %s\n", channel_label == NULL ? "NULL" : "not NULL");
+#endif
+
+    float lambda = 1.2;
+
+    int max_label = channel_label[0], min_label = channel_label[0];
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        max_label = iftMax(max_label, channel_label[b]);
+        min_label = iftMin(min_label, channel_label[b]);
+    }
+    int nlabels = max_label - min_label + 1;
+
+    /* Normalize activations per channel */
+    float *max_channel = iftAllocFloatArray(nlabels);
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        float maxval = graph->nodes[0].feats[b];
+        for (int p = 1; p < graph->num_nodes; p++)
+        {
+            maxval = iftMax(graph->nodes[p].feats[b], maxval);
+        }
+        int label = channel_label[b] - min_label;
+        max_channel[label] = maxval;
+
+        for (int p = 1; p < graph->num_nodes; p++)
+        {
+            if (max_channel[label] > 0)
+                graph->nodes[p].feats[b] /= max_channel[label];
+            else
+                graph->nodes[p].feats[b] = 0;
+        }
+    }
+
+    float **saliencyGraph = (float **)iftAlloc(graph->num_nodes, sizeof(float *));
+
+    /* Estimate saliency of each pixel */
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        float *weight = iftGFLIMDecodeNode(graph->nodes[p], graph, nlabels, min_label, channel_label, lambda);
+
+        iftFLIMGraphNode *node = &(graph->nodes[p]);
+        saliencyGraph[p] = iftAllocFloatArray(nlabels - 1);
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            int label = channel_label[b] - min_label;
+            if (label > 0)
+            {
+                label--;
+            }
+            saliencyGraph[p][label] += node->feats[b] * weight[b];
+        }
+        for (int l = 0; l < nlabels - 1; l++)
+        {
+            if (saliencyGraph[p][l] < 0) /* RELU */
+                saliencyGraph[p][l] = 0;
+        }
+        iftFree(weight);
+    }
+
+    iftFree(max_channel);
+
+    return (saliencyGraph);
+}
+
+/**
+ * @fn iftGFLIMDecodeLayer
+ * @brief Decode a layer.
+ * @param graph The input graph.
+ * @param label_img The image with the superpixels of the input graph. It maps the image pixels to the graph nodes (from 1).
+ * @param label_img0 The image with the superpixels of the original image. It maps the image pixels to the graph nodes (from 1).
+ * @param truelabels An array with the kernel labels.
+ * @param nlabels The number of labels.
+ * @param decoder The decoder type. @see iftGFLIMDecoderType.
+ * @return The decoded image.
+ * @note The truelabels array is used to define the object and background channels.
+ * @note The label_img0 is used to interpolate the saliency map.
+ * @note The decoder type is used to define the decoder algorithm.
+ * @note The output image is normalized to 4095 (12 bits) or 255 (8 bits) and interpolated to the original image size.
+ */
+iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
+                                   iftImage *label_img, iftImage *label_img0,
+                                   int *truelabels, int nlabels,
+                                   iftGFLIMDecoderType decoder)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (label_img == NULL)
+        printf("\t label_img: NULL \n");
+    else
+        printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
+    if (label_img0 == NULL)
+        printf("\t label_img0: NULL \n");
+    else
+        printf("\t label_img0 size: %d %d %d \n", label_img0->xsize, label_img0->ysize, label_img0->zsize);
+    printf("\t truelabels: %s\n", truelabels == NULL ? "NULL" : "not NULL");
+    printf("\t nlabels: %d\n", nlabels);
+    printf("\t decoder: %d\n", decoder);
+    switch (decoder)
+    {
+    case IFT_GFLIM_TRISTATE_DECODER:
+        printf("\t decoder: TriStateAdaptativeDecoder\n");
+        break;
+
+    case IFT_GFLIM_HYBRID_DECODER:
+        printf("\t decoder: HybridAdaptativeDecoder\n");
+        break;
+
+    case IFT_GFLIM_GRAPHADAPTIVE_DECODER:
+        printf("\t decoder: GraphAdaptiveDecoder\n");
+        break;
+
+    case IFT_GFLIM_GAUSSIAN_DECODER:
+        printf("\t decoder: GaussianDecoder\n");
+        break;
+    }
+#endif
+
+    float scale[3];
+    iftFImage **salie = NULL;
+    iftMImage *mimg = NULL;
+    float *weight = NULL;
+    float **saliencyGraph = NULL;
+    iftImageArray *smap = NULL;
+
+    scale[0] = (float)label_img0->xsize / (float)label_img->xsize;
+    scale[1] = (float)label_img0->ysize / (float)label_img->ysize;
+    scale[2] = (float)label_img0->zsize / (float)label_img->zsize;
+
+    if (IFT_GFLIM_TRISTATE_DECODER)
+        nlabels = 1;
+
+    if (nlabels == 0)
+        iftError("Number of labels must be greater than 0: %d", __func__, nlabels);
+
+    salie = (iftFImage **)calloc(nlabels, sizeof(iftFImage *));
+
+    switch (decoder)
+    {
+    case IFT_GFLIM_TRISTATE_DECODER:
+        mimg = iftFLIMGraphToMImage(graph, label_img);
+        salie[0] = TriStateAdaptativeDecoder(mimg);
+        break;
+
+    case IFT_GFLIM_HYBRID_DECODER:
+        if(truelabels == NULL) iftError("truelabels must be not NULL with hybrid decoder", __func__);
+        
+        mimg = iftFLIMGraphToMImage(graph, label_img);
+        weight = iftAllocFloatArray(graph->num_feats);
+        for (int l = 0; l < nlabels; l++)
+        {
+            /* set weights */
+            for (int k = 0; k < graph->num_feats; k++)
+            {
+                if ((l + 1) == truelabels[k])
+                    weight[k] = +1;
+                else
+                    weight[k] = -1;
+            }
+            salie[l] = HybridAdaptativeDecoder(mimg, weight);
+        }
+        break;
+
+    case IFT_GFLIM_GRAPHADAPTIVE_DECODER:
+        if(truelabels == NULL) iftError("truelabels must be not NULL with graph adaptive decoder", __func__);
+        for (int l = 0; l < nlabels; l++)
+            salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
+
+        saliencyGraph = iftGFLIMGraphAdaptiveDecoder(graph, truelabels);
+
+        // fill the saliency image with the saliency of the graph nodes.
+        for (int p = 0; p < label_img->n; p++)
+        {
+            int node = label_img->val[p] - 1;
+            for (int l = 0; l < nlabels - 1; l++)
+                salie[l]->val[p] = saliencyGraph[node][l];
+        }
+
+        break;
+    
+    case IFT_GFLIM_GAUSSIAN_DECODER:
+        if(truelabels == NULL) iftError("truelabels must be not NULL with gaussian decoder", __func__);
+        mimg = iftFLIMGraphToMImage(graph, label_img);
+        weight = iftAllocFloatArray(graph->num_feats);
+        for (int l = 0; l < nlabels; l++)
+        {
+            /* set weights */
+            for (int k = 0; k < graph->num_feats; k++)
+            {
+                if ((l + 1) == truelabels[k])
+                    weight[k] = +1;
+                else
+                    weight[k] = -1;
+            }
+            salie[l] = iftGFLIMGaussianDecoder(mimg, 1.5, weight);
+        }
+        break;
+
+    default:
+        iftError("Invalid decoder type: %d", __func__, decoder);
+        break;
+    }
+
+    if(saliencyGraph != NULL){
+        for (int p = 0; p < graph->num_nodes; p++)
+            iftFree(saliencyGraph[p]);
+        iftFree(saliencyGraph);
+    }
+
+    iftDestroyMImage(&mimg);
+    iftFree(weight);
+
+    smap = iftCreateImageArray(nlabels);
+
+    for (int l = 0; l < nlabels; l++)
+    {
+        int Imax;
+        /* Interpolate and normalize the salience maps */
+        iftFImage *smap_interp = NULL;
+        if (iftIs3DImage(label_img))
+        {
+            smap_interp = iftFInterp(salie[l], scale[0], scale[1], scale[2]);
+            Imax = 4095;
+        }
+        else
+        {
+            smap_interp = iftFInterp2D(salie[l], scale[0], scale[1]);
+            Imax = 255;
+        }
+
+        smap->val[l] = iftFImageToImage(smap_interp, Imax);
+        iftDestroyFImage(&smap_interp);
+        iftDestroyFImage(&salie[l]);
+    }
+
+    return smap;
+}
+
+// =========== FUNCTION TO EXTRACT FEATURES ============ //
+
+/**
+ * @fn iftGFLIMImageToFLIMGraphBatch
+ * @brief Convert a batch of images to a batch of FLIM graphs.
+ * @param fs The image file set.
+ * @param labels_dir The labels directory.
+ * @param first The first image index.
+ * @param last The last image index.
+ * @param initial_seeds The number of initial seeds.
+ * @param nsuperpixels The number of superpixels.
+ * @param basename An array with the name of the images.
+ * @param graph_feat The graph feature. @see iftFLIMGraphFeature.
+ * @param graph_type The graph type. @see iftFLIMGraphType.
+ * @return The FLIM graph array.
+ */
+iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_dir,
+                                                 int first, int last,
+                                                 int initial_seeds, int nsuperpixels,
+                                                 char **basename,
+                                                 iftFLIMGraphFeature graph_feat,
+                                                 iftFLIMGraphType graph_type)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (fs == NULL)
+        printf("\t fs: NULL \n");
+    else
+        printf("\t fs size: %ld \n", fs->n);
+    printf("\t labels_dir: %s\n", labels_dir);
+    printf("\t first: %d\n", first);
+    printf("\t last: %d\n", last);
+    printf("\t initial_seeds: %d\n", initial_seeds);
+    printf("\t nsuperpixels: %d\n", nsuperpixels);
+    printf("\t basename: %s\n", basename == NULL ? "NULL" : "not NULL");
+    printf("\t graph_feat: %d\n", graph_feat);
+    printf("\t graph_type: %d\n", graph_type);
+#endif
+
+    iftFLIMGraphArray *input = iftFLIMGraphCreateEmptyFLIMGraphArray(last - first + 1);
+
+#pragma omp parallel for
+    for (int k = 0; k <= last - first; k++)
+    {
+        int i = k + first;
+        char ext[10], label_file[512];
+
+        sprintf(ext, "%s", iftFileExt(fs->files[i]->path));
+        basename[k] = iftFilename(fs->files[i]->path, ext);
+        sprintf(label_file, "%s/%s.pgm", labels_dir, basename[k]);
+
+        iftImage *img = iftReadImageByExt(fs->files[i]->path);
+        iftImage *label_img = NULL;
+
+        switch (graph_type)
+        {
+        case IFT_FLIMGRAPH_TYPE_DISF:
+            input->val[k] = iftImageToFLIMGraphDISF(img, initial_seeds, nsuperpixels, &label_img, graph_feat);
+            break;
+
+        case IFT_FLIMGRAPH_TYPE_ERGC:
+            input->val[k] = iftImageToFLIMGraphERGC(img, nsuperpixels, 0, &label_img, graph_feat);
+            break;
+        }
+
+        iftWriteImageByExt(label_img, label_file);
+        iftDestroyImage(&label_img);
+        iftDestroyImage(&img);
+    }
+    return input;
+}
+
+iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
+                                                    int first, int last,
+                                                    int initial_seeds, int nsuperpixels,
+                                                    iftFLIMGraphFeature graph_feat,
+                                                    iftFLIMGraphType graph_type,
+                                                    iftImageArray *label_imgs)
+{
+    iftFLIMGraphArray *input = iftFLIMGraphCreateEmptyFLIMGraphArray(last - first + 1);
+
+#pragma omp parallel for
+    for (int k = 0; k <= last - first; k++)
+    {
+        int i = k + first;
+        iftImage *img = iftReadImageByExt(fs->files[i]->path);
+
+        switch (graph_type)
+        {
+        case IFT_FLIMGRAPH_TYPE_DISF:
+            input->val[k] = iftImageToFLIMGraphDISF(img, initial_seeds, nsuperpixels, &(label_imgs->val[k]), graph_feat);
+            break;
+
+        case IFT_FLIMGRAPH_TYPE_ERGC:
+            input->val[k] = iftImageToFLIMGraphERGC(img, nsuperpixels, 0, &(label_imgs->val[k]), graph_feat);
+            break;
+        }
+        iftDestroyImage(&img);
+    }
+    return input;
+}
