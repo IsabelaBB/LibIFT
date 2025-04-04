@@ -23,34 +23,47 @@ extern "C" {
 
 typedef struct iftFLIMGraphNode iftFLIMGraphNode;
 
+/**
+ * @struct iftFLIMGraphNode
+ * @brief Node of a graph for GFLIM.
+ * @see iftFLIMGraph
+ */
 typedef struct iftFLIMGraphNode{
-    double *feats;
-    unsigned long numNeighbors;
-    unsigned long numPixels;
-    iftSet *adj;
+    double  *feats;             // Features of the node
+    unsigned long numNeighbors; // Number of neighbors
+    unsigned long numPixels;    // Number of pixels in the node (considering its a superpixel)
+    iftSet *adj;                // Adjacency list of the node, in which each element contains the index of a neighbor node 
 }iftFLIMGraphNode;
 
+/**
+ * @struct iftFLIMGraph
+ * @brief Graph for GFLIM.
+ */
 typedef struct _iftFLIMGraph {
-    iftFLIMGraphNode *nodes;
-    unsigned long num_nodes;
-    unsigned long num_feats;
-    unsigned long num_edges;
+    iftFLIMGraphNode *nodes;    // Array of nodes. @see iftFLIMGraphNode 
+    unsigned long num_nodes;    // Number of nodes
+    unsigned long num_feats;    // Number of features in each node
+    unsigned long num_edges;    // Number of edges
 } iftFLIMGraph;
 
 /**
  * @struct iftFLIMGraphArray
- * @brief Array of graphs for GFLIM.
+ * @brief Array of graphs iftFLIMGraph.
  * @see iftGFLIMGraphArrayAlloc()
  * @see iftGFLIMGraphArrayFree()
  */
 typedef struct iftFLIMGraphArray{
-    iftFLIMGraph **val; // Array of graphs. @see iftFLIMGraph
+    iftFLIMGraph **val; // Array of graphs. @see iftFLIMGraph 
     int n;              // Number of graphs.
 } iftFLIMGraphArray;
 
+/**
+ * @enum iftFLIMGraphAttention
+ * @brief Enumerates the attention types for GFLIM.
+ */
 typedef enum {
-    IFT_FLIMGRAPH_ATTENTION_NONE,
-    IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE, // number of pixels by the total number of pixels in the graph. No softmax
+    IFT_FLIMGRAPH_ATTENTION_NONE,           // No attention
+    IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE,   // number of pixels by the total number of pixels in the graph. No softmax
     IFT_FLIMGRAPH_ATTENTION_NODE_SIZE,    // number of pixels in the neighborhood
     IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL, // neighbors similarity
     IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE, // number of pixels and neighbors similarity
@@ -61,37 +74,52 @@ typedef enum {
     IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY
 } iftFLIMGraphAttention;
 
+/**
+ * @enum iftFLIMGraphFeature
+ * @brief Enumerates the feature types for the nodes in FLIMGraph.
+ */
 typedef enum {
-    IFT_FLIMGRAPH_FEATURE_MEAN, // color mean only
-    IFT_FLIMGRAPH_FEATURE_SUM, // sum of color
-    IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE, // sum of color multiplied by 1 + the relative size of the node
-    IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE, // mean color multiplied by 1 + the relative size of the node
-    IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE, // concatenate the relative spx. size with the mean color
-    IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB, // concatenate the relative spx. size (normalized by the neighborhood) with the mean color
-    IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK, // concatenate the relative spx. size (normalized by the neighborhood) with the mean color and haralick features
-    IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK, // sum of color multiplied by 1 + the relative size of the node and concatenate with haralick features
-    IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK // sum of color and concatenate with haralick features
+    IFT_FLIMGRAPH_FEATURE_MEAN,                             // mean pixel color
+    IFT_FLIMGRAPH_FEATURE_SUM,                              // sum of pixel color
+    IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE,                 // sum of color multiplied by 1 + (superpixel size / image size)
+    IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE,                // mean of color multiplied by 1 + (superpixel size / image size)
+    IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE,              // concatenate the mean color with (superpixel size / image size)
+    IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB,       // concatenate the mean color with (superpixel size / neighborhood size)
+    IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK,     // concatenate the mean color with (superpixel size / neighborhood size) and with haralick features
+    IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK, // sum of color multiplied by 1 + (superpixel size / image size) and concatenated with haralick features
+    IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK               // concatenated sum of color with haralick features
 } iftFLIMGraphFeature;
 
+/**
+ * @enum iftFLIMGraphType
+ * @brief Enumerates the superpixel methods to apply in an input image.
+ * A FLIMGraph is created from the superpixels.
+ */
 typedef enum {
-    IFT_FLIMGRAPH_TYPE_DISF,
-    IFT_FLIMGRAPH_TYPE_ERGC,
+    IFT_FLIMGRAPH_TYPE_DISF, // DISF. @see iftDISF() at iftSegmentation.c
+    IFT_FLIMGRAPH_TYPE_ERGC, // ERGC. @see iftERGC() at iftFLIMGraph.c
 } iftFLIMGraphType;
 
+/**
+ * @enum iftGFLIMAggregationType
+ * @brief Enumerates ways to aggregate feature in a FLIMGraph.
+ * In GFLIM-BoFP, the aggregation is done among the neighbor features of the node.
+ * In GFLIM, the aggregation is CONCATENATE.
+ */
 typedef enum {
-    IFT_GFLIM_AGGREGATION_CONCAT,
-    IFT_GFLIM_AGGREGATION_MEAN,
-    IFT_GFLIM_AGGREGATION_WMEAN
+    IFT_GFLIM_AGGREGATION_CONCAT,   // Concatenate the features of the nodes
+    IFT_GFLIM_AGGREGATION_MEAN,     // Average the features of the nodes
+    IFT_GFLIM_AGGREGATION_WMEAN     // Weighted mean of the features of the nodes
   } iftGFLIMAggregationType;
 
 // ============ GraphArray CONTRUCTOR AND DESTRUCT ============ //
+
 iftFLIMGraphArray *iftFLIMGraphCreateEmptyFLIMGraphArray(int n);
 void iftDestroyFLIMGraphArray(iftFLIMGraphArray **arr);
 
 iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name);
 iftFLIMGraphType iftGFLIMGetGraphType(const char *name);
 iftFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg);
-
 iftFLIMGraphAttention iftGLIMGraphGetAggregationType(char *arg);
 
 double *iftFLIMGraphAttentionRelNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors);
@@ -149,40 +177,11 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
 iftFLIMGraph* iftGetFLIMGraphFromGrid(iftImage *img,
                              iftImage **label_img);
 
-int iftImageToFLIMGraphDISFDisk(char *image_dir,
-                         char *labels_dir,
-                         char *graph_dir,
-                         int num_init_seeds,
-                         int num_superpixels,
-                         iftFLIMGraphFeature graph_feat);
-int iftImageToFLIMGraphDISFDir(char *image_dir,
-                          char *labels_dir,
-                          char *graph_dir,
-                          int num_init_seeds,
-                          int num_superpixels,
-                          iftFLIMGraphFeature graph_feat);
-
-iftFLIMGraph *iftImageToFLIMGraphDISF(iftImage *img, 
-                                    int init_seeds, int final_spx,
-                                    iftImage **label_img,
-                                    iftFLIMGraphFeature graph_feat);
-                                    
-int iftImageToFLIMGraphERGCDisk(char *image_dir,
-                         char *labels_dir,
-                         char *graph_dir,
-                         int num_superpixels,
-                         int m,
-                         iftFLIMGraphFeature graph_feat);
-int iftImageToFLIMGraphERGCDir(char *image_dir,
-                          char *labels_dir,
-                          char *graph_dir,
-                          int num_superpixels,
-                          int m,
-                          iftFLIMGraphFeature graph_feat);
-iftFLIMGraph *iftImageToFLIMGraphERGC(iftImage *img, 
-                                    int final_spx, int m,
-                                    iftImage **label_img,
-                                    iftFLIMGraphFeature graph_feat);
+iftFLIMGraph *iftImageToFLIMGraph(iftImage *img, 
+                                int num_superpixels, int param,
+                                iftImage **label_img,
+                                iftFLIMGraphFeature graph_feat,
+                                iftFLIMGraphType graph_type);
 
 // graph to iftImage / iftMImage
 iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, int band);
