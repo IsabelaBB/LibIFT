@@ -1,8 +1,6 @@
 #include "iftFLIMGraph.h"
 
-float *readSaliencyImage(char *saliency_dir, iftImage *labels_img, int nnodes);
-
-// ============ GraphArray CONTRUCTOR AND DESTRUCT ============ //
+/* --------------------- GraphArray CONTRUCTOR AND DESTRUCT ----------------------------- */
 
 /**
  * @fn iftFLIMGraphCreateEmptyFLIMGraphArray
@@ -888,311 +886,6 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
     return graph;
 }
 
-/*
-iftFLIMGraph *iftSuperpixelImageToFLIMGraph_haralick2(
-    unsigned long num_superpixels,
-    iftAdjRel *A, iftMImage *original_img, iftMImage *gray_img, 
-    iftImage *labeled_img)
-{
-    if(num_superpixels < 1) iftError("Number of superpixels must be positive", __func__);
-    if(original_img == NULL) iftError("Original image is NULL", __func__);
-    if(labeled_img == NULL) iftError("Labeled image is NULL", __func__);
-    if(A == NULL) iftError("Adjacency relation is NULL", __func__);
-
-    int num_haralick_feats = 13;
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img->m + num_haralick_feats, num_superpixels);
-    iftBMap *neighbors[num_superpixels];
-
-    int *initial_pixel_spx = (int *)malloc(num_superpixels * sizeof(int));
-    for(int i = 0; i < num_superpixels; i++){
-        initial_pixel_spx[i] = -1;
-        neighbors[i] = iftCreateBMap(num_superpixels);
-    }
-
-    //printf("\nComputing FLIM Graph... \n");
-    for(int i = 0; i < original_img->n; i++)
-    {
-        int label = labeled_img->val[i] - 1;
-        float *ref = original_img->val[i];
-        iftFLIMGraphNode *node = &(graph->nodes[label]);
-        node->numPixels++;
-
-        if(initial_pixel_spx[label] == -1) initial_pixel_spx[label] = i;
-
-        for (int b = 0; b < original_img->m; b++)
-            node->feats[b] += ref[b];
-
-        //printf("pixel: %d, label: %d, neighbors:", i, label);
-        iftVoxel u = iftMGetVoxelCoord(gray_img, i);
-        for(int j = 1; j < A->n; j++){
-            
-            iftVoxel v = iftGetAdjacentVoxel(A,u,j);
-            
-            if (iftMValidVoxel(gray_img, v))
-            {
-                int neigh_index = iftMGetVoxelIndex(gray_img, v);
-                int v_label = labeled_img->val[neigh_index] - 1;
-                //printf(" %d", v_label);
-                
-                if (label > v_label && !iftBMapValue(neighbors[label], v_label))
-                {
-                    iftInsertFLIMGraphNeighborNode(node, v_label);
-                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[v_label]), label);
-                    iftBMapSet1(neighbors[label], v_label);
-                    graph->num_edges++;
-                }
-            }
-        }
-    }
-
-    for(int i = 0; i < num_superpixels; i++){
-        iftDestroyBMap(&neighbors[i]);
-        for (int b = 0; b < original_img->m; b++)
-            graph->nodes[i].feats[b] /= (double)graph->nodes[i].numPixels;
-    }
-
-    float num_gray_levels = 16;
-
-    for(int i = 0; i < num_superpixels; i++)
-    {
-        //printf("Computing Haralick features for superpixel %d... \n", i);
-
-        // 1. Create k GLCM matrices and a superpixel graph
-        float ***glcm = (float ***)malloc(4 * sizeof(float **));
-        float normVal_glcm[] = {0, 0, 0, 0};
-        
-        for(int j = 0; j < 4; j++){
-            glcm[j] = (float **)malloc(num_gray_levels * sizeof(float *));
-            for(int k = 0; k < num_gray_levels; k++){
-                glcm[j][k] = (float *)calloc(num_gray_levels, sizeof(float));
-            }
-        }
-
-        iftBMap *visited = iftCreateBMap(gray_img->n);
-        int *fifo = (int *)malloc(gray_img->n * sizeof(int));
-        int begin = 0, end = 0;
-
-        fifo[end++] = initial_pixel_spx[i];
-
-        //printf("computing GLCM from pixel %d with label %d\n", initial_pixel_spx[i], i);
-        while(begin < end){
-            int pixel = fifo[begin++];
-            if(iftBMapValue(visited, pixel)) continue;
-            iftBMapSet1(visited, pixel);
-
-            float ref = gray_img->val[pixel][0];
-
-            iftVoxel u = iftMGetVoxelCoord(gray_img, pixel);
-            for(int j = 1; j < A->n; j++){
-                iftVoxel v = iftGetAdjacentVoxel(A,u,j);
-                if (iftMValidVoxel(gray_img, v))
-                {
-                    int neigh_index = iftMGetVoxelIndex(gray_img, v);
-                    int v_label = labeled_img->val[neigh_index] - 1;
-
-                    if(j == 2 || j == 3 || j == 6 || j == 7){
-                        int b = j < 6 ? j-2 : j-4;
-                        glcm[b][(int)(ref)%(int)num_gray_levels][(int)(gray_img->val[neigh_index][0])%(int)num_gray_levels] += 1;
-                        normVal_glcm[b] += 1;
-                        //printf("ref %d, neigh %d, j: %d, (%d,%d) \n", pixel, neigh_index, j, (int)(ref[0])%(int)num_gray_levels, (int)(neigh[0])%(int)num_gray_levels);
-                    }
-                    if (i == v_label && (!iftBMapValue(visited, neigh_index))){
-                        //printf("num_pixels_fifo:%d num_pixels: %ld \n", end, node->numPixels);
-                        fifo[end++] = neigh_index;
-                    }
-                }
-            }
-        }
-        //printf("\n\n");
-    
-        iftDestroyBMap(&visited);
-        free(fifo);
-
-        // 2. Normalize the GLCM matrices
-
-        //printf("normalizing GLCM matrices ad computing haralick features... \n");
-        for(int p = 0; p < 4; p++){
-
-            //printf("normalizing GLCM matrix %d degree... \n", p);
-            for(int j = 0; j < num_gray_levels; j++){
-                for(int k = 0; k < num_gray_levels; k++){
-                    if(normVal_glcm[p] != 0) glcm[p][j][k] *= ((num_gray_levels*num_gray_levels)/normVal_glcm[p]);
-                    else glcm[p][j][k] = 0;
-                    //printf("%f ", glcm[p][j][k]);
-                }
-                //printf("\n");
-            }
-            //printf("\n\n");
-            
-            // 3. Compute Haralick features and put them in the graph
-
-            float *px = (float *)calloc(num_gray_levels, sizeof(float));
-            float *py = (float *)calloc(num_gray_levels, sizeof(float));
-            float *pxmy = (float *)calloc(num_gray_levels, sizeof(float));
-            float *pxpy = (float *)calloc(2*num_gray_levels-1, sizeof(float));
-            float mean = 0;
-            float mean_x = 0, mean_y = 0, mean_xmy = 0, mean_xpy = 0, variation_x = 0, variation_y = 0;
-            compute_basics_haralick(glcm[p], px, py, &mean, num_gray_levels);
-
-            //compute_meanY_meanY_haralick(px, py, &mean_x, &mean_y, num_gray_levels);
-            computePXminusY_PXplusY_haralick(glcm[p], pxmy, pxpy, num_gray_levels);
-            computeMeanXminusY_MeanXplusY(pxmy, pxpy, &mean_xmy, &mean_xpy, num_gray_levels);
-            //computeVariation_XY_haralick(px, py, mean_x, mean_y, &variation_x, &variation_y, num_gray_levels);
-
-            //printf("mean_x: %f, mean_y: %f, mean_xmy: %f, mean_xpy: %f, variation_x: %f, variation_y: %f, mean: %f\n", mean_x, mean_y, mean_xmy, mean_xpy, variation_x, variation_y, mean);
-
-            float *features = computeHaralickFeatures(glcm[p], 
-                                px, py, pxmy, pxpy,
-                                mean_x, mean_y, mean_xmy, mean_xpy, variation_x, variation_y, 
-                                mean, num_gray_levels);
-
-            //printf("Features for superpixel %d, degree %d: ", i, p);
-            iftFLIMGraphNode *node = &(graph->nodes[i]);
-            for(int j = 0; j < num_haralick_feats; j++){
-                node->feats[original_img->m + j] += (features[j]/4.0);
-            }
-            free(px); free(py); 
-            free(pxmy); free(pxpy); 
-            free(features);
-            for(int j = 0; j < num_gray_levels; j++) free(glcm[p][j]);
-            free(glcm[p]);
-        }
-        free(glcm);
-    }
-
-    free(initial_pixel_spx);
-    return graph;
-}
-
-iftFLIMGraph *iftSuperpixelImageToFLIMGraph_haralick(
-    unsigned long num_superpixels,
-    iftAdjRel *A, iftMImage *original_img, iftMImage *gray_img, 
-    iftImage *labeled_img)
-{
-    if(num_superpixels < 1) iftError("Number of superpixels must be positive", __func__);
-    if(original_img == NULL) iftError("Original image is NULL", __func__);
-    if(labeled_img == NULL) iftError("Labeled image is NULL", __func__);
-    if(A == NULL) iftError("Adjacency relation is NULL", __func__);
-
-    // 1. Create k GLCM matrices and a superpixel graph
-    float ***glcm = (float ***)malloc(num_superpixels * sizeof(float **));
-    float *normVal_glcm = (float *)calloc(num_superpixels, sizeof(float));
-    int num_haralick_feats = 13;
-    float num_gray_levels = 16;
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img->m + num_haralick_feats, num_superpixels);
-    iftBMap *neighbors[num_superpixels];
-    
-    for(int i = 0; i < num_superpixels; i++){
-        neighbors[i] = iftCreateBMap(num_superpixels);
-        glcm[i] = (float **)malloc(num_gray_levels * sizeof(float *));
-        for(int j = 0; j < num_gray_levels; j++){
-            glcm[i][j] = (float *)calloc(num_gray_levels, sizeof(float));
-        }
-    }
-
-    //printf("\nComputing GLCM matrices... \n");
-    for(int i = 0; i < original_img->n; i++)
-    {
-        int label = labeled_img->val[i] - 1;
-        float *ref = original_img->val[i];
-        iftFLIMGraphNode *node = &(graph->nodes[label]);
-        node->numPixels++;
-
-        for (int b = 0; b < original_img->m; b++)
-            node->feats[b] += ref[b];
-
-        ref = gray_img->val[i];
-
-        //printf("pixel: %d, label: %d, neighbors:", i, label);
-        iftVoxel u = iftMGetVoxelCoord(gray_img, i);
-        for(int j = 1; j < A->n; j++){
-            
-            iftVoxel v = iftGetAdjacentVoxel(A,u,j);
-            if (iftMValidVoxel(gray_img, v))
-            {
-                int neigh_index = iftMGetVoxelIndex(gray_img, v);
-                int v_label = labeled_img->val[neigh_index] - 1;
-                //printf(" %d", v_label);
-
-                if (label > v_label && !iftBMapValue(neighbors[label], v_label))
-                {
-                    iftInsertFLIMGraphNeighborNode(node, v_label);
-                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[v_label]), label);
-                    iftBMapSet1(neighbors[label], v_label);
-                    graph->num_edges++;
-                }
-
-                if(j == 2 || j == 3 || j == 6 || j == 7){
-                    glcm[label][(int)(ref[0]) % (int)num_gray_levels][(int)(gray_img->val[neigh_index][0]) % (int)num_gray_levels] += 1;
-                    normVal_glcm[label] += 1;
-                }
-            }
-        }
-    }
-    //printf("\n");
-
-    for(int i = 0; i < num_superpixels; i++)
-        iftDestroyBMap(&neighbors[i]);
-
-    // 2. Normalize the GLCM matrices
-    float normConstGLCM = (num_gray_levels*num_gray_levels)/4; 
-#pragma omp parallel for
-    for(int i = 0; i < num_superpixels; i++){
-        iftFLIMGraphNode *node = &(graph->nodes[i]);
-        
-        for (int b = 0; b < original_img->m; b++)
-            node->feats[b] /= (double)node->numPixels;
-        
-        if(normVal_glcm[i] == 0) continue;
-        float norm = normConstGLCM/normVal_glcm[i];
-        for(int j = 0; j < num_gray_levels; j++){
-            for(int k = 0; k < num_gray_levels; k++){
-                glcm[i][j][k] *= norm;
-            }
-        }
-    }
-
-   free(normVal_glcm);
-
-    // 3. Compute Haralick features and put them in the graph
-    //printf("Computing Haralick features... \n");
-    for(int k = 0; k < num_superpixels; k++){
-        //printf("Superpixel %d: \n\n", k);
-
-        float *px = (float *)calloc(num_gray_levels, sizeof(float));
-        float *py = (float *)calloc(num_gray_levels, sizeof(float));
-        float *pxmy = (float *)calloc(num_gray_levels, sizeof(float));
-        float *pxpy = (float *)calloc(2*num_gray_levels-1, sizeof(float));
-        float mean = 0, mean_x = 0, mean_y = 0, mean_xmy = 0, mean_xpy = 0, variation_x = 0, variation_y = 0;
-        compute_basics_haralick(glcm[k], NULL, NULL, &mean, num_gray_levels);
-
-        //compute_meanY_meanY_haralick(px, py, &mean_x, &mean_y, num_gray_levels);
-        computePXminusY_PXplusY_haralick(glcm[k], pxmy, pxpy, num_gray_levels);
-        computeMeanXminusY_MeanXplusY(pxmy, pxpy, &mean_xmy, &mean_xpy, num_gray_levels);
-        //computeVariation_XY_haralick(px, py, mean_x, mean_y, &variation_x, &variation_y, num_gray_levels);
-
-        //printf("mean_x: %f, mean_y: %f, mean_xmy: %f, mean_xpy: %f, variation_x: %f, variation_y: %f, mean: %f\n", mean_x, mean_y, mean_xmy, mean_xpy, variation_x, variation_y, mean);
-
-        float *features = computeHaralickFeatures(glcm[k], 
-                                px, py, pxmy, pxpy,
-                                mean_x, mean_y, mean_xmy, mean_xpy,
-                                variation_x, variation_y, 
-                                mean, num_gray_levels);
-        
-        iftFLIMGraphNode *node = &(graph->nodes[k]);
-        for(int i = 0; i < num_haralick_feats; i++)
-            node->feats[original_img->m + i] = features[i];
-        free(px); free(py); 
-        free(pxmy); free(pxpy); 
-        free(features);
-        for(int j = 0; j < num_gray_levels; j++) free(glcm[k][j]);
-        free(glcm[k]);
-    }
-
-    free(glcm);
-    return graph;
-}*/
-
 /**
  * @brief Create a segmentation map using ERGC algorithm.
  * 
@@ -1295,7 +988,6 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
         iftInsertDHeap(heap, p_index);
     }
     
-    // fmm3d
     while (!iftEmptyDHeap(heap))
     {
         int p_index, p_label;
@@ -1399,38 +1091,48 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
 }
 
 /**
- * @brief Create a graph from a image based on a superpixel segmentation using ERGC.
+ * @brief Create a graph from a image based on a superpixel segmentation.
  * 
- * From an input image, this function creates a superpixel segmentation using ERGC algorithm 
- * and then creates a graph based on this segmentation. 
- * The graph is created using the superpixels as nodes and the edges are created based on a 4-adjacency relation.
- * 
- * @note label_img is allocated inside the function and must be destroyed by the user.
+ * @note label_img is allocated inside the function and must be destroyed by the caller.
  * 
  * @param img Input image
  * @param num_superpixels Number of superpixels
- * @param m Compactness parameter
+ * @param param superpixel segmentation parameter (initial seeds for DISF and compactness for ERGC)
  * @param label_img A pointer to a superpixel segmentation
  * @param graph_feat Feature type to be used in the graph
  */
-iftFLIMGraph *iftImageToFLIMGraphERGC(iftImage *img, 
-                                    int num_superpixels, int m,
+iftFLIMGraph *iftImageToFLIMGraph(iftImage *img, 
+                                    int num_superpixels, int param,
                                     iftImage **label_img,
-                                    iftFLIMGraphFeature graph_feat)
+                                    iftFLIMGraphFeature graph_feat,
+                                    iftFLIMGraphType graph_type)
 {
     iftImage *label_img_tmp = NULL;
     iftMImage *mimg;
     iftAdjRel *A;
     iftFLIMGraph *graph;
 
-    // Init other inputs
     if (iftIsColorImage(img))
         mimg = iftImageToMImage(img, LABNorm_CSPACE);
     else
         mimg = iftImageToMImage(img, GRAYNorm_CSPACE);
     
+    switch (graph_type)
+    {
+    case IFT_FLIMGRAPH_TYPE_DISF:
+        A = iftCircular(2.0);
+        label_img_tmp = iftERGC(mimg, A, &num_superpixels, param);
+        break;
+
+    case IFT_FLIMGRAPH_TYPE_ERGC:
     A = iftCircular(1.0);
-    label_img_tmp = iftERGC(mimg, A, &num_superpixels, m);
+        label_img_tmp = iftERGC(mimg, A, &num_superpixels, param);
+        break;
+    
+    default:
+        iftError("Invalid graph type %d", __func__, graph_type);
+        
+    }
 
     iftImage *gray_img = NULL;
     if(graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK ||
@@ -1452,372 +1154,6 @@ iftFLIMGraph *iftImageToFLIMGraphERGC(iftImage *img,
     iftDestroyMImage(&mimg);
     return graph;
 }
-
-iftFLIMGraph *iftImageToFLIMGraphDISF(iftImage *img, 
-                                    int init_seeds, int final_spx,
-                                    iftImage **label_img,
-                                    iftFLIMGraphFeature graph_feat)
-{
-    iftImage *label_img_tmp = NULL, *mask = NULL;
-    iftMImage *mimg;
-    iftAdjRel *A;
-    iftFLIMGraph *graph;
-
-    // Init other inputs
-    if (iftIsColorImage(img))
-        mimg = iftImageToMImage(img, LABNorm_CSPACE);
-    else
-        mimg = iftImageToMImage(img, GRAYNorm_CSPACE);
-    
-    if (iftIs3DMImage(mimg))
-        A = iftSpheric(sqrtf(3.0));
-    else
-        A = iftCircular(sqrtf(2.0));
-
-    label_img_tmp = iftDISF(mimg, A, init_seeds, final_spx, mask);
-
-    iftImage *gray_img = NULL;
-    if(graph_feat == IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK ||
-        graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK ||
-        graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK)
-    {
-        gray_img = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
-        for(int i = 0; i < mimg->n; i++)
-            gray_img->val[i] = mimg->val[i][0];//*255;
-    }
-    graph = iftSuperpixelImageToFLIMGraph(final_spx, A, mimg, label_img_tmp, graph_feat, gray_img);
-    if(gray_img != NULL) iftDestroyImage(&gray_img);
-
-    (*label_img) = label_img_tmp;
-    label_img_tmp = NULL;
-
-    iftDestroyAdjRel(&A);
-    iftDestroyMImage(&mimg);
-    return graph;
-}
-
-/**
- * @brief Convert an image to a FLIMGraph using ERGC to segment the image
- * 
- * Convert the images in the image file path to FLIMGraph using ERGC to segment the images (see also iftERGC function).
- * The superpixel images and the graphs are saved in the respective directories (labels_dir and graph_dir).
- * The names of the superpixel images and the graphs are the same as the image files.
- * 
- * @note Superpixel images are saved in .pgm format and the graphs are saved in .json format.
- * 
- * @param image_dir image file path
- * @param labels_dir superpixel image file path
- * @param graph_dir graph file path
- * @param num_superpixels Number of superpixels / nodes in the graph
- * @param m Compactity parameter used in ERGC
- * @param graph_feat Feature type to be used in the graph
- * @return Maximum number of edges among the graphs
- */
-int iftImageToFLIMGraphERGCDir(char *image_dir,
-                          char *labels_dir,
-                          char *graph_dir,
-                          int num_superpixels,
-                          int m,
-                          iftFLIMGraphFeature graph_feat)
-{
-#ifdef IFT_DEBUG
-    printf("%s \n", __func__);
-    printf("\t image_dir: %s \n", image_dir == NULL ? "NULL" : image_dir);
-    printf("\t labels_dir: %s \n", labels_dir == NULL ? "NULL" : labels_dir);
-    printf("\t graph_dir: %s \n", graph_dir == NULL ? "NULL" : graph_dir);
-    printf("\t num_superpixels: %d \n", num_superpixels);
-    printf("\t m: %d \n", m);
-#endif
-
-    if (image_dir == NULL || !iftDirExists(image_dir)) iftError("Image directory does not exist", __func__);
-    if (num_superpixels < 1) iftError("Number of superpixels must be positive", __func__);
-    if(graph_dir == NULL) iftError("Graph directory is NULL", __func__);
-    if(labels_dir == NULL) iftError("Labels directory is NULL", __func__);
-    if(m < 0) iftError("m must be positive or zero", __func__);
-
-    iftFileSet *fs_imgs = iftLoadFileSetFromDir(image_dir, 1);
-    if(fs_imgs->n < 1) iftError("No images found in the directory", __func__);
-
-    if (!iftDirExists(graph_dir)) iftMakeDir(graph_dir);
-    if (!iftDirExists(labels_dir)) iftMakeDir(labels_dir);
-
-    int max_edges = 0;
-
-    for (int i = 0; i < fs_imgs->n; i++)
-    {
-        char *basename = NULL;
-        char graph_file[200], ext[10], label_file[200];
-
-        sprintf(ext, "%s", iftFileExt(fs_imgs->files[i]->path));
-        basename = iftFilename(fs_imgs->files[i]->path, ext);
-        sprintf(label_file, "%s/%s.pgm", labels_dir, basename);
-        sprintf(graph_file, "%s/%s.json", graph_dir, basename);
-
-        int nedges = iftImageToFLIMGraphERGCDisk(fs_imgs->files[i]->path,
-                                                 label_file,
-                                                 graph_file,
-                                                 num_superpixels, m, graph_feat);
-        if (nedges > max_edges)
-            max_edges = nedges;
-        iftFree(basename);
-    }
-
-    iftDestroyFileSet(&fs_imgs);
-    return max_edges;
-}
-
-/**
- * @brief Convert an image to a graph using ERGC to segment the image
- * 
- * Convert an images to a graph using ERGC to segment the image (see also iftERGC function).
- * The superpixel image and the graph are saved in the respective directories (labels_dir and graph_dir).
- * The names of the superpixel image and the graph are the same as the image file name.
- * 
- * @param image_dir image file path
- * @param labels_dir superpixel images file path
- * @param graph_dir graph file path
- * @param num_superpixels Number of superpixels / nodes in the graph
- * @param m Compactity parameter used in ERGC
- * @param graph_feat Feature type to be used in the graph
- * @return Number of edges in the graph
- */
-int iftImageToFLIMGraphERGCDisk(char *image_dir,
-                         char *labels_dir,
-                         char *graph_dir,
-                         int num_superpixels,
-                         int m,
-                         iftFLIMGraphFeature graph_feat)
-{
-#ifdef IFT_DEBUG
-    printf("%s \n", __func__);
-    printf("\t image_dir: %s \n", image_dir == NULL ? "NULL" : image_dir);
-    printf("\t labels_dir: %s \n", labels_dir == NULL ? "NULL" : labels_dir);
-    printf("\t graph_dir: %s \n", graph_dir == NULL ? "NULL" : graph_dir);
-    printf("\t num_superpixels: %d \n", num_superpixels);
-    printf("\t m: %d \n", m);
-#endif
-
-    iftImage *img, *label_img = NULL;
-    iftFLIMGraph *graph;
-    int nedges = 0;
-
-    if(image_dir == NULL || !iftFileExists(image_dir)) iftError("Image file %s does not exist", __func__, image_dir);
-    if(num_superpixels < 1) iftError("Number of superpixels %d must be positive", __func__, num_superpixels);
-    if(m < 0) iftError("m must be positive or zero", __func__);
-    
-    img = iftReadImageByExt(image_dir);
-
-    // compute iDISF
-    graph = iftImageToFLIMGraphERGC(img, num_superpixels, m, &label_img, graph_feat);
-    nedges = (int)graph->num_edges;
-
-    if (labels_dir != NULL) iftWriteImageByExt(label_img, labels_dir);
-    if (graph_dir != NULL) iftWriteFLIMGraph(graph, graph_dir);
-
-    iftDestroyImage(&label_img);
-    iftDestroyFLIMGraph(&graph);
-    iftDestroyImage(&img);
-    return nedges;
-}
-
-/**
- * @brief Convert an image to a FLIMGraph
- * @param image_dir image file path
- * @param labels_dir superpixel images file path
- * @param graph_dir graph file path
- * @param num_init_seeds Number of initial seeds (used in DISF)
- * @param num_superpixels Number of superpixels / nodes in the graph
- * @note The image must be in .pgm or .ppm format
- */
-int iftImageToFLIMGraphDISFDisk(char *image_dir,
-                         char *labels_dir,
-                         char *graph_dir,
-                         int num_init_seeds,
-                         int num_superpixels,
-                         iftFLIMGraphFeature graph_feat)
-{
-#ifdef IFT_DEBUG
-    printf("%s \n", __func__);
-    printf("\t image_dir: %s \n", image_dir == NULL ? "NULL" : image_dir);
-    printf("\t labels_dir: %s \n", labels_dir == NULL ? "NULL" : labels_dir);
-    printf("\t graph_dir: %s \n", graph_dir == NULL ? "NULL" : graph_dir);
-    printf("\t num_init_seeds: %d \n", num_init_seeds);
-    printf("\t num_superpixels: %d \n", num_superpixels);
-#endif
-
-    iftImage *img, *label_img = NULL;
-    iftFLIMGraph *graph;
-    int nedges = 0;
-
-    if(image_dir == NULL || !iftFileExists(image_dir)) iftError("Image file %s does not exist", __func__, image_dir);
-    if(num_init_seeds < 1) iftError("Number of initial seeds %d must be positive", __func__, num_init_seeds);
-    if(num_superpixels < 1) iftError("Number of superpixels %d must be positive", __func__, num_superpixels);
-    if (num_superpixels >= num_init_seeds) iftError("Number of superpixels %d >= initial seeds %d", __func__, num_superpixels, num_init_seeds);
-
-    img = iftReadImageByExt(image_dir);
-
-    // compute iDISF
-    graph = iftImageToFLIMGraphDISF(img, num_init_seeds, num_superpixels, &label_img, graph_feat);
-    nedges = (int)graph->num_edges;
-
-    if (labels_dir != NULL) iftWriteImageByExt(label_img, labels_dir);
-    if (graph_dir != NULL) iftWriteFLIMGraph(graph, graph_dir);
-
-    iftDestroyImage(&label_img);
-    iftDestroyFLIMGraph(&graph);
-    iftDestroyImage(&img);
-    return nedges;
-}
-
-int iftImageToFLIMGraphDISFDir(char *image_dir,
-                          char *labels_dir,
-                          char *graph_dir,
-                          int num_init_seeds,
-                          int num_superpixels,
-                          iftFLIMGraphFeature graph_feat)
-{
-#ifdef IFT_DEBUG
-    printf("%s \n", __func__);
-    printf("\t image_dir: %s \n", image_dir == NULL ? "NULL" : image_dir);
-    printf("\t labels_dir: %s \n", labels_dir == NULL ? "NULL" : labels_dir);
-    printf("\t graph_dir: %s \n", graph_dir == NULL ? "NULL" : graph_dir);
-    printf("\t num_init_seeds: %d \n", num_init_seeds);
-    printf("\t num_superpixels: %d \n", num_superpixels);
-#endif
-
-    if (image_dir == NULL || !iftDirExists(image_dir)) iftError("Image directory does not exist", __func__);
-    if (num_init_seeds < 1) iftError("Number of initial seeds must be positive", __func__);
-    if (num_superpixels < 1) iftError("Number of superpixels must be positive", __func__);
-    if(num_superpixels >= num_init_seeds) iftError("Number of superpixels >= initial seeds", __func__);
-    if(graph_dir == NULL) iftError("Graph directory is NULL", __func__);
-    if(labels_dir == NULL) iftError("Labels directory is NULL", __func__);
-
-    iftFileSet *fs_imgs = iftLoadFileSetFromDir(image_dir, 1);
-    if(fs_imgs->n < 1) iftError("No images found in the directory", __func__);
-
-    if (!iftDirExists(graph_dir)) iftMakeDir(graph_dir);
-    if (!iftDirExists(labels_dir)) iftMakeDir(labels_dir);
-
-    int max_edges = 0;
-    
-        for (int i = 0; i < fs_imgs->n; i++)
-        {
-            char *basename = NULL;
-            char graph_file[200], ext[10], label_file[200];
-
-            sprintf(ext, "%s", iftFileExt(fs_imgs->files[i]->path));
-            basename = iftFilename(fs_imgs->files[i]->path, ext);
-            sprintf(label_file, "%s/%s.pgm", labels_dir, basename);
-            sprintf(graph_file, "%s/%s.json", graph_dir, basename);
-
-            int nedges = iftImageToFLIMGraphDISFDisk(fs_imgs->files[i]->path,
-                                                     label_file,
-                                                     graph_file,
-                                                     num_init_seeds,
-                                                     num_superpixels,
-                                                     graph_feat);
-            if (nedges > max_edges) max_edges = nedges;
-            iftFree(basename);
-        }
-    
-    iftDestroyFileSet(&fs_imgs);
-    return max_edges;
-}
-
-/**
- * @brief Compute graphs of the images in "image_dir" using DISF,
- * save their pixel-superpixel maps in "labels_dir",
- * and save them in "graph_dir"
- * @author  Isabela Borlido.
- * @date    May, 2021.
- * @param image_dir         Directory of the original image.
- * @param graph_dir         Directory of the graph.
- * @param num_init_seeds    Initial number of seeds in DISF.
- * @param num_superpixels Number of superpixels / nodes in the graph
- * @note The image must be in .pgm or .ppm format
- * @note The labels_dir and graph_dir must be valid directories
- */
-/*int iftImageToFLIMGraphDISFDir_parallel(char *image_dir,
-                          char *labels_dir,
-                          char *graph_dir,
-                          int num_init_seeds,
-                          int num_superpixels)
-{
-#ifdef IFT_DEBUG
-    printf("%s \n", __func__);
-    printf("\t image_dir: %s \n", image_dir == NULL ? "NULL" : image_dir);
-    printf("\t labels_dir: %s \n", labels_dir == NULL ? "NULL" : labels_dir);
-    printf("\t graph_dir: %s \n", graph_dir == NULL ? "NULL" : graph_dir);
-    printf("\t num_init_seeds: %d \n", num_init_seeds);
-    printf("\t num_superpixels: %d \n", num_superpixels);
-#endif
-
-    if (image_dir == NULL || !iftDirExists(image_dir)) iftError("Image directory does not exist", __func__);
-    if (num_init_seeds < 1) iftError("Number of initial seeds must be positive", __func__);
-    if (num_superpixels < 1) iftError("Number of superpixels must be positive", __func__);
-    if(num_superpixels >= num_init_seeds) iftError("Number of superpixels >= initial seeds", __func__);
-    if(graph_dir == NULL) iftError("Graph directory is NULL", __func__);
-    if(labels_dir == NULL) iftError("Labels directory is NULL", __func__);
-
-    iftFileSet *fs_imgs = iftLoadFileSetFromDir(image_dir, 1);
-    if(fs_imgs->n < 1) iftError("No images found in the directory", __func__);
-
-    if (!iftDirExists(graph_dir)) iftMakeDir(graph_dir);
-    if (!iftDirExists(labels_dir)) iftMakeDir(labels_dir);
-
-    int max_edges = 0;
-
-    // Ensure that each thread accesses a different cache line (https://wgropp.cs.illinois.edu/courses/cs598-s15/lectures/lecture18.pdf)
-    typedef struct { double val; char pad[128]; } tvals;
-
-    tvals maxinfo[omp_get_max_threads()];
-
-#pragma omp parallel shared(maxinfo)
-    {
-        int id = omp_get_thread_num();
-        maxinfo[id].val = 0;
-
-#pragma omp parallel for
-        for (int i = 0; i < fs_imgs->n; i++)
-        {
-            char *basename = NULL;
-            char graph_file[200], ext[10], label_file[200];
-
-            sprintf(ext, "%s", iftFileExt(fs_imgs->files[i]->path));
-            basename = iftFilename(fs_imgs->files[i]->path, ext);
-            sprintf(label_file, "%s/%s.pgm", labels_dir, basename);
-            sprintf(graph_file, "%s/%s.json", graph_dir, basename);
-
-            int nedges = iftImageToFLIMGraphDISFDisk(fs_imgs->files[i]->path,
-                                                     label_file,
-                                                     graph_file,
-                                                     num_init_seeds,
-                                                     num_superpixels);
-            if (nedges > maxinfo[id].val)
-            {
-                maxinfo[id].val = nedges;
-            }
-            iftFree(basename);
-        }
-    }
-
-#pragma omp flush(maxinfo)
-#pragma omp master
-    {
-        int nt = omp_get_num_threads();
-        max_edges = maxinfo[0].val;
-        for (int i = 1; i < nt; i++)
-        {
-            if (maxinfo[i].val > max_edges)
-            {
-                max_edges = maxinfo[i].val;
-            }
-        }
-    }
-    
-    iftDestroyFileSet(&fs_imgs);
-    return max_edges;
-}*/
 
 
 /**

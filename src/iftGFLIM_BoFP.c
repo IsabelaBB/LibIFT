@@ -2658,16 +2658,8 @@ iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_di
         iftImage *img = iftReadImageByExt(fs->files[i]->path);
         iftImage *label_img = NULL;
 
-        switch (graph_type)
-        {
-        case IFT_FLIMGRAPH_TYPE_DISF:
-            input->val[k] = iftImageToFLIMGraphDISF(img, initial_seeds, nsuperpixels, &label_img, graph_feat);
-            break;
-
-        case IFT_FLIMGRAPH_TYPE_ERGC:
-            input->val[k] = iftImageToFLIMGraphERGC(img, nsuperpixels, 0, &label_img, graph_feat);
-            break;
-        }
+        if(graph_type == IFT_FLIMGRAPH_TYPE_ERGC) initial_seeds = 0;
+        input->val[k] = iftImageToFLIMGraph(img, nsuperpixels, initial_seeds, &label_img, graph_feat, graph_type);
 
         iftWriteImageByExt(label_img, label_file);
         iftDestroyImage(&label_img);
@@ -2690,17 +2682,8 @@ iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
     {
         int i = k + first;
         iftImage *img = iftReadImageByExt(fs->files[i]->path);
-
-        switch (graph_type)
-        {
-        case IFT_FLIMGRAPH_TYPE_DISF:
-            input->val[k] = iftImageToFLIMGraphDISF(img, initial_seeds, nsuperpixels, &(label_imgs->val[k]), graph_feat);
-            break;
-
-        case IFT_FLIMGRAPH_TYPE_ERGC:
-            input->val[k] = iftImageToFLIMGraphERGC(img, nsuperpixels, 0, &(label_imgs->val[k]), graph_feat);
-            break;
-        }
+        if(graph_type == IFT_FLIMGRAPH_TYPE_ERGC) initial_seeds = 0;
+        input->val[k] = iftImageToFLIMGraph(img, nsuperpixels, initial_seeds, &(label_imgs->val[k]), graph_feat, graph_type);
         iftDestroyImage(&img);
     }
     return input;
