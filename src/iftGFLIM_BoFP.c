@@ -1,17 +1,3 @@
-/**
- * @file iftGFLIM_BoFP.c
- * @author Isabela Borlido Barcelos
- * @date dec 2024
- * @brief GFLIM: Graph-based Feature Learning From Image Markers -- version with Bag of Feature Points (BoFP).
- * @note Programs:
- * * @ref iftGFLIMConvertSeeds.c = Convert image markers to graph markers and reduce the seed set to a maximum number of points per marker.
- * * @ref iftGFLIMCreateLayerModel.c = Create a layer model.
- * * @ref iftGFLIMMergeLayerModels.c = Merge layer models.
- * * @ref iftGFLIMEncodeLayer.c = Encode a layer.
- * * @ref iftGFLIMEncodeMergedLayer.c = Encode a merged layer.
- * * @ref iftGFLIMDecodeLayer.c = Decode a layer.
- * * @ref iftGFLIMExtract.c = Extract features from a graph using a trained model
- */
 
 #include "iftGFLIM_BoFP.h"
 

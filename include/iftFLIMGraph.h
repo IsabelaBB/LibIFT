@@ -1,6 +1,7 @@
 /**
- * @file 
- * @brief ...
+ * @file iftFLIMGraph.h
+ * @brief Provide functions to operate on Graphs for GFLIM or GFLIM-BoFP.
+ * @author Isabela Borlido Barcelos
  */
 
 #ifndef IFT_FLIMGRAPH_H

@@ -1,7 +1,8 @@
 /**
- * @file 
- * @brief GFLIM: Graph-based Feature Learning From Image Markers -- functions to
- * learn the parameters of a sequence of convolutional layers from
+ * @file iftGFLIM.h
+ * @brief GFLIM: Graph-based Feature Learning From Image Markers  
+ * 
+ * Learn the parameters of a sequence of convolutional layers from
  * labeled nodes in graphs and employ the resulting model for feature extraction.
  * 
  * @note <b>Programs:</b>
@@ -10,7 +11,10 @@
  * * @ref iftGFLIMTrainLayer.c = Train a layer using GFLIM
  * * @ref iftGFLIMDecodeLayer.c = Decode a layer using GFLIM
  * * @ref iftGFLIMExtract.c = Extract features from graphs using a trained model
+ * 
  * @note Some of the aforementioned programs are the same for GFLIM-BoFP, requiring therefore GFLIMBoFP files.
+ * 
+ * @author Isabela Borlido Barcelos
  */
 
 #ifndef IFT_GFLIM_H
