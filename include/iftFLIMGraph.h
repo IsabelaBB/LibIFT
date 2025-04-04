@@ -10,10 +10,15 @@
 extern "C" {
 #endif
 
-#include "iftSegmentation.h"
-#include "ift/core/tools/Numerical.h"
+#include "ift/core/dtypes/Set.h"
+#include "iftAdjacency.h"
+#include "iftMImage.h"
+#include "iftImage.h"
+#include "ift/core/dtypes/DHeap.h"
+#include "ift/core/dtypes/BasicDataTypes.h"
 #include "ift/core/io/Json.h"
 #include "ift/core/io/Dir.h"
+#include "iftSegmentation.h"
 
 typedef struct iftFLIMGraphNode iftFLIMGraphNode;
 

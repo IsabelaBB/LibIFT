@@ -24,8 +24,6 @@ extern "C" {
 #include "iftMatrix.h"
 #include "iftDataSet.h"
 #include "iftMImage.h"
-#include "ift/core/io/Dir.h"
-#include "ift/core/io/Json.h"
 #include "iftFLIMGraph.h"
 
 /* --------------------- GFLIM seeds (user drawn markers) ----------------------------- */

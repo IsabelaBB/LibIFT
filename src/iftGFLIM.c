@@ -1,12 +1,5 @@
-#include "iftFLIM.cuh"
-#include "iftFLIM.h"
-#include "iftGFLIM.h"
 
-#include "iftMImage.h"
-#include "iftImage.h"
-#include "ift/core/dtypes/DHeap.h"
-#include "ift/core/dtypes/Set.h"
-#include "iftAdjacency.h"
+#include "iftGFLIM.h"
 
 /* --------------------- GFLIM seeds (user drawn markers) ----------------------------- */
 
