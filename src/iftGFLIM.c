@@ -1219,7 +1219,7 @@ void iftWriteActivationsImg(char *source, char *destination, char *ext, char *la
             sprintf(filename, "%s/%s.pgm", labels_dir, basename);
             iftImage *img = iftReadImageByExt(filename);
 
-            iftImage **activations = iftFlimGraphToActivations(graph, img);
+            iftImage **activations = iftFLIMGraphToActivations(graph, img);
             iftDestroyImage(&img);
 
             int num_activations = (int)graph->num_feats;

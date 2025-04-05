@@ -527,7 +527,6 @@ iftLabeledSet *iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img,
     return T;
 }
 
-
 // ============ CONVERT FROM SEEDS/GRAPH TO DATASET ============ //
 
 /**
@@ -585,7 +584,7 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftFLIMGraph *graph,
         else
             ncomponents = iftMin(ncomponents, Z->nfeats);
     }
-    
+
     // not using it
     if (dimReduction == IFT_GFLIM_DIMREDUCTION_TSNE && (ncomponents < 2 || ncomponents > 3))
         iftError("Invalid number of components for tSNE: %d. The options are 2 or 3", __func__, ncomponents);
@@ -1400,10 +1399,10 @@ void iftGFLIMStrideBatch_v2(iftFLIMGraphArray *graph, iftFLIMLayer layer,
  * @param reduce If true, use attention values to remove some channels from the output graph.
  * @return A mimage with the convolution result.
  */
-iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels, 
-                            int kernel_size, iftFLIMGraphAttention attention_opt, 
-                            int *kernel_labels, iftGFLIMAggregationType aggregation_opt, 
-                            bool *maintain_kernels, bool reduce)
+iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
+                             int kernel_size, iftFLIMGraphAttention attention_opt,
+                             int *kernel_labels, iftGFLIMAggregationType aggregation_opt,
+                             bool *maintain_kernels, bool reduce)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1447,8 +1446,9 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
     iftMatrix *XJ = iftMultMatrices(XI, kernels);
     iftMatrix *A = NULL;
 
-    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
+    switch (attention_opt)
     {
+    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
         if (kernel_labels == NULL)
             iftError("kernel_labels is NULL", __func__);
         iftMatrix *XK = iftCreateMatrix(XJ->ncols, XJ->nrows);
@@ -1502,13 +1502,34 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
         iftFree(neighbors_all);
         XJ = XK;
         XK = NULL;
-    }
+        break;
 
-    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE)
-    {
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST:
+
+        if (kernel_labels == NULL)
+            iftError("kernel_labels is NULL", __func__);
+        A = iftFLIMGraphAttentionClassDominance_test(XJ, graph, kernel_labels);
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE:
         if (kernel_labels == NULL)
             iftError("kernel_labels is NULL", __func__);
         A = iftFLIMGraphAttentionClassDominance(XJ, graph, kernel_labels);
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_POWER2:
+        if (kernel_labels == NULL)
+            iftError("kernel_labels is NULL", __func__);
+        A = iftFLIMGraphAttentionClassDominancePower2(XJ, graph, kernel_labels);
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB:
+        if (kernel_labels == NULL)
+            iftError("kernel_labels is NULL", __func__);
+        A = iftFLIMGraphAttentionClassDominance_softmaxNeigh(XJ, graph, kernel_labels);
+        break;
+
+    // no need for a default case here, since some attention strategies are applied before the convolution
     }
 
     if (A != NULL)
@@ -1654,7 +1675,7 @@ iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, floa
 
     for (int i = 0; i < mimgArray->n; i++)
     {
-        
+
         tmp = iftGFLIMSumMImgToFloatArray(mimgArray->val[i], bias, inplace);
         if (!inplace)
         {
@@ -1840,8 +1861,8 @@ iftFLIMGraph *iftGFLIMEncodeLayer(iftFLIMGraph *graph,
     /* pooling */
     iftFLIMGraph *pooling_graph = iftMImageToFLIMGraph(activ_relu, graph);
     iftDestroyMImage(&activ_relu);
-    iftGFLIMPoolingLayer(pooling_graph, layer.pool_type, layer.pool_size[0]*layer.pool_size[1], 1);
-    
+    iftGFLIMPoolingLayer(pooling_graph, layer.pool_type, layer.pool_size[0] * layer.pool_size[1], 1);
+
     /* stride model */
     iftFLIMGraph *output_graph = NULL;
     if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride == 1)
@@ -1985,7 +2006,7 @@ void iftGFLIMEncodeLayerBatch(iftFLIMGraphArray *input,
     activ = NULL;
 
     /* pooling */
-    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0]*layer.pool_size[1], 1);
+    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0] * layer.pool_size[1], 1);
     iftDestroyMImageArray(&activ_relu);
 
     /* stride */
@@ -2057,7 +2078,7 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
     activ = NULL;
 
     /* pooling */
-    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0]*layer.pool_size[1], 1);
+    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0] * layer.pool_size[1], 1);
     iftDestroyMImageArray(&activ_relu);
 
     /* stride */
@@ -2086,7 +2107,8 @@ iftFImage *HybridAdaptativeDecoder(iftMImage *mimg, float *channel_label)
             if (channel_label[b] != -1) // only foreground channels are weigthed
                 salie->val[p] += mimg->val[p][b] * weight[b];
         }
-        if (salie->val[p] < 0) salie->val[p] = 0; 
+        if (salie->val[p] < 0)
+            salie->val[p] = 0;
     }
 
     iftFree(weight);
@@ -2256,7 +2278,7 @@ iftFImage *iftGFLIMGaussianDecoder(iftMImage *mimg, float adj_radius, float *cha
         {
             salie->val[p] += mimg->val[p][b] * weight[b];
         }
-        if (salie->val[p] < 0) 
+        if (salie->val[p] < 0)
             salie->val[p] = 0;
     }
     iftDestroyAdjRel(&A);
@@ -2511,8 +2533,9 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         break;
 
     case IFT_GFLIM_HYBRID_DECODER:
-        if(truelabels == NULL) iftError("truelabels must be not NULL with hybrid decoder", __func__);
-        
+        if (truelabels == NULL)
+            iftError("truelabels must be not NULL with hybrid decoder", __func__);
+
         mimg = iftFLIMGraphToMImage(graph, label_img);
         weight = iftAllocFloatArray(graph->num_feats);
         for (int l = 0; l < nlabels; l++)
@@ -2530,7 +2553,8 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         break;
 
     case IFT_GFLIM_GRAPHADAPTIVE_DECODER:
-        if(truelabels == NULL) iftError("truelabels must be not NULL with graph adaptive decoder", __func__);
+        if (truelabels == NULL)
+            iftError("truelabels must be not NULL with graph adaptive decoder", __func__);
         for (int l = 0; l < nlabels; l++)
             salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
 
@@ -2545,9 +2569,10 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         }
 
         break;
-    
+
     case IFT_GFLIM_GAUSSIAN_DECODER:
-        if(truelabels == NULL) iftError("truelabels must be not NULL with gaussian decoder", __func__);
+        if (truelabels == NULL)
+            iftError("truelabels must be not NULL with gaussian decoder", __func__);
         mimg = iftFLIMGraphToMImage(graph, label_img);
         weight = iftAllocFloatArray(graph->num_feats);
         for (int l = 0; l < nlabels; l++)
@@ -2569,7 +2594,8 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         break;
     }
 
-    if(saliencyGraph != NULL){
+    if (saliencyGraph != NULL)
+    {
         for (int p = 0; p < graph->num_nodes; p++)
             iftFree(saliencyGraph[p]);
         iftFree(saliencyGraph);
@@ -2658,7 +2684,8 @@ iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_di
         iftImage *img = iftReadImageByExt(fs->files[i]->path);
         iftImage *label_img = NULL;
 
-        if(graph_type == IFT_FLIMGRAPH_TYPE_ERGC) initial_seeds = 0;
+        if (graph_type == IFT_FLIMGRAPH_TYPE_ERGC)
+            initial_seeds = 0;
         input->val[k] = iftImageToFLIMGraph(img, nsuperpixels, initial_seeds, &label_img, graph_feat, graph_type);
 
         iftWriteImageByExt(label_img, label_file);
@@ -2682,7 +2709,8 @@ iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
     {
         int i = k + first;
         iftImage *img = iftReadImageByExt(fs->files[i]->path);
-        if(graph_type == IFT_FLIMGRAPH_TYPE_ERGC) initial_seeds = 0;
+        if (graph_type == IFT_FLIMGRAPH_TYPE_ERGC)
+            initial_seeds = 0;
         input->val[k] = iftImageToFLIMGraph(img, nsuperpixels, initial_seeds, &(label_imgs->val[k]), graph_feat, graph_type);
         iftDestroyImage(&img);
     }

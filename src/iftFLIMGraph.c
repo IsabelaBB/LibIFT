@@ -1,6 +1,10 @@
 #include "iftFLIMGraph.h"
 
-/* --------------------- GraphArray CONTRUCTOR AND DESTRUCT ----------------------------- */
+/* --------------------- GraphArray functions ----------------------------- */
+/** @defgroup GraphArrayFunc GraphArray functions
+ *  Functions to create and destroy iftFLIMGraphArray.
+ *  @{
+ */
 
 /**
  * @fn iftFLIMGraphCreateEmptyFLIMGraphArray
@@ -39,21 +43,26 @@ void iftDestroyFLIMGraphArray(iftFLIMGraphArray **arr)
     }
 }
 
+/** @} */
+
 /* --------------------- FLIMGraph construction ----------------------------- */
+/** @defgroup FLIMGraphConstr FLIMGraph construction
+ *  Functions to create and destroy iftFLIMGraph.
+ *  @{
+ */
 
 /**
- * @brief Create a new graph with num_nodes nodes and num_feats features, but no edges.
- * 
- * Creates a new graph with num_nodes nodes and num_feats features, but no edges.
- * The features, number of neighbors, and number of pixels of all nodes are initialized with 0.
- * 
- * @warning num_feats and num_nodes must be greater than 0
- * @note The graph has no edges. To add edges, use iftInsertFLIMGraphNeighborNode
- * 
+ * @fn iftCreateEmptyFLIMGraph
+ * @brief Create a new graph with `num_nodes` nodes and `num_feats` features, but no edges.
+ *
+ * @note The features, number of neighbors, and number of pixels of all nodes are initialized with 0.
+ * @warning `num_feats` and `num_nodes` must be greater than 0
+ * @note The graph has no edges. To add edges, use `iftInsertFLIMGraphNeighborNode()`
+ *
  * @param num_feats Number of features
  * @param num_nodes Number of nodes
- * @return The graph
- * 
+ * @return The empty graph
+ *
  * @author Isabela B. Barcelos
  * @date fev, 2024
  */
@@ -74,28 +83,51 @@ iftFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes)
     for (unsigned long spx_index = 0; spx_index < graph->num_nodes; spx_index++)
     {
         graph->nodes[spx_index].numNeighbors = 0;
-        //graph->nodes[spx_index].neighbors = iftCreateBMap(graph->num_nodes);
+        // graph->nodes[spx_index].neighbors = iftCreateBMap(graph->num_nodes);
         graph->nodes[spx_index].adj = NULL;
         graph->nodes[spx_index].numPixels = 0;
     }
 
     for (unsigned long spx_index = 0; spx_index < graph->num_nodes; spx_index++)
         graph->nodes[spx_index].feats = (double *)calloc(num_feats, sizeof(double));
-    
+
     return graph;
 }
 
 /**
- * @brief Add a neighbor in the adjacent list of a node
- * 
- * @warning neighbor must be greater or equal than 0 
- * @warning This function does not check if the neighbor is a valid node in the graph
- * @note For undirected edge, also call iftInsertFLIMGraphNeighborNode switching node and neighbor
- * @note This function allows parallel edges
- * 
+ * @fn iftDestroyFLIMGraph
+ * @brief Destroy an iftFLIMGraph
+ */
+void iftDestroyFLIMGraph(iftFLIMGraph **graph)
+{
+    iftFLIMGraph *aux = *graph;
+
+    if (aux != NULL)
+    {
+        for (int i = 0; i < aux->num_nodes; i++)
+        {
+            // iftDestroyBMap(aux->nodes[i].neighbors);
+            iftDestroySet(&(aux->nodes[i].adj));
+            iftFree(aux->nodes[i].feats);
+        }
+        iftFree(aux->nodes);
+        iftFree(aux);
+        *graph = NULL;
+    }
+}
+
+/**
+ * @fn iftInsertFLIMGraphNeighborNode
+ * @brief Add `neighbor` to the adjacent list of `node`
+ *
+ * @warning This function allows parallel edges
+ * @warning This function does not check if `neighbor` exists in the graph
+ * @warning This function does not increment the number of edges in the graph
+ * @note For undirected edge, also call `iftInsertFLIMGraphNeighborNode()` switching `node` and `neighbor`
+ *
  * @param node A pointer to a graph node
- * @param neighbor The neighbor index in the graph
- * 
+ * @param neighbor The neighbor index in the graph (> 0)
+ *
  * @author Isabela B. Barcelos
  * @date fev, 2024
  */
@@ -106,26 +138,25 @@ void iftInsertFLIMGraphNeighborNode(iftFLIMGraphNode *node, int neighbor)
     if (neighbor < 0)
         iftError("Neighbor index value is invalid %d", __func__, neighbor);
 
-    //iftBMapSet1(node->neighbors, neighbor);
     iftInsertSet(&(node->adj), neighbor);
     (*node).numNeighbors++;
 }
 
 /**
- * @brief Create a copy of graph_orig
- * 
- * Make a copy of graph_orig. If copy_features is true, the features of the nodes are copied. Otherwise, set them to 0.
+ * @fn iftCopyFLIMGraph
+ * @brief Create a copy of `graph_orig`
+ *
+ * Make a copy of `graph_orig`.
+ * If `copy_features` is true, the features in `graph_orig` are copied. Otherwise, set them to 0.
  * When copy_features is true and:
- * - num_feats is greater than the number of features in graph_orig, the remaining features are set to 0.
- * - num_feats is less than the number of features in graph_orig, the remaining features are not copied.
- * 
- * @warning num_feats must be greater than 0
- * 
- * @param num_feats Number of features
+ * - num_feats is greater than the number of features in `graph_orig`, the remaining features are set to 0.
+ * - num_feats is less than the number of features in `graph_orig`, the remaining features are not copied.
+ *
+ * @param num_feats Number of features (> 0)
  * @param graph_orig Original graph
  * @param copy_features If true, copy the features from the original graph. Otherwise, set all features to 0
  * @return The copy of graph_orig
- * 
+ *
  * @author Isabela B. Barcelos
  * @date abr, 2023
  */
@@ -145,15 +176,16 @@ iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool cop
     iftFLIMGraphNode *node_orig = graph_orig->nodes;
     for (unsigned long node_index = 0; node_index < graph->num_nodes; node_index++)
     {
-        if(copy_features){
+        if (copy_features)
+        {
             memcpy(node->feats, node_orig->feats, min_feats * sizeof(double));
-            for(int i = min_feats; i < graph->num_feats; i++){
+            for (int i = min_feats; i < graph->num_feats; i++)
+            {
                 node->feats[i] = 0;
             }
         }
 
         node->numPixels = node_orig->numPixels;
-        //memcpy(node->neighbors->val, node_orig->neighbors->val, node_orig->neighbors->nbytes);
         node->adj = iftSetCopy(node_orig->adj);
         node->numNeighbors = node_orig->numNeighbors;
 
@@ -167,22 +199,154 @@ iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool cop
 }
 
 /**
+ * @fn iftIsValidFLIMGraph
+ * @brief Check whether a graph is valid, i.e., it has at least one node.
+ * @param graph Graph
+ * @return True if the graph is valid, false otherwise
+ */
+bool iftIsValidFLIMGraph(iftFLIMGraph *graph)
+{
+    if (graph == NULL)
+        iftError("Graph is NULL", __func__);
+    if (graph->num_nodes == 0)
+        iftError("Graph has no nodes", __func__);
+    if (graph->nodes == NULL)
+        iftError("Graph has no nodes", __func__);
+    return true;
+}
+
+/** @} */
+
+/* --------------------- FLIMGraph convert from string to a type ----------------------------- */
+/** @defgroup getFLIMGraphTypes Get types
+ * Functions to get types from a string.
+ *  @{
+ */
+
+/**
+ * @fn iftGLIMGraphGetAggregationType
+ * @brief Get the graph aggregation type from a string
+ * @param arg aggregation type as string
+ * @return iftFLIMGraphAggregation
+ */
+iftFLIMGraphAttention iftGLIMGraphGetAggregationType(char *arg)
+{
+    if (strcmp(arg, "CONCAT") == 0)
+        return IFT_GFLIM_AGGREGATION_CONCAT;
+    else if (strcmp(arg, "MEAN") == 0)
+        return IFT_GFLIM_AGGREGATION_MEAN;
+    else if (strcmp(arg, "WMEAN") == 0)
+        return IFT_GFLIM_AGGREGATION_WMEAN;
+    else
+        iftError("Invalid aggregation type %s", __func__, arg);
+    return IFT_GFLIM_AGGREGATION_CONCAT;
+}
+
+/**
+ * @fn iftGLIMGraphGetAttentionType
+ * @brief Get the graph attention from a string
+ * @param arg attention type as string
+ * @return iftFLIMGraphAttention
+ */
+iftFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg)
+{
+    if (strcmp(arg, "NONE") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_NONE;
+    else if (strcmp(arg, "NODE_RELSIZE") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE;
+    else if (strcmp(arg, "NODE_SIZE") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_NODE_SIZE;
+    //else if (strcmp(arg, "NEIGHB_SIZE") == 0)
+    //    return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE;
+    else if (strcmp(arg, "NEIGHB_SIMIL") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;
+    else if (strcmp(arg, "CLASS_DOMINANCE") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE;
+    else if (strcmp(arg, "CLASS_DOMINANCE_TEST") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST;
+    else if (strcmp(arg, "CLASS_DOMINANCE_POWER2") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_POWER2;
+    else if (strcmp(arg, "CLASS_DOMINANCE_SOFTMAX_NEIGHB") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB;
+    else if (strcmp(arg, "COSINE_SIMILARITY") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY;
+    else
+        iftError("Invalid attention type %s", __func__, arg);
+    return IFT_FLIMGRAPH_ATTENTION_NONE;
+}
+
+/**
+ * @fn iftGFLIMGetGraphFeature
+ * @brief Get the graph feature from a string
+ * @param name Name of the graph feature
+ * @return iftFLIMGraphFeature Graph feature
+ */
+iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name)
+{
+    if (strcmp(name, "MEAN") == 0)
+        return IFT_FLIMGRAPH_FEATURE_MEAN;
+    if (strcmp(name, "SUM") == 0)
+        return IFT_FLIMGRAPH_FEATURE_SUM;
+    if (strcmp(name, "SUM_MULT_RELSIZE") == 0)
+        return IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE;
+    if (strcmp(name, "MEAN_MULT_RELSIZE") == 0)
+        return IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE;
+    if (strcmp(name, "MEAN_CONCAT_RELSIZE") == 0)
+        return IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE;
+    if (strcmp(name, "MEAN_CONCAT_RELSIZE_NEIGHB") == 0)
+        return IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB;
+    if (strcmp(name, "MEAN_CONCAT_RELSIZE_HARALICK") == 0)
+        return IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK;
+    if (strcmp(name, "SUM_MULT_RELSIZE_CONCAT_HARALICK") == 0)
+        return IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK;
+    if (strcmp(name, "SUM_CONCAT_HARALICK") == 0)
+        return IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK;
+    iftError("Invalid iftFLIMGraphFeature name %s", __func__, name);
+    return IFT_FLIMGRAPH_FEATURE_MEAN;
+}
+
+/**
+ * @fn iftGFLIMGetGraphType
+ * @brief Get the graph type from a string
+ * @param name Name of the graph type
+ * @return iftFLIMGraphType Graph type
+ */
+iftFLIMGraphType iftGFLIMGetGraphType(const char *name)
+{
+    if (strcmp(name, "DISF") == 0)
+        return IFT_FLIMGRAPH_TYPE_DISF;
+    if (strcmp(name, "ERGC") == 0)
+        return IFT_FLIMGRAPH_TYPE_ERGC;
+    iftError("Invalid iftFLIMGraphType name %s", __func__, name);
+    return IFT_FLIMGRAPH_TYPE_DISF;
+}
+
+/** @} */
+
+/* --------------------- FLIMGraph read and write ----------------------------- */
+/** @defgroup FLIMGraphReadWrite Read and write FLIMGraph
+ *  @{
+ */
+
+/**
+ * @fn iftReadFLIMGraph
  * @brief Read a graph from a json file
- * 
+ *
  * @param filename File name
  * @return The graph
- * 
+ *
  * @author Isabela B. Barcelos
  * @date abr, 2023
  */
 iftFLIMGraph *iftReadFLIMGraph(char *filename)
 {
-    if(!iftFileExists(filename)) iftError("Graph file does not exist", __func__);
+    if (!iftFileExists(filename))
+        iftError("Graph file does not exist", __func__);
     iftDict *graph_dict = iftReadJson(filename);
 
     unsigned long num_nodes = (unsigned long)iftGetLongValFromDict("num_nodes", graph_dict);
     unsigned long num_feats = (unsigned long)iftGetLongValFromDict("num_feats", graph_dict);
-    
+
     bool directed = false;
     if (iftDictContainKey("directed", graph_dict, NULL))
         directed = (bool)iftGetLongValFromDict("directed", graph_dict);
@@ -219,7 +383,7 @@ iftFLIMGraph *iftReadFLIMGraph(char *filename)
             }
             iftDestroyIntArray(&input);
         }
-        
+
         iftDestroyDict(&node_info);
         node++;
     }
@@ -230,6 +394,7 @@ iftFLIMGraph *iftReadFLIMGraph(char *filename)
 }
 
 /**
+ * @fn iftWriteFLIMGraph
  * @brief Write a graph to a json file
  * @param graph Graph
  * @param filename File path
@@ -263,17 +428,22 @@ void iftWriteFLIMGraph(iftFLIMGraph *graph, char *filename)
 
         long j = 0;
         iftSet *neigh = node->adj;
-        while(neigh != NULL){
-            if(neigh->elem < i) j++;
+        while (neigh != NULL)
+        {
+            if (neigh->elem < i)
+                j++;
             neigh = neigh->next;
         }
         neighbors[i] = NULL;
-        if(j > 0){
+        if (j > 0)
+        {
             neighbors[i] = iftCreateIntArray(j);
             neigh = node->adj;
             j = 0;
-            while(neigh != NULL){
-                if(neigh->elem < i) {
+            while (neigh != NULL)
+            {
+                if (neigh->elem < i)
+                {
                     neighbors[i]->val[j] = neigh->elem;
                     j++;
                 }
@@ -287,220 +457,69 @@ void iftWriteFLIMGraph(iftFLIMGraph *graph, char *filename)
     node = NULL;
     iftWriteJson(info, filename);
 
-    for (int i = 0; i < graph->num_nodes; i++){
+    for (int i = 0; i < graph->num_nodes; i++)
+    {
         iftDestroyDict(&node_info[i]);
         iftDestroyDblArray(&feats[i]);
-        if(neighbors[i]!= NULL) iftDestroyIntArray(&neighbors[i]);
+        if (neighbors[i] != NULL)
+            iftDestroyIntArray(&neighbors[i]);
     }
     iftDestroyDict(&info);
 }
 
-/**
- * @brief Check whether a graph is valid, i.e., it has at least one node.
- * 
- * @param graph Graph
- * @return True if the graph is valid, false otherwise
+/** @} */
+
+/* --------------------- Functions for Haralick features ----------------------------- */
+/** @defgroup FLIMGraphHaralickFeatures Functions for Haralick features
+ *  @{
  */
-bool iftIsValidFLIMGraph(iftFLIMGraph *graph)
-{
-    if (graph == NULL) iftError("Graph is NULL", __func__);
-    if (graph->num_nodes == 0) iftError("Graph has no nodes", __func__);
-    if (graph->nodes == NULL) iftError("Graph has no nodes", __func__);
-    return true;
-}
 
 /**
- * @brief Destroy a graph
+ * @fn ComputeNormalizedGLCM
+ * @brief Compute the normalized GLCM for a given superpixel in an image.
+ *
+ * @param original_img The original image
+ * @param label_img The superpixel image
+ * @param spx_label The superpixel label
+ * @param spx_size The size of the superpixel
+ * @param angles The angles for the GLCM
+ * @param nangles The number of angles
+ * @param num_levels The number of gray levels
+ * @return The normalized GLCM for the superpixel
  */
-void iftDestroyFLIMGraph(iftFLIMGraph **graph)
+iftMatrix **ComputeNormalizedGLCM(iftImage *original_img, iftImage *label_img,
+                                  int spx_label, int spx_size,
+                                  double *angles, int nangles, int num_levels)
 {
-    iftFLIMGraph *aux = *graph;
-
-    if (aux != NULL)
-    {
-        for (int i = 0; i < aux->num_nodes; i++)
-        {
-            //iftDestroyBMap(aux->nodes[i].neighbors);
-            iftDestroySet(&(aux->nodes[i].adj));
-            iftFree(aux->nodes[i].feats);
-        }
-        iftFree(aux->nodes);
-        iftFree(aux);
-        *graph = NULL;
-    }
-}
-
-/* --------------------- FLIMGraph transform ----------------------------- */
-
-/**
- * @brief Normalize the node features based on mean and standard deviation values
- * 
- * @note The number of features in mean and stdev must be equal to the number of features in the graph
- * 
- * @param graph Graph
- * @param mean Mean values
- * @param stdev Standard deviation values
- */
-void iftNormalizeFLIMGraphByZScore(iftFLIMGraph *graph, float *mean, float *stdev)
-{
-#pragma omp parallel for
-    for (int p = 0; p < graph->num_nodes; p++)
-    {
-        for (int b = 0; b < graph->num_feats; b++)
-            graph->nodes[p].feats[b] = stdev[b] != 0 ? ((float)graph->nodes[p].feats[b] - mean[b]) / stdev[b] : ((float)graph->nodes[p].feats[b] - mean[b]);
-    }
-}
-
-/* --------------------- FLIMGraph conversion ----------------------------- */
-
-/**
- * @brief Create a grid graph from an image
- * @note The segmentation map must have the same hight and weight as the original image
- * @param img input image
- * @param label_img segmentation map
- * @return The FLIMGraph
-*/
-iftFLIMGraph* iftGetFLIMGraphFromGrid(iftImage *img, iftImage **label_img)
-{
-    iftMImage *mimg = NULL;
-    iftAdjRel *A = NULL;
-    iftFLIMGraph *graph = NULL;
-
-    if(img == NULL) iftError("Image is null.", __func__);
-    
-    // Init other inputs
-    if (iftIsColorImage(img))
-        mimg = iftImageToMImage(img, LABNorm_CSPACE);
-    else
-        mimg = iftImageToMImage(img, GRAYNorm_CSPACE);
-    
-    if (iftIs3DMImage(mimg))
-        A = iftSpheric(sqrtf(3.0));
-    else
-        A = iftCircular(sqrtf(2.0));
-
-    (*label_img) = iftCreateImage(mimg->xsize, mimg->ysize, 1);
-    graph = iftCreateEmptyFLIMGraph(mimg->m, mimg->n);
-    graph->num_edges = (mimg->xsize-2) * (mimg->ysize-2) * 4 + (2*(mimg->xsize-2) + 2*(mimg->ysize-2)) * 3 + 8;
-
-#pragma omp parallel for
-    for (int i = 0; i < mimg->n; i++)
-    {
-        iftVoxel p_voxel;
-        iftFLIMGraphNode *node;
-
-        p_voxel = iftMGetVoxelCoord(mimg, i);
-        (*label_img)->val[i] = i + 1;
-        node = &(graph->nodes[i]);
-        node->numPixels = 1;
-
-        for (int j = 0; j < graph->num_feats; j++)
-            node->feats[j] = mimg->val[i][j];
-
-        for (int j = 0; j < A->n; j++)
-        {
-            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, j);
-            if (iftMValidVoxel(mimg, q_voxel))
-            {
-                iftInsertFLIMGraphNeighborNode(node, iftMGetVoxelIndex(mimg, q_voxel));
-            }
-        }
-        node = NULL;
-    }
-    iftDestroyAdjRel(&A);
-    iftDestroyMImage(&mimg);
-    return graph;
-}
-
-/**
- * @brief Create grid graphs from images in a folder.
- * 
- * Create grid graphs from images in a folder. 
- * The superpixel maps and graphs are saved in the respective directories.
- * 
- * @note The graph and superpixel directory are created if they do not exist
- * 
- * @param image_dir image directory
- * @param labels_dir superpixel map directory
- * @param graph_dir graphs directory
-*/
-void iftImageToGridFLIMGraphs(char *image_dir,
-                            char *labels_dir,
-                            char *graph_dir)
-{
-#ifdef IFT_DEBUG
-    printf("%s \n", __func__);
-    printf("\t image_dir: %s\n", image_dir == NULL ? "NULL" : image_dir);
-    printf("\t labels_dir: %s\n", labels_dir == NULL ? "NULL" : labels_dir);
-    printf("\t graph_dir: %s\n", graph_dir == NULL ? "NULL" : graph_dir);
-#endif
-
-    if(!iftDirExists(image_dir)) iftError("Image directory does not exist.", __func__);
-    iftFileSet *fs_imgs = iftLoadFileSetFromDir(image_dir, 1);
-    if(fs_imgs->n < 1) iftError("No images found.", __func__);
-
-    iftMakeDir(labels_dir);
-    iftMakeDir(graph_dir);
-
-    for (int i = 0; i < fs_imgs->n; i++)
-    {
-        char *basename = NULL;
-        char filename[200], ext[10];
-
-        sprintf(ext, "%s", iftFileExt(fs_imgs->files[i]->path));
-        basename = iftFilename(fs_imgs->files[i]->path, ext);
-        
-        iftImage *img = iftReadImageByExt(fs_imgs->files[i]->path);
-        iftImage *label_img;
-        iftFLIMGraph *graph = iftGetFLIMGraphFromGrid(img, &label_img);
-        iftDestroyImage(&img);
-
-        sprintf(filename, "%s/%s.pgm", labels_dir, basename);
-        iftWriteImageByExt(label_img, filename);
-        iftDestroyImage(&label_img);
-
-        sprintf(filename, "%s/%s.json", graph_dir, basename);
-        iftWriteFLIMGraph(graph, filename);
-        iftDestroyFLIMGraph(&graph);
-        iftFree(basename);
-    }
-    iftDestroyFileSet(&fs_imgs);
-}
-
-iftMatrix **computeNormGLCM(iftImage *original_img, iftImage *label_img, int spx_label, int spx_size, 
-                        double *angles, int nangles, int num_levels)
-{
-    //if(iftMaximumValue(original_img) >= num_levels)
-    //    iftError("Number of gray levels should be greater than the maximum gray value in the image.", __func__);
-
     iftMatrix **glcm = (iftMatrix **)malloc(nangles * sizeof(iftMatrix *));
-    for(int a = 0; a < nangles; a++)
+    for (int a = 0; a < nangles; a++)
         glcm[a] = iftCreateMatrix(num_levels, num_levels);
-    
+
     int rows = original_img->xsize;
     int cols = original_img->ysize;
-    for(int p = 0; p < original_img->n; p++)
+    for (int p = 0; p < original_img->n; p++)
     {
-        if(label_img->val[p] == spx_label+1)
+        if (label_img->val[p] == spx_label + 1)
         {
-            for(int a = 0; a < nangles; a ++)
+            for (int a = 0; a < nangles; a++)
             {
                 double angle = angles[a];
                 int offset_row = round(sin(angle));
                 int offset_col = round(cos(angle));
                 int i = original_img->val[p];
 
-                int j_index = p + offset_row*cols + offset_col;
-                if(j_index >= rows*cols) continue;
+                int j_index = p + offset_row * cols + offset_col;
+                if (j_index >= rows * cols)
+                    continue;
                 int j = original_img->val[j_index];
 
-                if(i >= 0 && j >= 0 && i < num_levels && j < num_levels)
+                if (i >= 0 && j >= 0 && i < num_levels && j < num_levels)
                     iftMatrixElem(glcm[a], i, j) += 1;
             }
         }
     }
 
-    for(int a = 0; a < nangles; a ++)
+    for (int a = 0; a < nangles; a++)
     {
         // make it symmetric
         iftMatrix *T = iftTransposeMatrix(glcm[a]);
@@ -509,34 +528,56 @@ iftMatrix **computeNormGLCM(iftImage *original_img, iftImage *label_img, int spx
 
         // normalize
         double norm = iftMatrixSum(glcm[a]);
-        if(norm > 1) iftComputeDivisionBetweenMatrixScalar(glcm[a], norm, 'f');
+        if (norm != 0)
+            iftComputeDivisionBetweenMatrixScalar(glcm[a], norm, 'f');
     }
 
     return glcm;
 }
 
-float iftContrastHaralick(iftMatrix *glcm)
+/**
+ * @fn getContrastHaralick
+ * @brief Compute contrast from a GLCM.
+ * Let P(i,j) the value in the i-th row and j-th column of a GLCM, 0 < i,j <= N,
+ * contrast = sum_{i=1,j=1}^{N} P(i,j) * (i-j)^2
+ * @param glcm The GLCM
+ * @return The contrast
+ */
+float getContrastHaralick(iftMatrix *glcm)
 {
     float contrast = 0.0;
-    for(int i = 0; i < glcm->nrows; i++)
+    for (int i = 0; i < glcm->nrows; i++)
     {
-        for(int j = 0; j < glcm->ncols; j++)
-            contrast += iftMatrixElem(glcm, j, i) * (i-j)*(i-j);
+        for (int j = 0; j < glcm->ncols; j++)
+            contrast += iftMatrixElem(glcm, j, i) * (i - j) * (i - j);
     }
     return contrast;
 }
 
-float iftCorrelationHaralick(iftMatrix *glcm)
+/**
+ * @fn getCorrelationHaralick
+ * @brief Compute correlation from a GLCM.
+ * Let:
+ * - P(i,j) the value in the i-th row and j-th column of a GLCM, 0 < i,j <= N,
+ * - Px(i) = sum_{j=1}^{N} P(i,j) , mx(i) = sum_{i=1}^{N} i * Px(i) ,
+ * - Py(j) = sum_{j=1}^{N} P(i,j) , my(j) = sum_{j=1}^{N} j * Py(j) ,
+ * - stdx(i) = sqrt(sum_{i=1}^{N} (i - mx(i))^2 * Px(i)) ,
+ * - stdy(j) = sqrt(sum_{j=1}^{N} (j - my(j))^2 * Py(j)) ,
+ * Then, correlation = (1 / (stdx(i) * stdy(j))) * sum_{i=1,j=1}^{N} (i - mx(i)) * (j - my(j)) * P(i,j)
+ * @param glcm The GLCM
+ * @return The correlation
+ */
+float getCorrelationHaralick(iftMatrix *glcm)
 {
-    // Calcula Pi e Pj (somatorio das linhas e das colunas, respectivamente)
-    // e a média e a média de Pi e Pj
-    float *Pi = iftAllocFloatArray(glcm->nrows);
-    float *Pj = iftAllocFloatArray(glcm->ncols);
+    // Compute Pi e Pj (sum of the rows and of the cols, respectively)
+    // and the average values of Pi e Pj
+    float *Pi = iftAllocFloatArray(glcm->nrows); // Pi = sum_{j=1}^{N} P(i,j)
+    float *Pj = iftAllocFloatArray(glcm->ncols); // Pj = sum_{i=1}^{N} P(i,j)
 
     float mean_i = 0, mean_j = 0;
-    for(int i = 0; i < glcm->nrows; i++)
+    for (int i = 0; i < glcm->nrows; i++)
     {
-        for(int j = 0; j < glcm->ncols; j++)
+        for (int j = 0; j < glcm->ncols; j++)
         {
             Pi[i] += iftMatrixElem(glcm, j, i);
             Pj[i] += iftMatrixElem(glcm, i, j);
@@ -546,349 +587,173 @@ float iftCorrelationHaralick(iftMatrix *glcm)
         mean_j += i * Pj[i];
     }
 
-    // Calcula o desvio padrão de Pi e Pj
-    // e pre-calcula diferencas (i - mean_i) e (j - mean_j)
+    // Compute the standar deviation of Pi and Pj
+    // and pre-compute (i - mean_i) e (j - mean_j)
     float std_i = 0, std_j = 0;
     float i_diff[glcm->nrows], j_diff[glcm->ncols];
-    for(int i = 0; i < glcm->nrows; i++)
+    for (int i = 0; i < glcm->nrows; i++)
     {
         std_i += pow(i - mean_i, 2) * Pi[i];
         std_j += pow(i - mean_j, 2) * Pj[i];
 
         i_diff[i] = i - mean_i;
-        j_diff[i] = i - mean_j; 
+        j_diff[i] = i - mean_j;
     }
 
-    if(std_i == 0) std_i = 1;
-    if(std_j == 0) std_j = 1;
+    if (std_i == 0)
+        std_i = 1;
+    if (std_j == 0)
+        std_j = 1;
 
     std_i = sqrt(std_i);
     std_j = sqrt(std_j);
 
+    // Compute the correlation
     float correlation = 0.0;
-    for (int i = 0; i < glcm->nrows; i++) {
-        for (int j = 0; j < glcm->ncols; j++) {
+    for (int i = 0; i < glcm->nrows; i++)
+    {
+        for (int j = 0; j < glcm->ncols; j++)
+        {
             correlation += i_diff[i] * j_diff[j] * iftMatrixElem(glcm, j, i);
         }
     }
     correlation /= (std_i * std_j);
-    
+
     iftFree(Pi);
     iftFree(Pj);
 
     return correlation;
 }
 
-float iftEnergyHaralick(iftMatrix *glcm)
+/**
+ * @fn getEnergyHaralick
+ * @brief Compute energy (angular second moment) from a GLCM.
+ * Let P(i,j) the value in the i-th row and j-th column of a GLCM, 0 < i,j <= N,
+ * energy = sum_{i=1,j=1}^{N} P(i,j)^2
+ * @param glcm The GLCM
+ * @return The energy
+ */
+float getEnergyHaralick(iftMatrix *glcm)
 {
     float energy = 0.0;
-    for(int i = 0; i < glcm->nrows; i++)
+    for (int i = 0; i < glcm->nrows; i++)
     {
-        for(int j = 0; j < glcm->ncols; j++)
+        for (int j = 0; j < glcm->ncols; j++)
             energy += pow(iftMatrixElem(glcm, j, i), 2);
     }
     return energy;
 }
 
-float iftHomogeneityHaralick(iftMatrix *glcm)
+/**
+ * @fn getHomogeneityHaralick
+ * @brief Compute homogeneity from a GLCM.
+ * Let P(i,j) the value in the i-th row and j-th column of a GLCM, 0 < i,j <= N,
+ * homogeneity = sum_{i=1,j=1}^{N} P(i,j) / (1 + (i-j)^2)
+ * @param glcm The GLCM
+ * @return The homogeneity
+ */
+float getHomogeneityHaralick(iftMatrix *glcm)
 {
     float homogeneity = 0.0;
-    for(int i = 0; i < glcm->nrows; i++)
+    for (int i = 0; i < glcm->nrows; i++)
     {
-        for(int j = 0; j < glcm->ncols; j++)
-            homogeneity += iftMatrixElem(glcm, j, i) / (1 + pow(i-j, 2));
+        for (int j = 0; j < glcm->ncols; j++)
+            homogeneity += iftMatrixElem(glcm, j, i) / (1 + pow(i - j, 2));
     }
     return homogeneity;
 }
 
-float iftEntropyHaralick(iftMatrix *glcm)
+/**
+ * @fn getEntropyHaralick
+ * @brief Compute entropy from a GLCM.
+ * Let P(i,j) the value in the i-th row and j-th column of a GLCM, 0 < i,j <= N,
+ * entropy = - sum_{i=1,j=1}^{N} P(i,j) * log_2(P(i,j))
+ * @param glcm The GLCM
+ * @return The entropy
+ */
+float getEntropyHaralick(iftMatrix *glcm)
 {
     float entropy = 0.0;
-    for(int i = 0; i < glcm->nrows; i++)
+    for (int i = 0; i < glcm->nrows; i++)
     {
-        for(int j = 0; j < glcm->ncols; j++)
-            if(iftMatrixElem(glcm, j, i) > 0)
+        for (int j = 0; j < glcm->ncols; j++)
+            if (iftMatrixElem(glcm, j, i) > 0)
                 entropy += iftMatrixElem(glcm, j, i) * log(iftMatrixElem(glcm, j, i));
     }
     return -entropy;
 }
 
+/**
+ * @fn iftFLIMGraphHaralickFeatures
+ * @brief Compute Haralick features for a superpixel image.
+ * @param graph The FLIMGraph
+ * @param original_img The original image
+ * @param label_img The superpixel image
+ * @param feat_start The starting index for the features in the graph
+ * @note The features are stored in the graph nodes.
+ * @note The features are computed for each superpixel in the image.
+ * @note It averages the features for the angles 0, 45, 90, and 135 degrees.
+ * @note The features are contrast, correlation, energy, homogeneity, and entropy.
+ */
 void iftFLIMGraphHaralickFeatures(
-        iftFLIMGraph *graph,
-        iftImage *original_img, 
-        iftImage *label_img,
-        int feat_start)
+    iftFLIMGraph *graph,
+    iftImage *original_img,
+    iftImage *label_img,
+    int feat_start)
 {
-    if(original_img == NULL) iftError("Original image is NULL", __func__);
-    if(label_img == NULL) iftError("Labeled image is NULL", __func__);
-    if(graph == NULL) iftError("Graph is NULL", __func__);
+    if (original_img == NULL)
+        iftError("Original image is NULL", __func__);
+    if (label_img == NULL)
+        iftError("Labeled image is NULL", __func__);
+    if (graph == NULL)
+        iftError("Graph is NULL", __func__);
 
-    int num_levels = iftMaximumValue(original_img)+1;
-    double angles[] = {0, IFT_PI/4, IFT_PI/2, 3*IFT_PI/4}; // 0, 45, 90, 135
+    int num_levels = iftMaximumValue(original_img) + 1;
+    double angles[] = {0, IFT_PI / 4, IFT_PI / 2, 3 * IFT_PI / 4}; // 0, 45, 90, 135
     int nangles = 4;
 
-    //printf("Computing Haralick features for %ld nodes\n", graph->num_nodes);
-    //printf("Number of levels: %d\n", num_levels);
-    //printf("Number of features: %ld, feat_start: %d \n", graph->num_feats, feat_start);
-
     iftFLIMGraphNode *node = graph->nodes;
-    for(int i = 0; i < graph->num_nodes; i++)
+    for (int i = 0; i < graph->num_nodes; i++)
     {
         // https://scikit-image.org/docs/stable/api/skimage.feature.html#skimage.feature.graycomatrix
         // https://github.com/scikit-image/scikit-image/blob/main/skimage/feature/texture.py#L15-L167
         // https://github.com/scikit-image/scikit-image/blob/main/skimage/feature/_texture.pyx
         // https://medium.com/@girishajmera/feature-extraction-of-images-using-glcm-gray-level-cooccurrence-matrix-e4bda8729498
-        
-        //printf("Node %d\n", i);
-        // 1. Create k GLCM matrices and a superpixel graph
-        iftMatrix **glcm = computeNormGLCM(original_img, label_img, i, node->numPixels, 
-                        angles, nangles, num_levels);
 
-        //printf("GLCM computed\n");
-        
+        // 1. Create k GLCM matrices and a superpixel graph
+        iftMatrix **glcm = ComputeNormalizedGLCM(original_img, label_img, i, node->numPixels,
+                                                 angles, nangles, num_levels);
+
         // 2. Compute Haralick features for each GLCM matrix
-        for(int p = 0; p < nangles; p++)
+        for (int p = 0; p < nangles; p++)
         {
-            //printf("Angle %d\n", p);
-            node->feats[feat_start] += iftContrastHaralick(glcm[p]);
-            //printf("Contrast computed: %f \n", node->feats[feat_start]);
-            node->feats[feat_start + 1] += iftCorrelationHaralick(glcm[p]);
-            //printf("Correlation computed: %f \n", node->feats[feat_start + 1]);
-            node->feats[feat_start + 2] += iftEnergyHaralick(glcm[p]);
-            //printf("Energy computed: %f \n", node->feats[feat_start + 2]);
-            node->feats[feat_start + 3] += iftHomogeneityHaralick(glcm[p]);
-            //printf("Homogeneity computed: %f \n", node->feats[feat_start + 3]);
-            node->feats[feat_start + 4] += iftEntropyHaralick(glcm[p]);
-            //printf("Entropy computed: %f \n", node->feats[feat_start + 4]);
+            node->feats[feat_start] += getContrastHaralick(glcm[p]);
+            node->feats[feat_start + 1] += getCorrelationHaralick(glcm[p]);
+            node->feats[feat_start + 2] += getEnergyHaralick(glcm[p]);
+            node->feats[feat_start + 3] += getHomogeneityHaralick(glcm[p]);
+            node->feats[feat_start + 4] += getEntropyHaralick(glcm[p]);
             iftDestroyMatrix(&glcm[p]);
         }
 
-        //printf("Haralick features computed\n");
-
-        for(int p = 0; p < 5; p++)
+        for (int p = 0; p < 5; p++)
             node->feats[feat_start + p] /= nangles;
-
-        //printf("Haralick features normalized\n");
 
         free(glcm);
         node++;
     }
-    //printf("Haralick features computed for all nodes\n");
 }
 
-/**
- * @brief Create a graph from the original image and its segmentation map.
- * 
- * @note The values in the segmentation map must be in the range [1, num_superpixels]
- * 
- * @param num_superpixels   The number of superpixels in 'labeled_img'.
- * @param A                 An adjacency relation between pixels.
- * @param oiginal_img       The original image.
- * @param labeled_img       A map of superpixel labels.
- * @param feat_type         The type of feature to be computed.
- * @return The FLIMGraph.
- * 
- * @author Isabela Borlido.
- * @date May, 2021.
+/** @} */
+
+/* --------------------- FLIMGraph segmentation ----------------------------- */
+/** @defgroup FLIMGraphSegmentation FLIMGraph segmentation
+ *  @{
  */
-iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
-    unsigned long num_superpixels,
-    iftAdjRel *A,
-    iftMImage *oiginal_img, iftImage *labeled_img, 
-    iftFLIMGraphFeature feat_type,
-    iftImage *gray_img)
-{
-    if(num_superpixels < 1) iftError("Number of superpixels must be positive", __func__);
-    if((feat_type == IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK || 
-        feat_type == IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK ||
-        feat_type == IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK) && gray_img == NULL)
-        iftError("Gray image is NULL", __func__);
-
-    iftFLIMGraph *graph;
-    iftBMap *neighbors[num_superpixels];
-
-    int feat_num = 0;
-    switch (feat_type)
-    {
-    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE:
-    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB:
-        feat_num = oiginal_img->m + 1;
-        break;
-    
-    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK:
-        feat_num = oiginal_img->m + 6;
-        break;
-
-    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
-    case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
-        feat_num = oiginal_img->m + 5;
-        break;
-
-    default:
-        feat_num = oiginal_img->m;
-        break;
-    }
-
-    graph = iftCreateEmptyFLIMGraph(feat_num, num_superpixels);
-    
-    for (int i = 0; i < num_superpixels; i++)
-        neighbors[i] = iftCreateBMap(num_superpixels);
-
-    // for each pixel
-    for (int p_index = 0; p_index < labeled_img->n; p_index++)
-    {
-        //printf("Pixel %d, label %d \n", p_index, labeled_img->val[p_index]);
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);
-        node->numPixels++;
-
-        // increase feature
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
-
-        // look at neighbors
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
-        for (int i = 1; i < A->n; i++)
-        {
-            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
-            {
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
-                {
-                    iftInsertFLIMGraphNeighborNode(node, q_label);
-                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
-                    iftBMapSet1(neighbors[label], q_label);
-                    graph->num_edges++;
-                }
-            }
-        }
-    }
-
-    iftFLIMGraphNode *node = graph->nodes;
-    switch (feat_type)
-    {
-    case IFT_FLIMGRAPH_FEATURE_MEAN:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
-                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels); 
-            node++;
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        break;
-
-    case IFT_FLIMGRAPH_FEATURE_SUM:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        break;
-
-    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
-                node->feats[band_index] *= (1.0+rel_size);
-            node++;
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        break;
-
-    case IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE:
-        int max_size = node->numPixels;
-        node++;
-        for (unsigned long spx_index = 1; spx_index < num_superpixels; spx_index++)
-        {
-            max_size = iftMax(max_size, node->numPixels);
-            node++;
-        }
-        node = graph->nodes;
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            double rel_size = (double)node->numPixels / (double)max_size;
-            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++){
-                node->feats[band_index] /= (double)node->numPixels;
-                node->feats[band_index] *= (1.0+rel_size);
-            }
-            node++;
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        break;
-
-    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            for (unsigned long band_index = 0; band_index < graph->num_feats-1; band_index++)
-                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
-            node->feats[graph->num_feats-1] = (double)node->numPixels / (double)oiginal_img->n;
-            node++;
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        break;
-
-    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            for (unsigned long band_index = 0; band_index < graph->num_feats-1; band_index++)
-                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
-            
-            int sum_size = 0;
-            iftSet *neigh = node->adj;
-            while(neigh != NULL){
-                sum_size += graph->nodes[neigh->elem].numPixels;
-                neigh = neigh->next;
-            }
-            sum_size += node->numPixels;
-            node->feats[graph->num_feats-1] = (double)node->numPixels / (double)sum_size;
-            node++;
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        break;
-    
-    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
-            node->feats[oiginal_img->m] = (double)node->numPixels / (double)oiginal_img->n;
-            node++;
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m+1);
-        break;
-
-    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-            for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-                node->feats[band_index] *= (1.0+rel_size);
-            node++;
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
-        break;
-    case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
-        {
-            iftDestroyBMap(&neighbors[spx_index]);
-        }
-        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
-        break;
-    default:
-        iftError("Invalid feature type %d ", __func__, feat_type);
-        break;
-    }
-    node = NULL;
-
-    return graph;
-}
 
 /**
+ * @fn iftERGC
  * @brief Create a segmentation map using ERGC algorithm.
- * 
+ *
  * @param mimg Multiband image
  * @param A Adjacency relation
  * @param num_superpixels Number of superpixels
@@ -896,37 +761,38 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
  * @return The segmentation map.
  */
 iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
-{   
+{
     iftImage *seeds_img;
     double *distances;
     int *superpixel_area;
     float **superpixel_feats;
     iftDHeap *heap;
-    
+
     // GRID SAMPLING ==============================================================
     iftAdjRel *A_grad = iftCircular(sqrtf(2.0));
     iftImage *grad = iftMImageGradient(mimg, A_grad, iftMMaximumValue(mimg, -1));
-    int s = (float)(mimg->xsize*mimg->ysize)/(float)(*num_superpixels);
-    int dy = 0.5f + sqrt(s*mimg->ysize/ (float)mimg->xsize);
-    int dx = 0.5f + s / (float)(0.5f + sqrt(s*mimg->ysize/ (float)mimg->xsize));
+    int s = (float)(mimg->xsize * mimg->ysize) / (float)(*num_superpixels);
+    int dy = 0.5f + sqrt(s * mimg->ysize / (float)mimg->xsize);
+    int dx = 0.5f + s / (float)(0.5f + sqrt(s * mimg->ysize / (float)mimg->xsize));
     int num_seeds = 1;
     seeds_img = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
-    for(int x = dx / 2; x < mimg->xsize; x += dx)
+    for (int x = dx / 2; x < mimg->xsize; x += dx)
     {
-        for(int y = dy / 2; y < mimg->ysize; y += dy)
+        for (int y = dy / 2; y < mimg->ysize; y += dy)
         {
             iftVoxel u;
             u.x = x;
             u.y = y;
             u.z = 0;
             u.t = 0;
-            for(int j = 1; j < A_grad->n; j++)
+            for (int j = 1; j < A_grad->n; j++)
             {
                 iftVoxel v = iftGetAdjacentVoxel(A_grad, u, j);
-                if(iftMValidVoxel(mimg, v))
+                if (iftMValidVoxel(mimg, v))
                 {
                     int v_index = iftMGetVoxelIndex(mimg, v);
-                    if(grad->val[v_index] < grad->val[iftMGetVoxelIndex(mimg, u)] && seeds_img->val[v_index] == 0){
+                    if (grad->val[v_index] < grad->val[iftMGetVoxelIndex(mimg, u)] && seeds_img->val[v_index] == 0)
+                    {
                         u.x = v.x;
                         u.y = v.y;
                     }
@@ -942,35 +808,37 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
     *num_superpixels = num_seeds;
 
     // Init --------------------------------------------------------------------
-    distances = (double*)calloc(mimg->n, sizeof(double));
+    distances = (double *)calloc(mimg->n, sizeof(double));
     heap = iftCreateDHeap(mimg->n, distances);
     superpixel_area = (int *)calloc(num_seeds, sizeof(int));
     superpixel_feats = (float **)calloc(num_seeds, sizeof(float *));
     float Sz = (float)mimg->n / (float)num_seeds;
 
-
-    int *superpixel_root = (int*)calloc(num_seeds, sizeof(int));
+    int *superpixel_root = (int *)calloc(num_seeds, sizeof(int));
     // initialize_images
 #pragma omp parallel for
     for (int p_index = 0; p_index < mimg->n; p_index++)
     {
-        if(seeds_img->val[p_index] == 0){
+        if (seeds_img->val[p_index] == 0)
+        {
             distances[p_index] = INFINITY;
-        }else{
+        }
+        else
+        {
             distances[p_index] = 0;
             superpixel_root[seeds_img->val[p_index] - 1] = p_index;
         }
     }
 
     // initialize_superpixels
-    for(int seed_index = 0; seed_index < num_seeds; seed_index++)
+    for (int seed_index = 0; seed_index < num_seeds; seed_index++)
     {
         int p_index = superpixel_root[seed_index];
         superpixel_area[seed_index] = 1;
         superpixel_feats[seed_index] = (float *)calloc(mimg->m, sizeof(float));
-        for(int j = 0; j < mimg->m; ++j)
+        for (int j = 0; j < mimg->m; ++j)
             superpixel_feats[seed_index][j] = mimg->val[p_index][j];
-        
+
         iftVoxel p_voxel = iftMGetVoxelCoord(mimg, p_index);
         for (int i = 1; i < A->n; i++)
         {
@@ -978,7 +846,8 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
             if (iftMValidVoxel(mimg, q_voxel))
             {
                 int q_index = iftMGetVoxelIndex(mimg, q_voxel);
-                if(seeds_img->val[q_index] != 0) continue;
+                if (seeds_img->val[q_index] != 0)
+                    continue;
 
                 superpixel_area[seed_index]++;
                 for (int j = 0; j < mimg->m; ++j)
@@ -987,7 +856,7 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
         }
         iftInsertDHeap(heap, p_index);
     }
-    
+
     while (!iftEmptyDHeap(heap))
     {
         int p_index, p_label;
@@ -997,7 +866,7 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
 
         p_voxel = iftMGetVoxelCoord(mimg, p_index);
         p_label = seeds_img->val[p_index];
-        
+
         // Add spel p to its tree
         superpixel_area[p_label - 1]++;
         for (int j = 0; j < mimg->m; j++)
@@ -1011,7 +880,8 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
             {
                 int q_index = iftMGetVoxelIndex(mimg, q_voxel);
 
-                if (heap->color[q_index] == IFT_BLACK) continue;
+                if (heap->color[q_index] == IFT_BLACK)
+                    continue;
 
                 double P = 0;
                 for (int j = 0; j < mimg->m; j++)
@@ -1086,26 +956,389 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
     free(superpixel_area);
     iftDestroyDHeap(&heap);
     free(distances);
-    
+
     return seeds_img;
 }
 
 /**
+ * @fn iftGetFLIMGraphFromGrid
+ * @brief Create a grid graph from an image
+ * @param img input image
+ * @param label_img a pointer to a superpixel segmentation
+ * @return The FLIMGraph
+ * @note `label_img` is allocated inside the function and must be destroyed by the caller.
+ */
+iftFLIMGraph *iftGetFLIMGraphFromGrid(iftImage *img, iftImage **label_img)
+{
+    iftMImage *mimg = NULL;
+    iftAdjRel *A = NULL;
+    iftFLIMGraph *graph = NULL;
+
+    if (img == NULL)
+        iftError("Image is null.", __func__);
+
+    // Init other inputs
+    if (iftIsColorImage(img))
+        mimg = iftImageToMImage(img, LABNorm_CSPACE);
+    else
+        mimg = iftImageToMImage(img, GRAYNorm_CSPACE);
+
+    if (iftIs3DMImage(mimg))
+        A = iftSpheric(sqrtf(3.0));
+    else
+        A = iftCircular(sqrtf(2.0));
+
+    (*label_img) = iftCreateImage(mimg->xsize, mimg->ysize, 1);
+    graph = iftCreateEmptyFLIMGraph(mimg->m, mimg->n);
+    graph->num_edges = (mimg->xsize - 2) * (mimg->ysize - 2) * 4 + (2 * (mimg->xsize - 2) + 2 * (mimg->ysize - 2)) * 3 + 8;
+
+#pragma omp parallel for
+    for (int i = 0; i < mimg->n; i++)
+    {
+        iftVoxel p_voxel;
+        iftFLIMGraphNode *node;
+
+        p_voxel = iftMGetVoxelCoord(mimg, i);
+        (*label_img)->val[i] = i + 1;
+        node = &(graph->nodes[i]);
+        node->numPixels = 1;
+
+        for (int j = 0; j < graph->num_feats; j++)
+            node->feats[j] = mimg->val[i][j];
+
+        for (int j = 0; j < A->n; j++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, j);
+            if (iftMValidVoxel(mimg, q_voxel))
+            {
+                iftInsertFLIMGraphNeighborNode(node, iftMGetVoxelIndex(mimg, q_voxel));
+            }
+        }
+        node = NULL;
+    }
+    iftDestroyAdjRel(&A);
+    iftDestroyMImage(&mimg);
+    return graph;
+}
+
+/**
+ * @fn iftImageToGridFLIMGraphs
+ * @brief Create grid graphs from images in a folder.
+ *
+ * Create grid graphs from images in a folder.
+ * The superpixel maps and graphs are saved in the respective directories.
+ *
+ * @note The graph and superpixel directory are created if they do not exist
+ *
+ * @param image_dir image directory
+ * @param labels_dir superpixel map directory
+ * @param graph_dir graphs directory
+ */
+void iftImageToGridFLIMGraphs(char *image_dir,
+                              char *labels_dir,
+                              char *graph_dir)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    printf("\t image_dir: %s\n", image_dir == NULL ? "NULL" : image_dir);
+    printf("\t labels_dir: %s\n", labels_dir == NULL ? "NULL" : labels_dir);
+    printf("\t graph_dir: %s\n", graph_dir == NULL ? "NULL" : graph_dir);
+#endif
+
+    if (!iftDirExists(image_dir))
+        iftError("Image directory does not exist.", __func__);
+    iftFileSet *fs_imgs = iftLoadFileSetFromDir(image_dir, 1);
+    if (fs_imgs->n < 1)
+        iftError("No images found.", __func__);
+
+    iftMakeDir(labels_dir);
+    iftMakeDir(graph_dir);
+
+    for (int i = 0; i < fs_imgs->n; i++)
+    {
+        char *basename = NULL;
+        char filename[200], ext[10];
+
+        sprintf(ext, "%s", iftFileExt(fs_imgs->files[i]->path));
+        basename = iftFilename(fs_imgs->files[i]->path, ext);
+
+        iftImage *img = iftReadImageByExt(fs_imgs->files[i]->path);
+        iftImage *label_img;
+        iftFLIMGraph *graph = iftGetFLIMGraphFromGrid(img, &label_img);
+        iftDestroyImage(&img);
+
+        sprintf(filename, "%s/%s.pgm", labels_dir, basename);
+        iftWriteImageByExt(label_img, filename);
+        iftDestroyImage(&label_img);
+
+        sprintf(filename, "%s/%s.json", graph_dir, basename);
+        iftWriteFLIMGraph(graph, filename);
+        iftDestroyFLIMGraph(&graph);
+        iftFree(basename);
+    }
+    iftDestroyFileSet(&fs_imgs);
+}
+
+/* --------------------- FLIMGraph transform ----------------------------- */
+/** @defgroup FLIMGraphTransform FLIMGraph transform
+ * Functions to transform the FLIMGraph to and from other data structures
+ *  @{
+ */
+
+/**
+ * @fn iftNormalizeFLIMGraphByZScore
+ * @brief Normalize the node features based on mean and standard deviation values
+ *
+ * @warning `mean` and `stdev` must have the same number of values as the number of features in the graph
+ *
+ * @param graph Graph
+ * @param mean Mean values
+ * @param stdev Standard deviation values
+ */
+void iftNormalizeFLIMGraphByZScore(iftFLIMGraph *graph, float *mean, float *stdev)
+{
+#pragma omp parallel for
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            graph->nodes[p].feats[b] = stdev[b] != 0 ? ((float)graph->nodes[p].feats[b] - mean[b]) / stdev[b] : ((float)graph->nodes[p].feats[b] - mean[b]);
+    }
+}
+
+/**
+ * @fn iftSuperpixelImageToFLIMGraph
+ * @brief Create a graph from the original image and its segmentation map.
+ *
+ * @param num_superpixels   The number of superpixels in `labeled_img`.
+ * @param A                 An adjacency relation between pixels.
+ * @param oiginal_img       The original image.
+ * @param labeled_img       A map of superpixel labels.
+ * @param feat_type         The type of feature to be computed.
+ * @param gray_img         The gray image. It is used to compute the Haralick features.
+ * @return The FLIMGraph.
+ *
+ * @note The values in the segmentation map must be in the range [1, num_superpixels]
+ * @author Isabela Borlido.
+ */
+iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
+    unsigned long num_superpixels,
+    iftAdjRel *A,
+    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftFLIMGraphFeature feat_type,
+    iftImage *gray_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+    if ((feat_type == IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK ||
+         feat_type == IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK ||
+         feat_type == IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK) &&
+        gray_img == NULL)
+        iftError("Gray image is NULL", __func__);
+
+    iftFLIMGraph *graph;
+    iftBMap *neighbors[num_superpixels];
+
+    int feat_num = 0;
+    switch (feat_type)
+    {
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE:
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB:
+        feat_num = oiginal_img->m + 1;
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK:
+        feat_num = oiginal_img->m + 6;
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
+    case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
+        feat_num = oiginal_img->m + 5;
+        break;
+
+    default:
+        feat_num = oiginal_img->m;
+        break;
+    }
+
+    graph = iftCreateEmptyFLIMGraph(feat_num, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    switch (feat_type)
+    {
+    case IFT_FLIMGRAPH_FEATURE_MEAN:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+            node++;
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_SUM:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
+            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+                node->feats[band_index] *= (1.0 + rel_size);
+            node++;
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE:
+        /*int max_size = node->numPixels;
+        node++;
+        for (unsigned long spx_index = 1; spx_index < num_superpixels; spx_index++)
+        {
+            max_size = iftMax(max_size, node->numPixels);
+            node++;
+        }*/
+        node = graph->nodes;
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
+            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+            {
+                node->feats[band_index] /= (double)node->numPixels;
+                node->feats[band_index] *= (1.0 + rel_size);
+            }
+            node++;
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+            node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)oiginal_img->n;
+            node++;
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+
+            int sum_size = 0;
+            iftSet *neigh = node->adj;
+            while (neigh != NULL)
+            {
+                sum_size += graph->nodes[neigh->elem].numPixels;
+                neigh = neigh->next;
+            }
+            sum_size += node->numPixels;
+            node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)sum_size;
+            node++;
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+                node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+            node->feats[oiginal_img->m] = (double)node->numPixels / (double)oiginal_img->n;
+            node++;
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
+        break;
+
+    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
+            for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+                node->feats[band_index] *= (1.0 + rel_size);
+            node++;
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
+        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        {
+            iftDestroyBMap(&neighbors[spx_index]);
+        }
+        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+        break;
+    default:
+        iftError("Invalid feature type %d ", __func__, feat_type);
+        break;
+    }
+    node = NULL;
+
+    return graph;
+}
+
+/**
+ * @fn iftImageToFLIMGraph
  * @brief Create a graph from a image based on a superpixel segmentation.
- * 
+ *
  * @note label_img is allocated inside the function and must be destroyed by the caller.
- * 
+ *
  * @param img Input image
  * @param num_superpixels Number of superpixels
  * @param param superpixel segmentation parameter (initial seeds for DISF and compactness for ERGC)
  * @param label_img A pointer to a superpixel segmentation
  * @param graph_feat Feature type to be used in the graph
  */
-iftFLIMGraph *iftImageToFLIMGraph(iftImage *img, 
-                                    int num_superpixels, int param,
-                                    iftImage **label_img,
-                                    iftFLIMGraphFeature graph_feat,
-                                    iftFLIMGraphType graph_type)
+iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
+                                  int num_superpixels, int param,
+                                  iftImage **label_img,
+                                  iftFLIMGraphFeature graph_feat,
+                                  iftFLIMGraphType graph_type)
 {
     iftImage *label_img_tmp = NULL;
     iftMImage *mimg;
@@ -1116,7 +1349,7 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
         mimg = iftImageToMImage(img, LABNorm_CSPACE);
     else
         mimg = iftImageToMImage(img, GRAYNorm_CSPACE);
-    
+
     switch (graph_type)
     {
     case IFT_FLIMGRAPH_TYPE_DISF:
@@ -1125,27 +1358,27 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
         break;
 
     case IFT_FLIMGRAPH_TYPE_ERGC:
-    A = iftCircular(1.0);
+        A = iftCircular(1.0);
         label_img_tmp = iftERGC(mimg, A, &num_superpixels, param);
         break;
-    
+
     default:
         iftError("Invalid graph type %d", __func__, graph_type);
-        
     }
 
     iftImage *gray_img = NULL;
-    if(graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK ||
+    if (graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK ||
         graph_feat == IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK ||
-        graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK) 
+        graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK)
     {
         iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
-        for(int i = 0; i < mimg->n; i++)
-            gray_img->val[i] = mimg->val[i][0];//*255;
+        for (int i = 0; i < mimg->n; i++)
+            gray_img->val[i] = mimg->val[i][0]; //*255;
     }
-    
+
     graph = iftSuperpixelImageToFLIMGraph(num_superpixels, A, mimg, label_img_tmp, graph_feat, gray_img);
-    if(gray_img != NULL) iftDestroyImage(&gray_img);
+    if (gray_img != NULL)
+        iftDestroyImage(&gray_img);
 
     (*label_img) = label_img_tmp;
     label_img_tmp = NULL;
@@ -1155,9 +1388,10 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
     return graph;
 }
 
-
 /**
- * @brief Convert a graph to a iftImage
+ * @fn iftFLIMGraphToImage
+ * @brief Convert a band of the node features in a graph to an `iftImage`
+ * @note It performs a min-max normalization on the features and scale it to `Imax`
  * @param graph Graph
  * @param labels Superpixel image
  * @param Imax Maximum intensity value
@@ -1168,7 +1402,8 @@ iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, i
     int p, b = band;
 
     iftIsValidFLIMGraph(graph);
-    if ((band < 0) || (band >= (int)graph->num_feats)) iftError("Invalid band", __func__);
+    if ((band < 0) || (band >= (int)graph->num_feats))
+        iftError("Invalid band", __func__);
 
     iftImage *img = iftCreateImage(labels->xsize, labels->ysize, labels->zsize);
     double min = IFT_INFINITY_FLT, max = IFT_INFINITY_FLT_NEG;
@@ -1185,13 +1420,11 @@ iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, i
     }
     node = NULL;
 
-    //if (max > min)
-    if(max != 0)
+    if (max != 0)
     {
         for (p = 0; p < img->n; p++)
         {
-            //img->val[p] = (int)((double)(Imax) * ((graph->nodes[labels->val[p] - 1].feats[b] - min) / (max - min)));
-            img->val[p] = (int)((double)(Imax) * (graph->nodes[labels->val[p] - 1].feats[b] / max));
+            img->val[p] = (int)((double)(Imax) * ((graph->nodes[labels->val[p] - 1].feats[b] - min) / (max - min)));
         }
     }
 
@@ -1203,25 +1436,27 @@ iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, i
 }
 
 /**
- * @brief Convert a graph to a iftMImage
+ * @fn iftFLIMGraphToMImage
+ * @brief Convert a graph to a multi-band image
  * @param graph Graph
  * @param labels Superpixel image
  * @return iftMImage*
- * @note The number of bands in the mimg is equal to the number of features in the graph
+ * @note The number of bands in the `*iftImage` is equal to the number of features in the graph
  */
 iftMImage *iftFLIMGraphToMImage(iftFLIMGraph *graph, iftImage *labels)
 {
     int p, b;
-    
+
     iftIsValidFLIMGraph(graph);
-    if (labels == NULL) iftError("Labels image is NULL", __func__);
+    if (labels == NULL)
+        iftError("Labels image is NULL", __func__);
 
     iftMImage *img = iftCreateMImage(labels->xsize, labels->ysize, labels->zsize, graph->num_feats);
     for (b = 0; b < img->m; b++)
     {
         for (p = 0; p < img->n; p++)
         {
-            if(labels->val[p] - 1 < 0 || labels->val[p] - 1 >= graph->num_nodes) 
+            if (labels->val[p] - 1 < 0 || labels->val[p] - 1 >= graph->num_nodes)
                 iftError("Invalid label %d %d ", __func__, labels->val[p], graph->num_nodes);
             img->val[p][b] = graph->nodes[labels->val[p] - 1].feats[b];
         }
@@ -1235,56 +1470,15 @@ iftMImage *iftFLIMGraphToMImage(iftFLIMGraph *graph, iftImage *labels)
 }
 
 /**
- * @brief Convert a graph (in json format) to a .mimg file using the superpixel labels map as auxiliar.
- * @author  Isabela Borlido.
- * @date    May, 2021.
- * @param graph_dir    Directory with graph files (in json format).
- * @param labels_dir   Directory with the superpixel labels map.
- * @param output_dir   Directory to write the .mimg file.
- * @note The labels must be in .pgm or .ppm format
- * @note The graph must be in .json format
+ * @fn iftMImageToFLIMGraph
+ * @brief Convert an iftMImage to an iftFLIMGraph
+ * @param mimg MImage
+ * @param graph_ref Graph reference
+ * @return iftFLIMGraph*
+ * @note The number of nodes in `graph_ref` must be equal to the number of pixels in `mimg`
+ * @note The `graph_ref` is used to copy the adjacency relations
+ * @note The features in `mimg` are copied to the output graph
  */
-void iftFLIMGraphToMIMG(char *graph_dir, char *labels_dir, char *output_dir)
-{
-#ifdef IFT_DEBUG
-    printf("%s \n", __func__);
-    printf("\t graph_dir: %s\n", graph_dir == NULL ? "NULL" : graph_dir);
-    printf("\t labels_dir: %s\n", labels_dir == NULL ? "NULL" : labels_dir);
-    printf("\t output_dir: %s\n", output_dir == NULL ? "NULL" : output_dir);
-#endif
-
-    if(!iftDirExists(graph_dir)) iftError("Graph directory does not exist", __func__);
-    if(!iftDirExists(labels_dir)) iftError("Labels directory does not exist", __func__);
-    if(output_dir == NULL) iftError("Output directory is NULL", __func__);
-
-    iftFileSet *fs_graphs = iftLoadFileSetFromDirBySuffix(graph_dir, ".json", 1);
-    if(fs_graphs->n < 1) iftError("No graph files found", __func__);
-    iftMakeDir(output_dir);
-
-//#pragma omp parallel for
-    for (int i = 0; i < fs_graphs->n; i++)
-    {
-        char *basename = NULL;
-        char filename[200], label_file[200];
-
-        basename = iftFilename(fs_graphs->files[i]->path, ".json");
-        sprintf(label_file, "%s/%s.pgm", labels_dir, basename);
-        if (!iftFileExists(label_file)) iftError("Label file does not exist", __func__);
-        
-        iftFLIMGraph *graph = iftReadFLIMGraph(fs_graphs->files[i]->path);
-        iftImage *label_img = iftReadImageByExt(label_file);
-        iftMImage *features = iftFLIMGraphToMImage(graph, label_img);
-
-        sprintf(filename, "%s/%s.mimg", output_dir, basename);
-        iftWriteMImage(features, filename);
-        iftDestroyMImage(&features);
-        iftDestroyFLIMGraph(&graph);
-        iftDestroyImage(&label_img);
-        iftFree(basename);
-    }
-    iftDestroyFileSet(&fs_graphs);
-}
-
 iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
                                    iftFLIMGraph *graph_ref)
 {
@@ -1314,13 +1508,14 @@ iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
 }
 
 /**
- * @brief Copy the features from the mimg to the graph_ref
- * @param mimg MImage
+ * @fn iftMImageToFLIMGraphInplace
+ * @brief Copy the features from the `mimg` to `graph_ref`
+ * @param mimg Multi-band image
  * @param graph_ref Graph reference
- * @note The number of nodes in the graph_ref must be equal to the number of pixels in the mimg
+ * @note The number of nodes in `graph_ref` must be equal to the number of pixels in `mimg`
  */
 void iftMImageToFLIMGraphInplace(iftMImage *mimg,
-                                iftFLIMGraph *graph_ref)
+                                 iftFLIMGraph *graph_ref)
 {
     if (mimg->n != graph_ref->num_nodes)
         iftError("Number of nodes in the graph is different from the number of pixels in the image", __func__);
@@ -1340,360 +1535,118 @@ void iftMImageToFLIMGraphInplace(iftMImage *mimg,
     node = NULL;
 }
 
-
 /**
+ * @fn iftFLIMGraphToActivations
  * @brief Convert a graph to a vector of iftImage
  * @param graph Graph
  * @param labels Superpixel image
  * @return iftImage**
  * @note The number of images is equal to the number of features in the graph
  */
-iftImage **iftFlimGraphToActivations(iftFLIMGraph *graph, iftImage *labels)
+iftImage **iftFLIMGraphToActivations(iftFLIMGraph *graph, iftImage *labels)
 {
     iftImage **activations = (iftImage **)malloc(graph->num_feats * sizeof(iftImage *));
 
-    /* ranged from 0 to 1*/
     for (int i = 0; i < (int)(graph->num_feats); i++)
     {
         iftImage *band = iftFLIMGraphToImage(graph, labels, 255, i);
-        if (iftIs3DImage(band)) activations[i] = iftGetXYSlice(band, band->zsize / 2);
-        else activations[i] = iftCopyImage(band);
+        if (iftIs3DImage(band))
+            activations[i] = iftGetXYSlice(band, band->zsize / 2);
+        else
+            activations[i] = iftCopyImage(band);
         iftDestroyImage(&band);
     }
 
     return activations;
 }
 
+/** @} */
 
-/** @brief Insert in "heap" at most k neighbors of the nodes in "roots" whose features are
-   most similar (Euclidean distance) with those in feature_reference.
- * @param graph: graph with node relations and features
- * @param roots: initial nodes indexes to get the neighbors
- * @param k: number of neighbors to get
- * @param dissimilarity: array to store the dissimilarity between the reference features and those from the neighbors.
- * @param feature_reference: reference node features
- * @param heap: heap of nodes to store the neighbors found
- * @warning Only neighbors with white state in heap may be inserted to it.
- * @author Isabela
- * @date abr, 2023
+/* --------------------- FLIMGraph attention ----------------------------- */
+/** @defgroup FLIMGraphAttention FLIMGraph attention
+ * Functions to compute attention values for the nodes in a graph
+ *  @{
  */
-void iftGetNeighborsFLIMGraph(iftFLIMGraph *graph, int *roots, int num_roots,
-                           int k, double *dissimilarity,
-                           double *feature_reference,
-                           iftDHeap *heap,
-                           bool most_similar)
-{
-    if (roots == NULL) iftError("Roots is NULL", __func__);
-
-    int *root_ptr = roots;
-    for(int r = 0; r < num_roots; r++)
-    {
-        iftSet *neigh = graph->nodes[*root_ptr].adj;
-        while(neigh != NULL)
-        {
-            if (heap->color[neigh->elem] == IFT_WHITE)
-            {
-                double dist = 0;
-                double *feats = graph->nodes[neigh->elem].feats;
-                for (int i = 0; i < graph->num_feats; i++)
-                {
-                    double feat_val = feature_reference[i] - feats[i];
-                    dist += feat_val * feat_val;
-                }
-
-                // if te heap already has k elements
-                // keep the most similar (or less similar) elements
-                if (heap->last + 1 == k) 
-                {
-                    int last = heap->node[0]; // look at the root of the heap
-                    if ((most_similar && dist < dissimilarity[last]) ||
-                        (!most_similar && dist > dissimilarity[last]))
-                    {
-                        iftRemoveDHeap(heap);
-                        dissimilarity[neigh->elem] = dist;
-                        iftInsertDHeap(heap, neigh->elem);
-                    }
-                }
-                else
-                {
-                    dissimilarity[neigh->elem] = dist;
-                    iftInsertDHeap(heap, neigh->elem);
-                }
-            }
-            neigh = neigh->next;
-        }
-        root_ptr++;
-    }
-}
 
 /**
- * @brief Compute the attention values for the neighbors of a node according to the attention_opt
- * @param neighbors: indexes of the neighbors
- * @param graph: graph with node relations and features
- * @param attention_opt: attention option
- * @return double*: attention values for the neighbors
+ * @fn iftFLIMGraphAttentionRelNodeSize
+ * @brief Compute the attention values for the nodes in `neighbors` based on the
+ * ration between the number of pixels in each node and the total number of
+ * pixels in the neighbors
+ * @param graph graph with node relations and features
+ * @param neighbors indexes of the neighbors
+ * @return double* attention values for the neighbors
  */
-double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *graph, iftFLIMGraphAttention *attention_opt)
-{
-    double *attention_vals = NULL;
-
-    switch (*attention_opt)
-    {
-    case IFT_FLIMGRAPH_ATTENTION_NONE:
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE:
-        attention_vals = iftFLIMGraphAttentionRelNodeSize(graph, neighbors);
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_NODE_SIZE:
-        attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
-        break;
-    
-    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
-        //attention_vals = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
-        //iftWarning("Attention partially implemented.", __func__);
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE:
-        attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
-        //double *attention_vals_simil = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
-        /*for(int j = 0; j < neighbors->n; j++)
-            attention_vals[j] += attention_vals_simil[j];
-        iftFree(attention_vals_simil);*/
-        iftWarning("Attention partially implemented.", __func__);
-        break;
-    
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE:
-        /*attention_opt = IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;
-        attention_vals = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);*/
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-    
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_WINNER:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-    
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_WINNER_POWER2:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-    
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-        
-    case IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY:
-        attention_vals = iftFLIMGraphAttentionCosineSimilarity(graph, neighbors);
-        break;
-
-    default:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        iftWarning("Attention option not implemented. Using IFT_FLIMGRAPH_ATTENTION_NONE", __func__);
-        break;
-    }
-
-    return attention_vals;
-}
-
-
-/** @brief Return k neighbors of node_index according to the GFLIM neighbor strategy.
- * @param node_index: initial node to get the neighbors
- * @param graph: graph with node relations and features
- * @param k: number of neighbors
- * @param dilation: number of skips to get neighbors (>= 1) (similar to dilation in convolutional network)
- * @param most_similar: if true, the neighbors are the most similar to the reference node
- * @return iftIntArray with the indexes of the k neighbors
- * @note The neighbors are selected according to the Euclidean distance between the features of the nodes and the features of the initial node.
- * @author Isabela
- * @date abr, 2023
- */
-iftIntArray *iftGetKNeighborsFLIMGraph(int node_index, 
-                            iftFLIMGraph *graph, int k,
-                            int dilation, bool most_similar, iftFLIMGraphAttention attention_opt)
-{
-    double *dissimilarity = (double *)malloc(graph->num_nodes * sizeof(double));
-    iftIntArray *neighbors = iftCreateIntArray(k);
-
-    // MaxHeap para armazenar até k vizinhos mais similares.
-    // Se a quantidade de vizinhos for maior que k, remove o menos similar
-    // do heap (que está no topo) usando "pop" e verifica quem é o mais similar
-    // para nova inserção.
-    iftDHeap *auxiliaryHeap = iftCreateDHeap(graph->num_nodes, dissimilarity);
-    iftDHeap *heap = iftCreateDHeap(graph->num_nodes, dissimilarity);
-    if (most_similar) auxiliaryHeap->removal_policy = MAXVALUE;
-    else heap->removal_policy = MAXVALUE;
-    
-    dissimilarity[node_index] = 0.0;
-    iftInsertDHeap(auxiliaryHeap, node_index);
-    iftRemoveDHeap(auxiliaryHeap);
-    //neighbors->val[0] = node_index;
-    neighbors->n = 1;
-    iftInsertDHeap(heap, node_index);
-
-    int skips_performed = 1;
-    int roots[k];
-
-    roots[0] = node_index;
-    int i = 1; // number of values in root
-
-    while (neighbors->n < k)
-    {
-        int miss_neighbors = k - neighbors->n;
-        iftGetNeighborsFLIMGraph(graph, roots, i,
-                              miss_neighbors,
-                              dissimilarity,
-                              graph->nodes[node_index].feats,
-                              auxiliaryHeap,
-                              most_similar);
-
-        if (iftEmptyDHeap(auxiliaryHeap)) break; // there are no neighbors to include
-        //bool new_iter = (auxiliaryHeap->last + 1 < miss_neighbors || skips_performed != dilation);
-        
-        i = 0;
-        int found_neighbors = auxiliaryHeap->last + 1;
-        // adiciona os k vizinhos selecionados (no auxiliaryHeap) em um minHeap
-        while (!iftEmptyDHeap(auxiliaryHeap))
-        {
-            int node_index = iftRemoveDHeap(auxiliaryHeap);
-            if (skips_performed == dilation)
-            {
-                //neighbors->val[neighbors->n + auxiliaryHeap->last + 1] = node_index;
-                roots[i] = node_index;
-                iftInsertDHeap(heap, node_index);
-                i++;
-            }
-        }
-        neighbors->n += found_neighbors;
-        if (skips_performed != dilation) skips_performed++;
-        else skips_performed = 1;
-    }
-
-    i = 0;
-    while(i < neighbors->n){
-        neighbors->val[i] = iftRemoveDHeap(heap);
-        i++;
-    }
-
-    free(dissimilarity);
-    iftDestroyDHeap(&auxiliaryHeap);
-    iftDestroyDHeap(&heap);
-
-    double *attention_vals = iftFLIMGraphGetAttentionValues(neighbors, graph, &attention_opt);
-    if(attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE){
-        for(int i = 0; i < neighbors->n; i++)
-            neighbors->val[i] *= attention_vals[i];
-    }
-
-    if(attention_vals != NULL) iftFree(attention_vals);
-    
-
-    return neighbors;
-}
-
-
-iftFLIMGraphAttention iftGLIMGraphGetAggregationType(char *arg)
-{
-    if(strcmp(arg, "CONCAT") == 0)
-        return IFT_GFLIM_AGGREGATION_CONCAT;
-    else if(strcmp(arg, "MEAN") == 0)
-        return IFT_GFLIM_AGGREGATION_MEAN;
-    else if(strcmp(arg, "WMEAN") == 0)
-        return IFT_GFLIM_AGGREGATION_WMEAN;
-    else
-        iftError("Invalid aggregation type %s", __func__, arg);
-    return IFT_GFLIM_AGGREGATION_CONCAT;
-}
-
-
-// ********** FUNCTION FOR ATTENTION IN GFLIM GRAPH ********** //
-
-/**
- * @brief Get the graph attention from a string
- * @param 
- */
-iftFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg)
-{
-    if(strcmp(arg, "NONE") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_NONE;
-    else if(strcmp(arg, "NODE_RELSIZE") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE;
-    else if (strcmp(arg, "NODE_SIZE") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_NODE_SIZE;
-    else if (strcmp(arg, "NEIGHB_SIZE") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE;
-    else if (strcmp(arg, "NEIGHB_SIMIL") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;
-    else if (strcmp(arg, "CLASS_DOMINANCE") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE;
-    else if (strcmp(arg, "CLASS_DOMINANCE_WINNER") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_WINNER;
-    else if (strcmp(arg, "CLASS_DOMINANCE_WINNER_POWER2") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_WINNER_POWER2;
-    else if(strcmp(arg, "CLASS_DOMINANCE_SOFTMAX_NEIGHB") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB;
-    else if(strcmp(arg, "COSINE_SIMILARITY") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY;
-    else
-        iftError("Invalid attention type %s", __func__, arg);
-    return IFT_FLIMGRAPH_ATTENTION_NONE;
-}
-
 double *iftFLIMGraphAttentionRelNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
-    // compute attention - IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE
 
-    int num_pixels = 0; 
-    for(int j = 0; j < neighbors->n; j++)
+    int num_pixels = 0;
+    for (int j = 0; j < neighbors->n; j++)
         num_pixels += graph->nodes[neighbors->val[j]].numPixels;
 
-    for(int j = 0; j < neighbors->n; j++)
-        attention_vals[j] = graph->nodes[neighbors->val[j]].numPixels/(double)num_pixels;
-    
+    for (int j = 0; j < neighbors->n; j++)
+        attention_vals[j] = graph->nodes[neighbors->val[j]].numPixels / (double)num_pixels;
+
     return attention_vals;
 }
 
+/**
+ * @fn iftFLIMGraphAttentionNodeSize
+ * @brief Compute the attention values for the nodes in `neighbors` with a softmax function
+ * based on the number of pixels in each node and the total number of pixels in the neighborhood.
+ * @param graph graph with node relations and features
+ * @param neighbors indexes of the neighbors
+ * @return double* attention values for the neighbors
+ */
 double *iftFLIMGraphAttentionNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
-    // compute attention - IFT_FLIMGRAPH_ATTENTION_NODE_SIZE
     double softmax_norm = IFT_EPSILON;
 
-    int num_pixels = 0; 
-    for(int j = 0; j < neighbors->n; j++)
+    int num_pixels = 0;
+    for (int j = 0; j < neighbors->n; j++)
         num_pixels += graph->nodes[neighbors->val[j]].numPixels;
 
-    for(int j = 0; j < neighbors->n; j++)
+    for (int j = 0; j < neighbors->n; j++)
     {
-        attention_vals[j] = exp((double)graph->nodes[neighbors->val[j]].numPixels/(double)num_pixels);
+        attention_vals[j] = exp((double)graph->nodes[neighbors->val[j]].numPixels / (double)num_pixels);
         softmax_norm += attention_vals[j];
     }
-    for(int j = 0; j < neighbors->n; j++)
+    for (int j = 0; j < neighbors->n; j++)
         attention_vals[j] /= softmax_norm;
 
     return attention_vals;
 }
 
+/**
+ * @fn iftFLIMGraphAttentionNeighborSimilarity
+ * @brief Compute the attention values for the nodes in `neighbors` based on the similarity of the features
+ * @param graph graph with node relations and features
+ * @param neighbors indexes of the neighbors
+ * @return double* attention values for the neighbors
+ */
 iftMatrix *iftFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntArray *neighbors,
-                                            int *kernel_labels, int label)
+                                                   int *kernel_labels, int label)
 {
     int nkernels = 0;
-    for(int j = 0; j < features->ncols; j++)
-        if(kernel_labels[j] == label) nkernels++;
+    for (int j = 0; j < features->ncols; j++)
+        if (kernel_labels[j] == label)
+            nkernels++;
 
-    if(nkernels < 1) iftError("No kernels found for label %d", __func__, label);
+    if (nkernels < 1)
+        iftError("No kernels found for label %d", __func__, label);
 
     iftMatrix *A = iftCreateMatrix(nkernels, neighbors->n);
     iftMatrix *AT = iftCreateMatrix(neighbors->n, nkernels);
-    
+
     // matrix for feature similarity
-    for(int j = 0; j < neighbors->n; j++)
+    for (int j = 0; j < neighbors->n; j++)
     {
         int k = 0;
-        for(int b = 0; b < features->ncols; b++)
+        for (int b = 0; b < features->ncols; b++)
         {
-            if(kernel_labels[b] == label)
+            if (kernel_labels[b] == label)
             {
                 iftMatrixElem(A, k, j) = iftMatrixElem(features, b, neighbors->val[j]);
                 iftMatrixElem(AT, j, k) = iftMatrixElem(A, k, j);
@@ -1702,64 +1655,75 @@ iftMatrix *iftFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntAr
         }
     }
     iftMatrix *X = iftMultMatrices(AT, A); // ncols: nkernels, nrows: nkernels
-    
+
     iftDestroyMatrix(&AT);
     iftDestroyMatrix(&A);
 
-    // compute a softmax for each row 
-    for(int b = 0; b < nkernels; b++)
+    // compute a softmax for each row
+    for (int b = 0; b < nkernels; b++)
     {
         double max = iftMatrixElem(X, 0, b);
-        for(int j = 0; j < nkernels; j++)
+        for (int j = 0; j < nkernels; j++)
             max = iftMax(iftMatrixElem(X, j, b), max);
 
         double norm = 0; // normalization factor for the softmax
-        for(int j = 0; j < nkernels; j++)
+        for (int j = 0; j < nkernels; j++)
         {
-            iftMatrixElem(X, j, b) = exp(iftMatrixElem(X, j, b)-max/*/sum*/);
-            norm += iftMatrixElem(X, j, b); 
+            iftMatrixElem(X, j, b) = exp(iftMatrixElem(X, j, b) - max /*/sum*/);
+            norm += iftMatrixElem(X, j, b);
         }
-        if(norm == 0) norm = 1;
-        
+        if (norm == 0)
+            norm = 1;
+
         // compute the attention values
-        for(int j = 0; j < nkernels; j++)
+        for (int j = 0; j < nkernels; j++)
             iftMatrixElem(X, j, b) /= norm;
     }
 
     return X;
 }
 
+/**
+ * @fn iftFLIMGraphAttentionCosineSimilarity
+ * @brief Compute the attention values for the nodes in `neighbors` based on the cosine similarity of the features
+ * @param graph graph with node relations and features
+ * @param neighbors indexes of the neighbors
+ * @return double* attention values for the neighbors
+ */
 double *iftFLIMGraphAttentionCosineSimilarity(iftFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
-    
-    iftMatrix *feat_matrix_v0 = iftCreateMatrix(graph->num_feats, 1); // size: [1 x m]
+
+    iftMatrix *feat_matrix_v0 = iftCreateMatrix(graph->num_feats, 1);           // size: [1 x m]
     iftMatrix *feat_matrix_T = iftCreateMatrix(neighbors->n, graph->num_feats); // size: [m x k]
-    
+
     // matrix for feature similarity
-    for(int j = 0; j < neighbors->n; j++)
+    for (int j = 0; j < neighbors->n; j++)
     {
         double viSize = 0; // ||vi|| = sqrt(sum({vil | l in [1, num_feats]}))
-        for(int b = 0; b < graph->num_feats; b++){
-            iftMatrixElem(feat_matrix_T, j, b) = graph->nodes[neighbors->val[j]].feats[b]; 
-            viSize += pow(iftMatrixElem(feat_matrix_T, j, b),2);
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            iftMatrixElem(feat_matrix_T, j, b) = graph->nodes[neighbors->val[j]].feats[b];
+            viSize += pow(iftMatrixElem(feat_matrix_T, j, b), 2);
         }
         viSize = sqrt(viSize);
-        if(viSize == 0) viSize = 1;
+        if (viSize == 0)
+            viSize = 1;
 
-        for(int b = 0; b < graph->num_feats; b++)
+        for (int b = 0; b < graph->num_feats; b++)
         {
             iftMatrixElem(feat_matrix_T, j, b) /= viSize; // normalize the feature matrix
-            if(j == 0) iftMatrixElem(feat_matrix_v0, b, 0) = iftMatrixElem(feat_matrix_T, 0, b); // transpose the feature matrix
+            if (j == 0)
+                iftMatrixElem(feat_matrix_v0, b, 0) = iftMatrixElem(feat_matrix_T, 0, b); // transpose the feature matrix
         }
     }
-    
+
     iftMatrix *X = iftMultMatrices(feat_matrix_v0, feat_matrix_T); // ncols: 1, nrows: neighbors->n
     iftDestroyMatrix(&feat_matrix_T);
     iftDestroyMatrix(&feat_matrix_v0);
 
     // compute a softmax for each row --- per neighbor
-    for(int b = 0; b < neighbors->n; b++)
+    for (int b = 0; b < neighbors->n; b++)
     {
         // compute the attention values
         attention_vals[b] = iftMatrixElem(X, b, 0);
@@ -1770,41 +1734,51 @@ double *iftFLIMGraphAttentionCosineSimilarity(iftFLIMGraph *graph, iftIntArray *
     return attention_vals;
 }
 
+/**
+ * @fn iftFLIMGraphAttentionCosineSimilarity
+ * @brief Compute the attention values for the nodes in `neighbors` based on the cosine similarity of the features
+ * @param graph graph with node relations and features
+ * @param neighbors indexes of the neighbors
+ * @return double* attention values for the neighbors
+ */
 double *iftFLIMGraphAttentionCosineSimilarity_v1(iftFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
-    
+
     iftMatrix *feat_matrix = iftCreateMatrix(graph->num_feats, neighbors->n);
     iftMatrix *feat_matrix_T = iftCreateMatrix(neighbors->n, graph->num_feats);
-    
+
     // matrix for feature similarity
-    for(int j = 0; j < neighbors->n; j++)
+    for (int j = 0; j < neighbors->n; j++)
     {
         double viSize = 0; // ||vi|| = sqrt(sum({vil | l in [1, num_feats]}))
-        for(int b = 0; b < graph->num_feats; b++){
+        for (int b = 0; b < graph->num_feats; b++)
+        {
             iftMatrixElem(feat_matrix, b, j) = graph->nodes[neighbors->val[j]].feats[b]; // compute feature matrix F in R^{num_nodes x num_feats}
-            viSize += pow(iftMatrixElem(feat_matrix, b, j),2);
+            viSize += pow(iftMatrixElem(feat_matrix, b, j), 2);
         }
         viSize = sqrt(viSize);
-        if(viSize == 0) viSize = 1;
+        if (viSize == 0)
+            viSize = 1;
 
-        for(int b = 0; b < graph->num_feats; b++)
+        for (int b = 0; b < graph->num_feats; b++)
         {
-            iftMatrixElem(feat_matrix, b, j) /= viSize; // normalize the feature matrix
+            iftMatrixElem(feat_matrix, b, j) /= viSize;                            // normalize the feature matrix
             iftMatrixElem(feat_matrix_T, j, b) = iftMatrixElem(feat_matrix, b, j); // transpose the feature matrix
         }
     }
     iftMatrix *X = iftMultMatrices(feat_matrix, feat_matrix_T); // ncols: neighbors->n, nrows: neighbors->n
-    
+
     iftDestroyMatrix(&feat_matrix_T);
     iftDestroyMatrix(&feat_matrix);
 
     // compute a softmax for each row --- per neighbor
-    for(int b = 0; b < neighbors->n; b++)
+    for (int b = 0; b < neighbors->n; b++)
     {
         // compute the attention values
-        for(int j = 0; j < neighbors->n; j++)
-            if(b != j) attention_vals[j] += (iftMatrixElem(X, j, b) );
+        for (int j = 0; j < neighbors->n; j++)
+            if (b != j)
+                attention_vals[j] += (iftMatrixElem(X, j, b));
     }
 
     iftDestroyMatrix(&X);
@@ -1812,16 +1786,16 @@ double *iftFLIMGraphAttentionCosineSimilarity_v1(iftFLIMGraph *graph, iftIntArra
     return attention_vals;
 }
 
-// iftFLIMGraphAttentionClassDominance_interlabel
-iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+// function in construction
+iftMatrix *iftFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
-    for(int i = 1; i < H->ncols; i++)
+    for (int i = 1; i < H->ncols; i++)
     {
-        if(kernel_labels[i] < minLabel)
+        if (kernel_labels[i] < minLabel)
             minLabel = kernel_labels[i];
-        if(kernel_labels[i] > nlabels)
+        if (kernel_labels[i] > nlabels)
             nlabels = kernel_labels[i];
     }
     nlabels = nlabels - minLabel + 1;
@@ -1829,9 +1803,9 @@ iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *grap
     int *nkernels = iftAllocIntArray(nlabels); // number of kernels per label
     for (int j = 0; j < H->ncols; j++)
         nkernels[kernel_labels[j] - minLabel]++;
-    
+
     iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         // min-max normalization
         double min[nlabels], max[nlabels];
@@ -1843,73 +1817,75 @@ iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *grap
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            if(iftMatrixElem(H, j, i) < min[label])
+            if (iftMatrixElem(H, j, i) < min[label])
                 min[label] = iftMatrixElem(H, j, i);
-            if(iftMatrixElem(H, j, i) > max[label])
+            if (iftMatrixElem(H, j, i) > max[label])
                 max[label] = iftMatrixElem(H, j, i);
         }
 
-        double sL[nlabels]; // label strength
-        double sK[nlabels]; // mean strength of the other labels
+        double sL[nlabels];    // label strength
+        double sK[nlabels];    // mean strength of the other labels
         double alpha[nlabels]; // reduction factor per label based on the mean activation differences
 
-        for(int j = 0; j < nlabels; j++)
+        for (int j = 0; j < nlabels; j++)
         {
             sL[j] = 0;
             sK[j] = 0;
         }
-        
+
         for (int j = 0; j < H->ncols; j++)
             sL[kernel_labels[j] - minLabel] += iftMatrixElem(H_norm, j, i);
 
-        for(int j = 0; j < nlabels; j++)
+        for (int j = 0; j < nlabels; j++)
             sL[j] /= nkernels[j];
 
-        for(int j = 0; j < nlabels; j++)
+        for (int j = 0; j < nlabels; j++)
         {
-            for(int l = 0; l < nlabels; l++)
+            for (int l = 0; l < nlabels; l++)
             {
-                if(l != j) sK[l] += sL[j];
+                if (l != j)
+                    sK[l] += sL[j];
             }
         }
 
-        for(int j = 0; j < nlabels; j++){
-            sK[j] /= (nlabels-1);
+        for (int j = 0; j < nlabels; j++)
+        {
+            sK[j] /= (nlabels - 1);
             alpha[j] = (iftMax(sK[j], sL[j]) != 0) ? iftMax((sK[j] - sL[j]) / iftMax(sK[j], sL[j]), 0) : 0;
         }
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            
-            double beta = iftMax(iftMatrixElem(H_norm, j, i), sK[label]) != 0 ? (iftMatrixElem(H_norm, j, i) - sK[label])/iftMax(iftMatrixElem(H_norm, j, i), sK[label]) : 0;
-            beta = iftMax(beta,0);
+
+            double beta = iftMax(iftMatrixElem(H_norm, j, i), sK[label]) != 0 ? (iftMatrixElem(H_norm, j, i) - sK[label]) / iftMax(iftMatrixElem(H_norm, j, i), sK[label]) : 0;
+            beta = iftMax(beta, 0);
             beta = 1;
 
-            double label_dominance = iftMax(sL[label], iftMatrixElem(H_norm, j, i)) != 0 ? (sL[label]-iftMatrixElem(H_norm, j, i)) / iftMax(sL[label], iftMatrixElem(H_norm, j, i)) : 0; // [-1,1]
+            double label_dominance = iftMax(sL[label], iftMatrixElem(H_norm, j, i)) != 0 ? (sL[label] - iftMatrixElem(H_norm, j, i)) / iftMax(sL[label], iftMatrixElem(H_norm, j, i)) : 0; // [-1,1]
 
             if (max[label] == min[label])
                 iftMatrixElem(H_norm, j, i) = 0;
             else
                 iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
-            
+
             /*if(i == 0){
-                printf("A[%d][%d] = %f * %f + 1 - %f * %f = %f + %f = %f \n", j, i, 
-                    label_dominance, iftMatrixElem(H_norm, j, i), alpha[label], beta, 
+                printf("A[%d][%d] = %f * %f + 1 - %f * %f = %f + %f = %f \n", j, i,
+                    label_dominance, iftMatrixElem(H_norm, j, i), alpha[label], beta,
                     label_dominance*iftMatrixElem(H_norm, j, i), 1 - alpha[label] * beta,
                     label_dominance * iftMatrixElem(H_norm, j, i) + 1 - alpha[label] * beta
                 );
-                printf("A[%d][%d] = (%f * %f) + 1 = %f \n", j, i, 
-                    label_dominance, iftMatrixElem(H_norm, j, i), 
+                printf("A[%d][%d] = (%f * %f) + 1 = %f \n", j, i,
+                    label_dominance, iftMatrixElem(H_norm, j, i),
                     (label_dominance*iftMatrixElem(H_norm, j, i)) + 1
                 );
             }*/
-            iftMatrixElem(H_norm, j, i) = iftMax(label_dominance * iftMatrixElem(H_norm, j, i) + 1 - alpha[label] * beta,0);
+            iftMatrixElem(H_norm, j, i) = iftMax(label_dominance * iftMatrixElem(H_norm, j, i) + 1 - alpha[label] * beta, 0);
         }
     }
-    
+
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         double size = (double)graph->nodes[i].numPixels;
 
@@ -1917,33 +1893,35 @@ iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *grap
         double max_diff = (double)fabs((double)graph->nodes[node->elem].numPixels - size);
         double w[graph->nodes[i].numNeighbors];
         int k = 0;
-        while(node != NULL)
+        while (node != NULL)
         {
             w[k] = fabs((double)graph->nodes[node->elem].numPixels - size);
             max_diff = iftMax(max_diff, w[k]);
             node = node->next;
             k++;
         }
-        if(max_diff == 0) max_diff = 1;
+        if (max_diff == 0)
+            max_diff = 1;
 
         double sum = 0;
         k = 0;
-        while(k < graph->nodes[i].numNeighbors)
+        while (k < graph->nodes[i].numNeighbors)
         {
             w[k] = exp((max_diff - w[k]) / max_diff);
             sum += w[k];
             k++;
         }
-        if(sum == 0) sum = 1;
+        if (sum == 0)
+            sum = 1;
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(attention_vals, j, i) = 0;
             iftSet *node = graph->nodes[i].adj;
             int k = 0;
-            while(node != NULL)
+            while (node != NULL)
             {
-                iftMatrixElem(attention_vals, j, i) += /*(w[k]/sum)**/iftMatrixElem(H_norm, j, node->elem);
+                iftMatrixElem(attention_vals, j, i) += /*(w[k]/sum)**/ iftMatrixElem(H_norm, j, node->elem);
                 k++;
                 node = node->next;
             }
@@ -1951,50 +1929,58 @@ iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *grap
             iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
             /*if(i == 0)
             {
-                printf("H'[%d][%d] = %f * (%f + %f) = %f * %f = %f \n", j, i, 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i))/2, 
+                printf("H'[%d][%d] = %f * (%f + %f) = %f * %f = %f \n", j, i,
+                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i),
+                    iftMatrixElem(H, j, i), (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i))/2,
                     ((iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i))/2)*iftMatrixElem(H, j, i)
                 );
             }*/
-            
+
             iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
-            //iftMatrixElem(attention_vals, j, i) /= 2;
+            // iftMatrixElem(attention_vals, j, i) /= 2;
         }
     }
     iftDestroyMatrix(&H_norm);
-    
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
+
+    // iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
+    // iftDestroyMatrix(&attention_vals);
     return attention_vals;
 }
 
-// iftFLIMGraphAttentionClassDominanceCosine
-iftMatrix * iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+/**
+ * @fn iftFLIMGraphAttentionClassDominanceCosine
+ * @brief Compute attention values using cosine similarity and class dominance,
+ * normalizing the input data and applying softmax to the cosine similarity among graph neighbors.
+ * @param H: matrix with the features
+ * @param graph: graph with node relations and features
+ * @param kernel_labels: labels of the kernels
+ * @return iftMatrix* attention values for the neighbors
+ */
+iftMatrix *iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
-    for(int i = 1; i < H->ncols; i++)
+    for (int i = 1; i < H->ncols; i++)
     {
-        if(kernel_labels[i] < minLabel)
+        if (kernel_labels[i] < minLabel)
             minLabel = kernel_labels[i];
-        if(kernel_labels[i] > nlabels)
+        if (kernel_labels[i] > nlabels)
             nlabels = kernel_labels[i];
     }
     nlabels = nlabels - minLabel + 1;
 
     // compute vector norms (size) for cosine similarity
     iftMatrix *vector_norm = iftCreateMatrix(H->nrows, 1);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         double norm = 0;
-        for(int j = 0; j < graph->num_feats; j++)
+        for (int j = 0; j < graph->num_feats; j++)
             norm += pow(graph->nodes[i].feats[j], 2);
         iftMatrixElem(vector_norm, i, 0) = sqrt(norm);
     }
-    
+
     iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         // min-max normalization
         double min[nlabels], max[nlabels];
@@ -2006,15 +1992,16 @@ iftMatrix * iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            if(iftMatrixElem(H, j, i) < min[label])
+            if (iftMatrixElem(H, j, i) < min[label])
                 min[label] = iftMatrixElem(H, j, i);
-            if(iftMatrixElem(H, j, i) > max[label])
+            if (iftMatrixElem(H, j, i) > max[label])
                 max[label] = iftMatrixElem(H, j, i);
         }
 
         double label_strength[nlabels];
         int nkernels[nlabels];
-        for(int j = 0; j < nlabels; j++){
+        for (int j = 0; j < nlabels; j++)
+        {
             label_strength[j] = 0;
             nkernels[j] = 0;
         }
@@ -2026,50 +2013,43 @@ iftMatrix * iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph
                 iftMatrixElem(H_norm, j, i) = 0;
             else
                 iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
-            
+
             label_strength[label] += iftMatrixElem(H_norm, j, i);
             nkernels[label]++;
         }
 
-        for(int j = 0; j < nlabels; j++)
+        for (int j = 0; j < nlabels; j++)
             label_strength[j] /= nkernels[j];
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            double max_val = iftMax(label_strength[label],iftMatrixElem(H_norm, j, i));
+            double max_val = iftMax(label_strength[label], iftMatrixElem(H_norm, j, i));
 
             double label_dominance = 0;
             if (max_val != 0)
-                label_dominance = (label_strength[label]-iftMatrixElem(H_norm, j, i))/max_val; // [-1,1]
-            
-            /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {    
-                printf("A[%d][%d] = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, \n", i, j,
-                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val, 
-                    iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
-            }*/
+                label_dominance = (label_strength[label] - iftMatrixElem(H_norm, j, i)) / max_val; // [-1,1]
 
-            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i)*label_dominance) + 1;
+            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
         }
     }
-    
+
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         int num_neighbors = graph->nodes[i].numNeighbors;
-        
+
         // compute softmax of cosine similarity among neighbors
         iftMatrix *cosine_similarity = iftCreateMatrix(num_neighbors, 1);
         iftSet *node = graph->nodes[i].adj;
         int k = 0;
         double sum = 0, max = -1;
-        while(node != NULL)
+        while (node != NULL)
         {
             double dotProduct = 0;
             for (int b = 0; b < graph->num_feats; b++)
                 dotProduct += graph->nodes[i].feats[b] * graph->nodes[node->elem].feats[b];
-            
+
             iftMatrixElem(cosine_similarity, k, 0) = dotProduct / (iftMatrixElem(vector_norm, i, 0) * iftMatrixElem(vector_norm, node->elem, 0));
             max = iftMax(max, iftMatrixElem(cosine_similarity, k, 0));
             node = node->next;
@@ -2078,7 +2058,7 @@ iftMatrix * iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph
 
         k = 0;
         node = graph->nodes[i].adj;
-        while(node != NULL)
+        while (node != NULL)
         {
             iftMatrixElem(cosine_similarity, k, 0) = exp(iftMatrixElem(cosine_similarity, k, 0) - max);
             sum += iftMatrixElem(cosine_similarity, k, 0);
@@ -2086,59 +2066,54 @@ iftMatrix * iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph
             k++;
         }
 
-        if(max == 0) max = 1;
+        if (max == 0)
+            max = 1;
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(attention_vals, j, i) = 0;
             node = graph->nodes[i].adj;
             k = 0;
-            while(node != NULL)
+            while (node != NULL)
             {
-                iftMatrixElem(attention_vals, j, i) += (iftMatrixElem(cosine_similarity, k, 0)/sum) * iftMatrixElem(H_norm, j, node->elem);
+                iftMatrixElem(attention_vals, j, i) += (iftMatrixElem(cosine_similarity, k, 0) / sum) * iftMatrixElem(H_norm, j, node->elem);
                 node = node->next;
                 k++;
             }
-            //iftMatrixElem(attention_vals, j, i) /= nsimilarNeigh;
-            iftMatrixElem(attention_vals, j, i) += pow(iftMatrixElem(attention_vals, j, i),2);
-
-            /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {
-                printf("H[%d][%d]' = %f * (%f + %f) = %f * %f = %f \n", i,j,
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i) * (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i)));
-            }*/
-
-            iftMatrixElem(attention_vals, j, i) += pow(iftMatrixElem(H_norm, j, i),2);
+            // iftMatrixElem(attention_vals, j, i) /= nsimilarNeigh;
+            iftMatrixElem(attention_vals, j, i) += pow(iftMatrixElem(attention_vals, j, i), 2);
+            iftMatrixElem(attention_vals, j, i) += pow(iftMatrixElem(H_norm, j, i), 2);
         }
         iftDestroyMatrix(&cosine_similarity);
-        //printf("\n");
     }
     iftDestroyMatrix(&H_norm);
     iftDestroyMatrix(&vector_norm);
-    //printf("\n");
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
     return attention_vals;
 }
 
-// iftFLIMGraphAttentionClassDominance_winnerPower2
-iftMatrix * iftFLIMGraphAttentionClassDominance_winnerPower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+/**
+ * @fn iftFLIMGraphAttentionClassDominance_winnerPower2
+ * @brief Compute attention values using class dominance
+ * @param H: matrix with the features
+ * @param graph: graph with node relations and features
+ * @param kernel_labels: labels of the kernels
+ * @return iftMatrix* attention values for the neighbors
+ */
+iftMatrix *iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
-    for(int i = 1; i < H->ncols; i++)
+    for (int i = 1; i < H->ncols; i++)
     {
-        if(kernel_labels[i] < minLabel)
+        if (kernel_labels[i] < minLabel)
             minLabel = kernel_labels[i];
-        if(kernel_labels[i] > nlabels)
+        if (kernel_labels[i] > nlabels)
             nlabels = kernel_labels[i];
     }
     nlabels = nlabels - minLabel + 1;
-    
+
     iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         // min-max normalization
         double min[nlabels], max[nlabels];
@@ -2150,15 +2125,16 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_winnerPower2(iftMatrix *H, iftFL
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            if(iftMatrixElem(H, j, i) < min[label])
+            if (iftMatrixElem(H, j, i) < min[label])
                 min[label] = iftMatrixElem(H, j, i);
-            if(iftMatrixElem(H, j, i) > max[label])
+            if (iftMatrixElem(H, j, i) > max[label])
                 max[label] = iftMatrixElem(H, j, i);
         }
 
         double label_strength[nlabels];
         int nkernels[nlabels];
-        for(int j = 0; j < nlabels; j++){
+        for (int j = 0; j < nlabels; j++)
+        {
             label_strength[j] = 0;
             nkernels[j] = 0;
         }
@@ -2170,84 +2146,78 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_winnerPower2(iftMatrix *H, iftFL
                 iftMatrixElem(H_norm, j, i) = 0;
             else
                 iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
-            
+
             label_strength[label] += iftMatrixElem(H_norm, j, i);
             nkernels[label]++;
         }
 
-        for(int j = 0; j < nlabels; j++)
+        for (int j = 0; j < nlabels; j++)
             label_strength[j] /= nkernels[j];
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            double max_val = iftMax(label_strength[label],iftMatrixElem(H_norm, j, i));
+            double max_val = iftMax(label_strength[label], iftMatrixElem(H_norm, j, i));
 
             double label_dominance = 0;
             if (max_val != 0)
-                label_dominance = (label_strength[label]-iftMatrixElem(H_norm, j, i))/iftMax(label_strength[label],iftMatrixElem(H_norm, j, i)); // [-1,1]
-            
+                label_dominance = (label_strength[label] - iftMatrixElem(H_norm, j, i)) / iftMax(label_strength[label], iftMatrixElem(H_norm, j, i)); // [-1,1]
+
             /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {    
+            {
                 printf("A[%d][%d] = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, \n", i, j,
-                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val, 
+                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val,
                     iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
             }*/
-            
-            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i)*label_dominance) + 1;
+
+            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
         }
     }
-    
+
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(attention_vals, j, i) = 0;
             iftSet *node = graph->nodes[i].adj;
-            while(node != NULL)
+            while (node != NULL)
             {
                 iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
                 node = node->next;
             }
             iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
-            
-            /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {
-                printf("H[%d][%d]' = %f * (%f^2 + %f^2) = %f * %f = %f \n", i,j,
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), pow(iftMatrixElem(H_norm, j, i),2) + pow(iftMatrixElem(attention_vals, j, i),2),
-                    iftMatrixElem(H, j, i) * (pow(iftMatrixElem(H_norm, j, i),2) + pow(iftMatrixElem(attention_vals, j, i),2)));
-            }*/
-
-            iftMatrixElem(attention_vals, j, i) = pow(iftMatrixElem(attention_vals, j, i),2);
-            iftMatrixElem(attention_vals, j, i) += pow(iftMatrixElem(H_norm, j, i),2);
+            iftMatrixElem(attention_vals, j, i) = pow(iftMatrixElem(attention_vals, j, i), 2);
+            iftMatrixElem(attention_vals, j, i) += pow(iftMatrixElem(H_norm, j, i), 2);
         }
-        //printf("\n");
     }
     iftDestroyMatrix(&H_norm);
-    //printf("\n");
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
     return attention_vals;
 }
 
-// iftFLIMGraphAttentionClassDominance_size
-iftMatrix * iftFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+/**
+ * @fn iftFLIMGraphAttentionClassDominance_size
+ * @brief Compute attention values using class dominance and weighting the neighbors contribution by their size
+ * @param H: matrix with the features
+ * @param graph: graph with node relations and features
+ * @param kernel_labels: labels of the kernels
+ * @return iftMatrix* attention values for the neighbors
+ */
+iftMatrix *iftFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
-    for(int i = 1; i < H->ncols; i++)
+    for (int i = 1; i < H->ncols; i++)
     {
-        if(kernel_labels[i] < minLabel)
+        if (kernel_labels[i] < minLabel)
             minLabel = kernel_labels[i];
-        if(kernel_labels[i] > nlabels)
+        if (kernel_labels[i] > nlabels)
             nlabels = kernel_labels[i];
     }
     nlabels = nlabels - minLabel + 1;
-    
+
     iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         // min-max normalization
         double min[nlabels], max[nlabels];
@@ -2263,17 +2233,19 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftFLIMGraph 
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            if(iftMatrixElem(H, j, i) < min[label])
+            if (iftMatrixElem(H, j, i) < min[label])
                 min[label] = iftMatrixElem(H, j, i);
-            if(iftMatrixElem(H, j, i) > max[label])
+            if (iftMatrixElem(H, j, i) > max[label])
                 max[label] = iftMatrixElem(H, j, i);
             nkernels[label]++;
         }
-        
-        for(int j = 0; j < nlabels; j++){
-            if(i == 0) printf("label %d: min=%f max=%f\n", j, min[j], max[j]);
+
+        for (int j = 0; j < nlabels; j++)
+        {
+            if (i == 0)
+                printf("label %d: min=%f max=%f\n", j, min[j], max[j]);
         }
-        
+
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
@@ -2281,46 +2253,45 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftFLIMGraph 
                 iftMatrixElem(H_norm, j, i) = 0;
             else
                 iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
-            
-            if(i == 0 && j == 0)
+
+            if (i == 0 && j == 0)
             {
                 printf("[%d][%d]: H = %f, H_norm = %f, ", j, i, iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i));
             }
             label_strength[label] += iftMatrixElem(H_norm, j, i);
         }
 
-        for(int j = 0; j < nlabels; j++)
+        for (int j = 0; j < nlabels; j++)
             label_strength[j] /= nkernels[j];
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            double max_val = iftMax(label_strength[label],iftMatrixElem(H_norm, j, i));
+            double max_val = iftMax(label_strength[label], iftMatrixElem(H_norm, j, i));
 
             double label_dominance = 0;
             if (max_val != 0)
-                label_dominance = (label_strength[label]-iftMatrixElem(H_norm, j, i))/iftMax(label_strength[label],iftMatrixElem(H_norm, j, i)); // [-1,1]
-            
+                label_dominance = (label_strength[label] - iftMatrixElem(H_norm, j, i)) / iftMax(label_strength[label], iftMatrixElem(H_norm, j, i)); // [-1,1]
+
             /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {    
+            {
                 printf("A[%d][%d] = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, \n", i, j,
-                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val, 
+                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val,
                     iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
             }*/
 
-            if((i == 1 && j == 0))
-            {    
-                printf("A = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, ", 
-                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val, 
-                    iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
+            if ((i == 1 && j == 0))
+            {
+                printf("A = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, ",
+                       iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val,
+                       iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i) * label_dominance) + 1);
             }
-            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i)*label_dominance) + 1;
-
+            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
         }
     }
-    
+
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         int neighborhood_size = 0;
         iftSet *node;
@@ -2333,76 +2304,52 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftFLIMGraph 
 
         int vi_size = graph->nodes[i].numPixels;
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(attention_vals, j, i) = 0;
             iftSet *node = graph->nodes[i].adj;
             double sum_importance = 0;
-            while(node != NULL)
+            while (node != NULL)
             {
-                double size_importance = exp(-0.5*pow((graph->nodes[node->elem].numPixels - vi_size)/neighborhood_size,2));
-                if(i == 0 && j == 0)
-                {    
-                    printf("A += b * H_norm[%d][%d] = %f + %f * %f = %f ", i,j,
-                        iftMatrixElem(H_norm, j, node->elem), size_importance, iftMatrixElem(attention_vals, j, i), 
-                        iftMatrixElem(H_norm, j, node->elem) + size_importance*iftMatrixElem(attention_vals, j, i));
-                }
-                iftMatrixElem(attention_vals, j, i) += size_importance*iftMatrixElem(H_norm, j, node->elem);
+                double size_importance = exp(-0.5 * pow((graph->nodes[node->elem].numPixels - vi_size) / neighborhood_size, 2));
+                iftMatrixElem(attention_vals, j, i) += size_importance * iftMatrixElem(H_norm, j, node->elem);
                 sum_importance += size_importance;
                 node = node->next;
             }
-            if(i == 0 && j == 0)
-            {    
-                printf("A[%d][%d] = %f / %f = %f, ", i,j, iftMatrixElem(attention_vals, j, i), sum_importance, 
-                    iftMatrixElem(attention_vals, j, i)/sum_importance);
-            }
 
-            //iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
-            if(sum_importance != 0) iftMatrixElem(attention_vals, j, i) /= sum_importance;
-
-            /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {
-                printf("H[%d][%d]' = %f * (%f + %f) = %f * %f = %f \n", i,j,
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i) * (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i)));
-            }*/
-
-            if(i == 0 && j == 0)
-            {
-                printf("H' = %f * (%f + %f) = %f * %f = %f ", 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i) * (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i)));
-            }
+            if (sum_importance != 0)
+                iftMatrixElem(attention_vals, j, i) /= sum_importance;
 
             iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
         }
-        //printf("\n");
     }
     iftDestroyMatrix(&H_norm);
-    printf("\n");
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
     return attention_vals;
 }
 
-// iftFLIMGraphAttentionClassDominance_softmaxNeigh
-iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+/**
+ * @fn iftFLIMGraphAttentionClassDominance_softmaxNeigh
+ * @brief Compute attention values using class dominance and softmax normalization
+ * @param H: matrix with the features
+ * @param graph: graph with node relations and features
+ * @param kernel_labels: labels of the kernels
+ * @return iftMatrix* attention values for the neighbors
+ */
+iftMatrix *iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
-    for(int i = 1; i < H->ncols; i++)
+    for (int i = 1; i < H->ncols; i++)
     {
-        if(kernel_labels[i] < minLabel)
+        if (kernel_labels[i] < minLabel)
             minLabel = kernel_labels[i];
-        if(kernel_labels[i] > nlabels)
+        if (kernel_labels[i] > nlabels)
             nlabels = kernel_labels[i];
     }
     nlabels = nlabels - minLabel + 1;
-    
+
     iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++) 
+    for (int i = 0; i < H->nrows; i++)
     {
         // min-max normalization
         double min[nlabels], max[nlabels];
@@ -2418,9 +2365,9 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFL
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            if(iftMatrixElem(H, j, i) < min[label])
+            if (iftMatrixElem(H, j, i) < min[label])
                 min[label] = iftMatrixElem(H, j, i);
-            if(iftMatrixElem(H, j, i) > max[label])
+            if (iftMatrixElem(H, j, i) > max[label])
                 max[label] = iftMatrixElem(H, j, i);
             nkernels[label]++;
         }
@@ -2435,7 +2382,7 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFL
             label_sizes[j] = 0;
             //if(i == 0) printf("label %d: min=%f max=%f\n", j, min[j], max[j]);
         }*/
-        
+
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
@@ -2443,19 +2390,20 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFL
                 iftMatrixElem(H_norm, j, i) = 0;
             else
                 iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
-            
+
             /*if(i == 0 && j == 0)
             {
                 printf("[%d][%d]: H = %f, H_norm = %f, ", j, i, iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i));
             }*/
-            
+
             /*ordering_values[label][label_sizes[label]] = iftMatrixElem(H_norm, j, i);
             indexes[label][label_sizes[label]] = label_sizes[label];
             label_sizes[label]++;*/
             modes[label] += iftMatrixElem(H_norm, j, i);
         }
 
-        for(int j = 0; j < nlabels; j++){
+        for (int j = 0; j < nlabels; j++)
+        {
             /*iftDQuickSort(ordering_values[j], indexes[j], 0, label_sizes[j]-1, IFT_INCREASING);
             if(label_sizes[j] % 2 != 0)
                 modes[j] = ordering_values[j][indexes[j][label_sizes[j]/2]];
@@ -2471,49 +2419,49 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFL
         free(ordering_values);
         free(indexes);*/
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            double max_val = modes[label]+iftMatrixElem(H_norm, j, i);
+            double max_val = modes[label] + iftMatrixElem(H_norm, j, i);
 
             double label_dominance = 0;
             if (max_val != 0)
-                label_dominance = (modes[label]-iftMatrixElem(H_norm, j, i))/iftMax(modes[label],iftMatrixElem(H_norm, j, i)); // [-1,1]
-            
+                label_dominance = (modes[label] - iftMatrixElem(H_norm, j, i)) / iftMax(modes[label], iftMatrixElem(H_norm, j, i)); // [-1,1]
+
             /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {    
+            {
                 printf("A[%d][%d] = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, \n", i, j,
-                    iftMatrixElem(H_norm, j, i), modes[label], iftMatrixElem(H_norm, j, i), max_val, 
+                    iftMatrixElem(H_norm, j, i), modes[label], iftMatrixElem(H_norm, j, i), max_val,
                     iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
             }*/
 
             /*if((i == 1 && j == 0))
-            {    
-                printf("A = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, ", 
-                    iftMatrixElem(H_norm, j, i), modes[label], iftMatrixElem(H_norm, j, i), max_val, 
+            {
+                printf("A = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, ",
+                    iftMatrixElem(H_norm, j, i), modes[label], iftMatrixElem(H_norm, j, i), max_val,
                     iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
             }*/
-            
-            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i)*label_dominance) + 1;
+
+            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
         }
     }
-    
+
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
-    {   
+    for (int i = 0; i < H->nrows; i++)
+    {
         int vi = graph->nodes[i].numPixels;
         int num_neighbors = graph->nodes[i].numNeighbors;
-        
+
         double neighborhood_size = 0;
         double neigh_variance = 0, neighb_sum2 = 0;
         iftSet *node = graph->nodes[i].adj;
         while (node != NULL)
         {
             neighborhood_size += graph->nodes[node->elem].numPixels;
-            neighb_sum2 += pow(graph->nodes[node->elem].numPixels,2);
+            neighb_sum2 += pow(graph->nodes[node->elem].numPixels, 2);
             node = node->next;
         }
-        neigh_variance = neighb_sum2/num_neighbors - pow(neighborhood_size/num_neighbors,2);
+        neigh_variance = neighb_sum2 / num_neighbors - pow(neighborhood_size / num_neighbors, 2);
 
         double sum_exp = 0;
         double vj[num_neighbors];
@@ -2521,84 +2469,53 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFL
         int k = 0;
         while (node != NULL)
         {
-            vj[k] = exp(-0.5*pow((graph->nodes[node->elem].numPixels - vi),2)/neigh_variance);
+            vj[k] = exp(-0.5 * pow((graph->nodes[node->elem].numPixels - vi), 2) / neigh_variance);
             sum_exp += vj[k];
             k++;
             node = node->next;
         }
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(attention_vals, j, i) = 0;
             iftSet *node = graph->nodes[i].adj;
             int k = 0;
-            while(node != NULL)
+            while (node != NULL)
             {
-                /*if(i == 0 && j == 0)
-                {    
-                    printf("A += H_norm[%d][%d] = %f + %f = %f ", i,j,
-                        iftMatrixElem(H_norm, j, node->elem), iftMatrixElem(attention_vals, j, i), 
-                        iftMatrixElem(H_norm, j, node->elem) + iftMatrixElem(attention_vals, j, i));
-                    printf("A += H_norm[%d][%d]*(%f/%f) = %f + %f*%f = %f ", i,j, vj[k], sum_exp,
-                        iftMatrixElem(attention_vals, j, i), iftMatrixElem(H_norm, j, node->elem), vj[k]/sum_exp, 
-                        iftMatrixElem(attention_vals, j, i) + iftMatrixElem(H_norm, j, node->elem)*vj[k]/sum_exp); 
-                }*/
-
-                iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem)*(vj[k]/sum_exp);
+                iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem) * (vj[k] / sum_exp);
                 k++;
                 node = node->next;
             }
-            /*if(i == 0 && j == 0)
-            {    
-                printf("A[%d][%d] = %f / %ld = %f, ", i,j, iftMatrixElem(attention_vals, j, i), graph->nodes[i].numNeighbors, 
-                    iftMatrixElem(attention_vals, j, i)/graph->nodes[i].numNeighbors);
-            }*/
-
-            //iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
-
-            /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {
-                printf("H[%d][%d]' = %f * (%f + %f) = %f * %f = %f \n", i,j,
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i) * (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i)));
-            }*/
-
-            /*if(i == 0 && j == 0)
-            {
-                printf("H' = %f * (%f + %f) = %f * %f = %f \n", 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i) * (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i)));
-            }*/
-
             iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
         }
-        //printf("\n");
     }
     iftDestroyMatrix(&H_norm);
-    //printf("\n");
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
     return attention_vals;
 }
 
-// iftFLIMGraphAttentionClassDominance_winner
-iftMatrix * iftFLIMGraphAttentionClassDominance_winner(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+/**
+ * @fn iftFLIMGraphAttentionClassDominance_winner
+ * @brief Compute attention values using class dominance
+ * @param H: matrix with the features
+ * @param graph: graph with node relations and features
+ * @param kernel_labels: labels of the kernels
+ * @return iftMatrix* attention values for the neighbors
+ */
+iftMatrix *iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
-    for(int i = 1; i < H->ncols; i++)
+    for (int i = 1; i < H->ncols; i++)
     {
-        if(kernel_labels[i] < minLabel)
+        if (kernel_labels[i] < minLabel)
             minLabel = kernel_labels[i];
-        if(kernel_labels[i] > nlabels)
+        if (kernel_labels[i] > nlabels)
             nlabels = kernel_labels[i];
     }
     nlabels = nlabels - minLabel + 1;
-    
+
     iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         // min-max normalization
         double min[nlabels], max[nlabels];
@@ -2610,19 +2527,20 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_winner(iftMatrix *H, iftFLIMGrap
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            if(iftMatrixElem(H, j, i) < min[label])
+            if (iftMatrixElem(H, j, i) < min[label])
                 min[label] = iftMatrixElem(H, j, i);
-            if(iftMatrixElem(H, j, i) > max[label])
+            if (iftMatrixElem(H, j, i) > max[label])
                 max[label] = iftMatrixElem(H, j, i);
         }
 
         double label_strength[nlabels];
         int nkernels[nlabels];
-        for(int j = 0; j < nlabels; j++){
+        for (int j = 0; j < nlabels; j++)
+        {
             label_strength[j] = 0;
             nkernels[j] = 0;
         }
-        
+
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
@@ -2630,172 +2548,142 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_winner(iftMatrix *H, iftFLIMGrap
                 iftMatrixElem(H_norm, j, i) = 0;
             else
                 iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
-            
+
             label_strength[label] += iftMatrixElem(H_norm, j, i);
             nkernels[label]++;
         }
 
-        for(int j = 0; j < nlabels; j++)
+        for (int j = 0; j < nlabels; j++)
             label_strength[j] /= nkernels[j];
 
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            double max_val = iftMax(label_strength[label],iftMatrixElem(H_norm, j, i));
+            double max_val = iftMax(label_strength[label], iftMatrixElem(H_norm, j, i));
 
             double label_dominance = 0;
             if (max_val != 0)
-                label_dominance = (label_strength[label]-iftMatrixElem(H_norm, j, i))/iftMax(label_strength[label],iftMatrixElem(H_norm, j, i)); // [-1,1]
-            
+                label_dominance = (label_strength[label] - iftMatrixElem(H_norm, j, i)) / iftMax(label_strength[label], iftMatrixElem(H_norm, j, i)); // [-1,1]
+
             /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {    
+            {
                 printf("A[%d][%d] = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, \n", i, j,
-                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val, 
+                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val,
                     iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
             }*/
 
             /*if(i == 1)
-            {    
+            {
                 printf("A[%d][%d] = (%f * %f) + 1 = %f \n", i, j,
                     iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
             }*/
-            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i)*label_dominance) + 1;
-
+            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
         }
     }
-    
+
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(attention_vals, j, i) = 0;
             iftSet *node = graph->nodes[i].adj;
-            while(node != NULL)
+            while (node != NULL)
             {
-                /*if(i == 0 && j == 0)
-                {    
-                    printf("A += H_norm[%d][%d] = %f + %f = %f ", i,j,
-                        iftMatrixElem(H_norm, j, node->elem), iftMatrixElem(attention_vals, j, i), 
-                        iftMatrixElem(H_norm, j, node->elem) + iftMatrixElem(attention_vals, j, i));
-                }*/
                 iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
-                
                 node = node->next;
             }
-            /*if(i == 0 && j == 0)
-            {    
-                printf("A[%d][%d] = %f / %ld = %f, ", i,j, iftMatrixElem(attention_vals, j, i), graph->nodes[i].numNeighbors, 
-                    iftMatrixElem(attention_vals, j, i)/graph->nodes[i].numNeighbors);
-            }*/
 
             iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
-
-            /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {
-                printf("H[%d][%d]' = %f * (%f + %f) = %f * %f = %f \n", i,j,
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i) * (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i)));
-            }*/
-
-            /*if(i == 0)
-            {
-                printf("H'[%d][%d] = %f * (%f + %f) = %f * %f = %f \n", i, j, 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i), iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i), iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i), 
-                    iftMatrixElem(H, j, i) * (iftMatrixElem(H_norm, j, i) + iftMatrixElem(attention_vals, j, i)));
-            }*/
-
             iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
         }
-        //printf("\n");
     }
     iftDestroyMatrix(&H_norm);
-    //printf("\n");
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
     return attention_vals;
 }
 
-iftMatrix * iftFLIMGraphAttentionClassDominance_v2(iftMatrix *X, iftMatrix *W, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftFLIMGraphAttentionClassDominance_v2(iftMatrix *X, iftMatrix *W, iftFLIMGraph *graph, int *kernel_labels)
 {
     iftMatrix *H = iftMultMatrices(X, W);
 
     iftMatrix *softmax_H = iftCreateMatrix(H->ncols, H->nrows);
     // znorm
-    for(int j = 0; j < H->ncols; j++)
+    for (int j = 0; j < H->ncols; j++)
     {
         double sum2 = 0, sum = 0;
-        for(int i = 0; i < H->nrows; i++)
+        for (int i = 0; i < H->nrows; i++)
         {
             sum += iftMatrixElem(H, j, i);
             sum2 += iftMatrixElem(H, j, i) * iftMatrixElem(H, j, i);
         }
-        double mean = sum/H->nrows;
-        double std = sqrt(sum2/H->nrows - mean*mean);
-        if(std < IFT_EPSILON && std > -IFT_EPSILON){
-            if(std < 0) std = -IFT_EPSILON;
-            else std = IFT_EPSILON;
-        } 
-        for(int i = 0; i < H->nrows; i++)
-            iftMatrixElem(softmax_H, j, i) = (iftMatrixElem(H, j, i) - mean)/std;
+        double mean = sum / H->nrows;
+        double std = sqrt(sum2 / H->nrows - mean * mean);
+        if (std < IFT_EPSILON && std > -IFT_EPSILON)
+        {
+            if (std < 0)
+                std = -IFT_EPSILON;
+            else
+                std = IFT_EPSILON;
+        }
+        for (int i = 0; i < H->nrows; i++)
+            iftMatrixElem(softmax_H, j, i) = (iftMatrixElem(H, j, i) - mean) / std;
     }
 
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
 
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         double max = IFT_INFINITY_FLT_NEG;
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
-            if(iftMatrixElem(H, j, i) > max)
+            if (iftMatrixElem(H, j, i) > max)
                 max = iftMatrixElem(softmax_H, j, i);
         }
 
         // Xi size for cosine similarity
         double sumXi = 0, sumWj = 0;
-        for(int j = 0; j < X->ncols; j++)
-            sumXi += pow(iftMatrixElem(X, j, i),2);
+        for (int j = 0; j < X->ncols; j++)
+            sumXi += pow(iftMatrixElem(X, j, i), 2);
         sumXi = sqrt(sumXi);
 
         // Compute the inidividual kernels contributions: Softmax(Hij)
         double softmax_norm = 0;
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
-            double e = exp(iftMatrixElem(softmax_H, j, i)-max); // handling high exponentials
+            double e = exp(iftMatrixElem(softmax_H, j, i) - max); // handling high exponentials
             iftMatrixElem(softmax_H, j, i) = e;
             softmax_norm += e;
         }
-        if(softmax_norm == 0) softmax_norm = 1;
-        
+        if (softmax_norm == 0)
+            softmax_norm = 1;
+
         double Afg = IFT_INFINITY_FLT_NEG, Abg = IFT_INFINITY_FLT_NEG;
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(softmax_H, j, i) /= softmax_norm; // softmax normalization
 
-            if(kernel_labels[j] == 2)
+            if (kernel_labels[j] == 2)
                 Afg = iftMax(iftMatrixElem(softmax_H, j, i), Afg);
             else
                 Abg = iftMax(iftMatrixElem(softmax_H, j, i), Abg);
         }
-        double dominance_score = (Afg - Abg)/(Afg + Abg); // [-1,1]
-        //printf("Dominance score: %f, Afg:%f, Abg:%f \n", dominance_score, Afg, Abg);
-        
-        for(int j = 0; j < H->ncols; j++)
+        double dominance_score = (Afg - Abg) / (Afg + Abg); // [-1,1]
+        // printf("Dominance score: %f, Afg:%f, Abg:%f \n", dominance_score, Afg, Abg);
+
+        for (int j = 0; j < H->ncols; j++)
         {
             // compute dominance score [0,1] according to the kernel class
             double ds;
-            if(kernel_labels[j] == 1)
+            if (kernel_labels[j] == 1)
                 ds = -dominance_score;
             else
                 ds = dominance_score;
-            ds = iftMax(ds,0);
+            ds = iftMax(ds, 0);
 
             // Wj size for cosine similarity
             double sumWj = 0;
-            for(int k = 0; k < W->nrows; k++)
-                sumWj += pow(iftMatrixElem(W, j, k),2);
+            for (int k = 0; k < W->nrows; k++)
+                sumWj += pow(iftMatrixElem(W, j, k), 2);
             sumWj = sqrt(sumWj);
 
             // compute cosine similarity
@@ -2805,82 +2693,88 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_v2(iftMatrix *X, iftMatrix *W, i
                 printf("H[%d][%d] = %f * Max(%f * (%f + %f),0.8) = %f\n", i, j, iftMatrixElem(H, j, i), cosine, ds, iftMatrixElem(softmax_H, j, i), iftMatrixElem(H, j, i)*iftMax(cosine*(ds + iftMatrixElem(softmax_H, j, 0)), 0.8));
             */
 
-            iftMatrixElem(attention_vals, j, i) = iftMax(cosine*(ds + iftMatrixElem(softmax_H, j, 0)), 0.8);
+            iftMatrixElem(attention_vals, j, i) = iftMax(cosine * (ds + iftMatrixElem(softmax_H, j, 0)), 0.8);
         }
     }
     iftDestroyMatrix(&softmax_H);
 
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
+    // iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
+    // iftDestroyMatrix(&attention_vals);
     return attention_vals;
 }
 
-iftMatrix * iftFLIMGraphAttentionClassDominance_v1(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels, double ambiguity_penalty , double smoothnes)
+iftMatrix *iftFLIMGraphAttentionClassDominance_v1(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels, double ambiguity_penalty, double smoothnes)
 {
-    if(graph->num_nodes != H->nrows) iftError("Number of nodes in the graph %ld is different from the number of rows in the matrix %d", __func__, graph->num_nodes, H->nrows);
+    if (graph->num_nodes != H->nrows)
+        iftError("Number of nodes in the graph %ld is different from the number of rows in the matrix %d", __func__, graph->num_nodes, H->nrows);
 
     iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
     // the energy is the L2 norm of the kernel features
-    for(int i = 0; i < H->nrows; i++)
+    for (int i = 0; i < H->nrows; i++)
     {
         double max = IFT_INFINITY_FLT_NEG;
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
-            if(iftMatrixElem(H, j, i) > max)
+            if (iftMatrixElem(H, j, i) > max)
                 max = iftMatrixElem(H, j, i);
         }
 
         // Compute the inidividual kernels contributions (Softmax(H))
         double softmax_norm = 0;
         iftMatrix *softmax_H = iftCreateMatrix(H->ncols, 1);
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
-            double h = iftMatrixElem(H, j, i)-max;
-            if(h < IFT_EPSILON && h > -IFT_EPSILON) // handling low exponentials
+            double h = iftMatrixElem(H, j, i) - max;
+            if (h < IFT_EPSILON && h > -IFT_EPSILON) // handling low exponentials
             {
-                if(h >= 0) h = IFT_EPSILON;
-                else h = -IFT_EPSILON;
+                if (h >= 0)
+                    h = IFT_EPSILON;
+                else
+                    h = -IFT_EPSILON;
             }
             double e = exp(h); // handling high exponentials
 
             iftMatrixElem(softmax_H, j, 0) = e;
             softmax_norm += e;
         }
-        if(softmax_norm == 0) softmax_norm = 1;
+        if (softmax_norm == 0)
+            softmax_norm = 1;
 
         // and compute class energy (L2 norm of H) to determine the class dominance
         double energy_fg = 0, energy_bg = 0;
-        for(int j = 0; j < H->ncols; j++)
+        for (int j = 0; j < H->ncols; j++)
         {
             iftMatrixElem(softmax_H, j, 0) /= softmax_norm;
             double h = iftMatrixElem(softmax_H, j, 0);
-            if(kernel_labels[j] == 2){
-                //energy_fg = iftMax(energy_fg, iftMatrixElem(H, j, i));
-                energy_fg += pow(h,2);
-            }else{
-                //energy_bg = iftMax(energy_bg, iftMatrixElem(H, j, i));
-                energy_bg += pow(h,2);
+            if (kernel_labels[j] == 2)
+            {
+                // energy_fg = iftMax(energy_fg, iftMatrixElem(H, j, i));
+                energy_fg += pow(h, 2);
+            }
+            else
+            {
+                // energy_bg = iftMax(energy_bg, iftMatrixElem(H, j, i));
+                energy_bg += pow(h, 2);
             }
         }
         energy_fg = sqrt(energy_fg); // Efg = sqrt(sum(Hij^2) for all j in fg kernels)
         energy_bg = sqrt(energy_bg); // Ebg = sqrt(sum(Hij^2) for all j in bg kernels)
-        
 
         // compute class dominance to determine which class should be enforced and which should be supressed.
-        double class_dominance_score = (energy_fg - energy_bg)/(energy_fg + energy_bg + IFT_EPSILON); // [-1,1], where > 0 means fg dominance and < 0 bg dominance
+        double class_dominance_score = (energy_fg - energy_bg) / (energy_fg + energy_bg + IFT_EPSILON); // [-1,1], where > 0 means fg dominance and < 0 bg dominance
         /*if(i == 34){
             printf("Energy fg: %f, Energy bg: %f, Class dominance: %f\n", energy_fg, energy_bg, class_dominance_score);
         }*/
-        
+
         // Let D be the class dominance score and lambda be ReLU(D) for foreground dominance and ReLU(-D) for background dominance.
         // Compute attention values for each kernel j and a node i as Aij = Softmax(Hij) * (lambda + beta * |D|)
-        // Lambda gives a "boost" on the dominant classe, increasing separability. 
-        // For non-dominant kernel classes, lambda is 0. Otherwise lambda is in (0,1). 
-        // D indicates how separated the classes are in node i, |D| > 0 and is fixed to all kernels. 
-        for(int j = 0; j < H->ncols; j++)
+        // Lambda gives a "boost" on the dominant classe, increasing separability.
+        // For non-dominant kernel classes, lambda is 0. Otherwise lambda is in (0,1).
+        // D indicates how separated the classes are in node i, |D| > 0 and is fixed to all kernels.
+        for (int j = 0; j < H->ncols; j++)
         {
-            double att = ambiguity_penalty*fabs(class_dominance_score); // beta * |D|
-            if(kernel_labels[j] == 2)
+            double att = ambiguity_penalty * fabs(class_dominance_score); // beta * |D|
+            if (kernel_labels[j] == 2)
                 att += iftMax(0, class_dominance_score);
             else
                 att += iftMax(0, -class_dominance_score);
@@ -2896,7 +2790,7 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_v1(iftMatrix *H, iftFLIMGraph *g
     /*
     iftMatrix *laplacian_smoothing = iftCreateMatrix(H->ncols, H->nrows);
     // apply laplacian smoothing to the attention values
-    // Aij = Aij + (smoothness/|N(i)|) * sum(Akj) for all k in N(i) 
+    // Aij = Aij + (smoothness/|N(i)|) * sum(Akj) for all k in N(i)
     for(int i=0; i < graph->num_nodes; i++)
     {
         for(int j = 0; j < H->ncols; j++)
@@ -2927,24 +2821,286 @@ iftMatrix * iftFLIMGraphAttentionClassDominance_v1(iftMatrix *H, iftFLIMGraph *g
     iftDestroyMatrix(&attention_final);
     */
 
-    //iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    //iftDestroyMatrix(&attention_vals);
-    
+    // iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
+    // iftDestroyMatrix(&attention_vals);
+
     return attention_vals;
 }
 
+/**
+ * @fn iftFLIMGraphGetAttentionValues
+ * @brief Compute the attention values for the nodes in `neighbors`
+ * @param neighbors: indexes of the neighbors
+ * @param graph: graph with node relations and features
+ * @param attention_opt: attention option
+ * @return double*: attention values for the neighbors
+ */
+double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *graph, iftFLIMGraphAttention *attention_opt)
+{
+    double *attention_vals = NULL;
 
-double *iftFLIMgraphAggregateFeatures(int p, 
-                                    iftIntArray *neighbors, 
-                                    iftFLIMGraph *graph,
-                                    int num_adj,
-                                    iftGFLIMAggregationType aggregation_opt)
+    switch (*attention_opt)
+    {
+    case IFT_FLIMGRAPH_ATTENTION_NONE:
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE:
+        attention_vals = iftFLIMGraphAttentionRelNodeSize(graph, neighbors);
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_NODE_SIZE:
+        attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
+        // attention_vals = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
+        // iftWarning("Attention partially implemented.", __func__);
+        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE:
+        attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
+        // double *attention_vals_simil = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
+        /*for(int j = 0; j < neighbors->n; j++)
+            attention_vals[j] += attention_vals_simil[j];
+        iftFree(attention_vals_simil);*/
+        iftWarning("Attention partially implemented.", __func__);
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST:
+        /*attention_opt = IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;
+        attention_vals = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);*/
+        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE:
+        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_POWER2:
+        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB:
+        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
+        break;
+
+    case IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY:
+        attention_vals = iftFLIMGraphAttentionCosineSimilarity(graph, neighbors);
+        break;
+
+    default:
+        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
+        iftWarning("Attention option not implemented. Using IFT_FLIMGRAPH_ATTENTION_NONE", __func__);
+        break;
+    }
+
+    return attention_vals;
+}
+
+/** @} */
+
+/* --------------------- FLIMGraph neighbor features ----------------------------- */
+/** @defgroup FLIMGraphNeighbFeat Neighbor features
+ * Functions to compute the features of the neighbors of a node in a FLIMGraph.
+ *  @{
+ */
+
+/**
+ * @fn iftGetNeighborsFLIMGraph
+ * @brief Insert in `heap` at most k neighbors of the nodes in `roots` whose features are
+ * most similar with those in `feature_reference`.
+ *
+ * The function inserts up to `k` neighbors of the nodes in `roots` into the heap,
+ * selecting those whose features are most (or least) similar to the `feature_reference`,
+ * depending on the `most_similar` flag.
+ *
+ * @param graph: graph with node relations and features
+ * @param roots: initial nodes indexes to get the neighbors
+ * @param k: number of neighbors to get
+ * @param dissimilarity: array to store the dissimilarity between the reference features and those from the neighbors.
+ * @param feature_reference: reference node features
+ * @param heap: heap of nodes to store the neighbors found
+ * @warning Only neighbors with white state in heap may be inserted to it.
+ *
+ * @author Isabela
+ * @date abr, 2023
+ */
+void iftGetNeighborsFLIMGraph(iftFLIMGraph *graph, int *roots, int num_roots,
+                              int k, double *dissimilarity,
+                              double *feature_reference,
+                              iftDHeap *heap,
+                              bool most_similar)
+{
+    if (roots == NULL)
+        iftError("Roots is NULL", __func__);
+
+    int *root_ptr = roots;
+    for (int r = 0; r < num_roots; r++)
+    {
+        iftSet *neigh = graph->nodes[*root_ptr].adj;
+        while (neigh != NULL)
+        {
+            if (heap->color[neigh->elem] == IFT_WHITE)
+            {
+                double dist = 0;
+                double *feats = graph->nodes[neigh->elem].feats;
+                for (int i = 0; i < graph->num_feats; i++)
+                {
+                    double feat_val = feature_reference[i] - feats[i];
+                    dist += feat_val * feat_val;
+                }
+
+                // if te heap already has k elements
+                // keep the most similar (or less similar) elements
+                if (heap->last + 1 == k)
+                {
+                    int last = heap->node[0]; // look at the root of the heap
+                    if ((most_similar && dist < dissimilarity[last]) ||
+                        (!most_similar && dist > dissimilarity[last]))
+                    {
+                        iftRemoveDHeap(heap);
+                        dissimilarity[neigh->elem] = dist;
+                        iftInsertDHeap(heap, neigh->elem);
+                    }
+                }
+                else
+                {
+                    dissimilarity[neigh->elem] = dist;
+                    iftInsertDHeap(heap, neigh->elem);
+                }
+            }
+            neigh = neigh->next;
+        }
+        root_ptr++;
+    }
+}
+
+/**
+ * @fn iftGetKNeighborsFLIMGraph
+ * @brief Return `k` neighbors of node_index according to the GFLIM neighbor selection strategy.
+ * @param node_index: initial node to get the neighbors
+ * @param graph: graph with node relations and features
+ * @param k: number of neighbors
+ * @param dilation: number of skips to get neighbors (>= 1) (similar to dilation in convolutional network)
+ * @param most_similar: if true, the neighbors are the most similar to the reference node
+ * @return iftIntArray with the indexes of the k neighbors
+ * @note The neighbors are selected according to the distance between the features of the nodes and the features of the initial node.
+ * @author Isabela
+ * @date abr, 2023
+ */
+iftIntArray *iftGetKNeighborsFLIMGraph(int node_index,
+                                       iftFLIMGraph *graph, int k,
+                                       int dilation, bool most_similar, iftFLIMGraphAttention attention_opt)
+{
+    double *dissimilarity = (double *)malloc(graph->num_nodes * sizeof(double));
+    iftIntArray *neighbors = iftCreateIntArray(k);
+
+    // MaxHeap para armazenar até k vizinhos mais similares.
+    // Se a quantidade de vizinhos for maior que k, remove o menos similar
+    // do heap (que está no topo) usando "pop" e verifica quem é o mais similar
+    // para nova inserção.
+    iftDHeap *auxiliaryHeap = iftCreateDHeap(graph->num_nodes, dissimilarity);
+    iftDHeap *heap = iftCreateDHeap(graph->num_nodes, dissimilarity);
+    if (most_similar)
+        auxiliaryHeap->removal_policy = MAXVALUE;
+    else
+        heap->removal_policy = MAXVALUE;
+
+    dissimilarity[node_index] = 0.0;
+    iftInsertDHeap(auxiliaryHeap, node_index);
+    iftRemoveDHeap(auxiliaryHeap);
+    // neighbors->val[0] = node_index;
+    neighbors->n = 1;
+    iftInsertDHeap(heap, node_index);
+
+    int skips_performed = 1;
+    int roots[k];
+
+    roots[0] = node_index;
+    int i = 1; // number of values in root
+
+    while (neighbors->n < k)
+    {
+        int miss_neighbors = k - neighbors->n;
+        iftGetNeighborsFLIMGraph(graph, roots, i,
+                                 miss_neighbors,
+                                 dissimilarity,
+                                 graph->nodes[node_index].feats,
+                                 auxiliaryHeap,
+                                 most_similar);
+
+        if (iftEmptyDHeap(auxiliaryHeap))
+            break; // there are no neighbors to include
+        // bool new_iter = (auxiliaryHeap->last + 1 < miss_neighbors || skips_performed != dilation);
+
+        i = 0;
+        int found_neighbors = auxiliaryHeap->last + 1;
+        // adiciona os k vizinhos selecionados (no auxiliaryHeap) em um minHeap
+        while (!iftEmptyDHeap(auxiliaryHeap))
+        {
+            int node_index = iftRemoveDHeap(auxiliaryHeap);
+            if (skips_performed == dilation)
+            {
+                // neighbors->val[neighbors->n + auxiliaryHeap->last + 1] = node_index;
+                roots[i] = node_index;
+                iftInsertDHeap(heap, node_index);
+                i++;
+            }
+        }
+        neighbors->n += found_neighbors;
+        if (skips_performed != dilation)
+            skips_performed++;
+        else
+            skips_performed = 1;
+    }
+
+    i = 0;
+    while (i < neighbors->n)
+    {
+        neighbors->val[i] = iftRemoveDHeap(heap);
+        i++;
+    }
+
+    free(dissimilarity);
+    iftDestroyDHeap(&auxiliaryHeap);
+    iftDestroyDHeap(&heap);
+
+    double *attention_vals = iftFLIMGraphGetAttentionValues(neighbors, graph, &attention_opt);
+    if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE)
+    {
+        for (int i = 0; i < neighbors->n; i++)
+            neighbors->val[i] *= attention_vals[i];
+    }
+
+    if (attention_vals != NULL)
+        iftFree(attention_vals);
+
+    return neighbors;
+}
+
+/**
+ * @fn iftFLIMgraphAggregateFeatures
+ * @brief Aggregate features of the nodes in `neighbors`
+ * @param p Node index
+ * @param neighbors Array of neighbors
+ * @param graph Graph
+ * @param num_adj Number of neighbors to be included in the matrix
+ * @param aggregation_opt Aggregation option
+ * @return double* Aggregated features
+ */
+double *iftFLIMgraphAggregateFeatures(int p,
+                                      iftIntArray *neighbors,
+                                      iftFLIMGraph *graph,
+                                      int num_adj,
+                                      iftGFLIMAggregationType aggregation_opt)
 {
     double *output_features = NULL;
     int i = 0;
     double w[neighbors->n - 1];
 
-    if(neighbors->val[0] != p) iftError("Neighbor of %d is %d", __func__, p, neighbors->val[0]);
+    if (neighbors->val[0] != p)
+        iftError("Neighbor of %d is %d", __func__, p, neighbors->val[0]);
 
     switch (aggregation_opt)
     {
@@ -2961,7 +3117,7 @@ double *iftFLIMgraphAggregateFeatures(int p,
         break;
 
     case IFT_GFLIM_AGGREGATION_MEAN:
-        
+
         output_features = iftAllocDoubleArray(2 * graph->num_feats);
 
         memcpy(output_features, graph->nodes[p].feats, graph->num_feats * sizeof(double));
@@ -2975,13 +3131,13 @@ double *iftFLIMgraphAggregateFeatures(int p,
             i++;
         }
 
-        for (int b = graph->num_feats; b < 2*graph->num_feats; b++)
-            output_features[b] /= (float)(neighbors->n-1);
-        
+        for (int b = graph->num_feats; b < 2 * graph->num_feats; b++)
+            output_features[b] /= (float)(neighbors->n - 1);
+
         break;
 
     case IFT_GFLIM_AGGREGATION_WMEAN:
-        
+
         output_features = iftAllocDoubleArray(2 * graph->num_feats);
 
         double size = (double)graph->nodes[p].numPixels;
@@ -2996,7 +3152,8 @@ double *iftFLIMgraphAggregateFeatures(int p,
             max_diff = iftMax(max_diff, w[i - 1]);
             i++;
         }
-        if(max_diff == 0) max_diff = 1;
+        if (max_diff == 0)
+            max_diff = 1;
 
         i = 0;
         double sum = 0;
@@ -3025,41 +3182,46 @@ double *iftFLIMgraphAggregateFeatures(int p,
 }
 
 /**
+ * @fn iftFLIMGraphToFeatureMatrix
  * @brief Create a matrix from a graph
  * @param graph Graph
  * @param num_adj Number of neighbors to be included in the matrix
- * @param fill_band_with Fill the matrix with this value when the node has less than num_adj neighbors
- * @param most_similar If true, the most similar neighbors are included in the matrix. Otherwise, the less similar neighbors are included.
+ * @param attention_opt Attention option
+ * @param aggregation_opt Aggregation option
+ * @param neighbors_all Array of neighbors for each node.
  * @return iftMatrix*
- * @note The matrix size is [num nodes][num_adj * num features]
- * @note Each matrix row contains the features of a node and its [num_adj] most similar neighbors
- * @note The similarity measure to find neighbors is euclidean distance in feature space.
+ * @note The matrix size depends on the aggregation option:
+ * - IFT_GFLIM_AGGREGATION_CONCAT: num_adj * graph->num_feats
+ * - IFT_GFLIM_AGGREGATION_MEAN: 2 * graph->num_feats
+ * - IFT_GFLIM_AGGREGATION_WMEAN: 2 * graph->num_feats
+ * @note `neighbors_al` is used to store the neighbors of each node when the attention option is IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL.
  */
 iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
-                                   int num_adj,
-                                   iftFLIMGraphAttention attention_opt,
-                                   iftGFLIMAggregationType aggregation_opt, 
-                                   iftIntArray **neighbors_all)
+                                       int num_adj,
+                                       iftFLIMGraphAttention attention_opt,
+                                       iftGFLIMAggregationType aggregation_opt,
+                                       iftIntArray **neighbors_all)
 {
     iftIsValidFLIMGraph(graph);
-    if(num_adj < 1) iftError("Number of neighbors must be positive", __func__);
+    if (num_adj < 1)
+        iftError("Number of neighbors must be positive", __func__);
 
     // cria a matriz de saída
-    int out_num_feats = aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT ? num_adj * graph->num_feats : 2*graph->num_feats;
+    int out_num_feats = aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT ? num_adj * graph->num_feats : 2 * graph->num_feats;
     iftMatrix *matrix = iftCreateMatrix(out_num_feats, graph->num_nodes);
 
     for (int p = 0; p < graph->num_nodes; p++)
     {
         iftIntArray *neighbors = iftGetKNeighborsFLIMGraph(p, graph, num_adj, 1, true, attention_opt);
 
-        if(attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
+        if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
         {
             memcpy(neighbors_all[p]->val, neighbors->val, neighbors->n * sizeof(int));
             neighbors_all[p]->n = neighbors->n;
         }
-        
+
         double *feature_vector = iftFLIMgraphAggregateFeatures(p, neighbors, graph, num_adj, aggregation_opt);
-        
+
         for (int b = 0; b < out_num_feats; b++)
             iftMatrixElem(matrix, b, p) = (float)feature_vector[b];
 
@@ -3069,11 +3231,13 @@ iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
     return matrix;
 }
 
-/*
-    Create a graph with n vertices, each one with m features.
-    The graph edges come from a reference graph
-    and the node features come from a matrix with size [n][m].
-*/
+/**
+ * @fn iftFeatureMatrixToFLIMGraph
+ * @brief Create a graph from a matrix
+ * @param matrix Matrix with the features
+ * @param graph_ref Reference graph
+ * @return iftFLIMGraph* Graph with the features
+ */
 iftFLIMGraph *iftFeatureMatrixToFLIMGraph(iftMatrix *matrix, iftFLIMGraph *graph_ref)
 {
     if (matrix->nrows != graph_ref->num_nodes)
@@ -3096,7 +3260,6 @@ iftFLIMGraph *iftFeatureMatrixToFLIMGraph(iftMatrix *matrix, iftFLIMGraph *graph
         for (int b = 0; b < matrix->ncols; b++)
             node->feats[b] = iftMatrixElem(matrix, b, node_index);
 
-        //memcpy(node->neighbors->val, node_ref->neighbors->val, node_ref->neighbors->nbytes);
         node->adj = iftSetCopy(node_ref->adj);
         node++;
         node_ref++;
@@ -3105,27 +3268,4 @@ iftFLIMGraph *iftFeatureMatrixToFLIMGraph(iftMatrix *matrix, iftFLIMGraph *graph
     return graph;
 }
 
-// OTHERS
-
-iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name)
-{
-    if(strcmp(name, "MEAN") == 0) return IFT_FLIMGRAPH_FEATURE_MEAN;
-    if(strcmp(name, "SUM") == 0) return IFT_FLIMGRAPH_FEATURE_SUM;
-    if(strcmp(name, "SUM_MULT_RELSIZE") == 0) return IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE;
-    if(strcmp(name, "MEAN_MULT_RELSIZE") == 0) return IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE;
-    if(strcmp(name, "MEAN_CONCAT_RELSIZE") == 0) return IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE;
-    if(strcmp(name, "MEAN_CONCAT_RELSIZE_NEIGHB") == 0) return IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB;
-    if(strcmp(name, "MEAN_CONCAT_RELSIZE_HARALICK") == 0) return IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK;
-    if(strcmp(name, "SUM_MULT_RELSIZE_CONCAT_HARALICK") == 0) return IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK;
-    if(strcmp(name, "SUM_CONCAT_HARALICK") == 0) return IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK;
-    iftError("Invalid iftFLIMGraphFeature name %s", __func__, name);
-    return IFT_FLIMGRAPH_FEATURE_MEAN;
-}
-
-iftFLIMGraphType iftGFLIMGetGraphType(const char *name)
-{
-    if(strcmp(name, "DISF") == 0) return IFT_FLIMGRAPH_TYPE_DISF;
-    if(strcmp(name, "ERGC") == 0) return IFT_FLIMGRAPH_TYPE_ERGC;
-    iftError("Invalid iftFLIMGraphType name %s", __func__, name);
-    return IFT_FLIMGRAPH_TYPE_DISF;
-}
+/** @} */

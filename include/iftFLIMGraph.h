@@ -66,10 +66,10 @@ typedef enum {
     IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE,   // number of pixels by the total number of pixels in the graph. No softmax
     IFT_FLIMGRAPH_ATTENTION_NODE_SIZE,    // number of pixels in the neighborhood
     IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL, // neighbors similarity
-    IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE, // number of pixels and neighbors similarity
+    IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE, // not implemented anymore // number of pixels and neighbors similarity
+    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST,
     IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE,
-    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_WINNER,
-    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_WINNER_POWER2,
+    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_POWER2,
     IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB,
     IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY
 } iftFLIMGraphAttention;
@@ -112,92 +112,58 @@ typedef enum {
     IFT_GFLIM_AGGREGATION_WMEAN     // Weighted mean of the features of the nodes
   } iftGFLIMAggregationType;
 
-// ============ GraphArray CONTRUCTOR AND DESTRUCT ============ //
 
+/* --------------------- GraphArray functions ----------------------------- */
 iftFLIMGraphArray *iftFLIMGraphCreateEmptyFLIMGraphArray(int n);
 void iftDestroyFLIMGraphArray(iftFLIMGraphArray **arr);
 
+/* --------------------- FLIMGraph construction ----------------------------- */
+iftFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes);
+void iftDestroyFLIMGraph(iftFLIMGraph **graph);
+void iftInsertFLIMGraphNeighborNode(iftFLIMGraphNode *node, int neighbor);
+bool iftIsValidFLIMGraph(iftFLIMGraph *graph);
+
+/* --------------------- FLIMGraph convert from string to a type ----------------------------- */
 iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name);
 iftFLIMGraphType iftGFLIMGetGraphType(const char *name);
 iftFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg);
 iftFLIMGraphAttention iftGLIMGraphGetAggregationType(char *arg);
 
+/* --------------------- FLIMGraph read and write ----------------------------- */
+iftFLIMGraph *iftReadFLIMGraph(char *filename);
+void iftWriteFLIMGraph(iftFLIMGraph *graph, char *filename);
+
+/* --------------------- FLIMGraph transform ----------------------------- */
+void iftNormalizeFLIMGraphByZScore(iftFLIMGraph *graph, float *mean, float *stdev);
+iftFLIMGraph *iftImageToFLIMGraph(iftImage *img, 
+    int num_superpixels, int param,
+    iftImage **label_img,
+    iftFLIMGraphFeature graph_feat,
+    iftFLIMGraphType graph_type);
+iftMImage *iftFLIMGraphToMImage(iftFLIMGraph *graph, iftImage *labels);
+iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
+    iftFLIMGraph *graph_ref);
+void iftMImageToFLIMGraphInplace(iftMImage *mimg, iftFLIMGraph *graph_ref);
+iftImage **iftFLIMGraphToActivations(iftFLIMGraph *graph, iftImage *labels);
+
+/* --------------------- FLIMGraph attention ----------------------------- */
 double *iftFLIMGraphAttentionRelNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors);
 double *iftFLIMGraphAttentionNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors);
 iftMatrix *iftFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntArray *neighbors, int *kernel_labels, int label);
-
 double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *graph, iftFLIMGraphAttention *attention_opt);
+iftMatrix * iftFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
-iftMatrix * iftFLIMGraphAttentionClassDominance_winner(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
-iftMatrix * iftFLIMGraphAttentionClassDominance_winnerPower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
+iftMatrix * iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
-
 double *iftFLIMGraphAttentionCosineSimilarity(iftFLIMGraph *graph, iftIntArray *neighbors);
 
-/* --------------------- FLIMGraph construction ----------------------------- */
-// create / insert
-iftFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes);
-void iftInsertFLIMGraphNeighborNode(iftFLIMGraphNode *node, int neighbor);
-
-// copy
-iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool copy_features);
-
-// read from / write to disk
-iftFLIMGraph *iftReadFLIMGraph(char *filename);
-
-void iftWriteFLIMGraph(iftFLIMGraph *graph, char *filename);
-
-// validate
-bool iftIsValidFLIMGraph(iftFLIMGraph *graph);
-
-// destroy
-void iftDestroyFLIMGraph(iftFLIMGraph **graph);
-
-/* --------------------- FLIMGraph transform ----------------------------- */
-
-void iftNormalizeFLIMGraphByZScore(iftFLIMGraph *graph, float *mean, float *stdev);
-
-/* --------------------- FLIMGraph feature ----------------------------- */
-
+/* --------------------- FLIMGraph neighbor features ----------------------------- */
 double *iftFLIMgraphAggregateFeatures(int p, 
     iftIntArray *neighbors, 
     iftFLIMGraph *graph,
     int num_adj,
     iftGFLIMAggregationType aggregation_opt);
 
-/* --------------------- FLIMGraph conversion ----------------------------- */
-
-// image to graph
-iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
-    unsigned long num_superpixels,
-    iftAdjRel *A,
-    iftMImage *oiginal_img, iftImage *labeled_img, iftFLIMGraphFeature feat_type,
-    iftImage *gray_img);
-
-iftFLIMGraph* iftGetFLIMGraphFromGrid(iftImage *img,
-                             iftImage **label_img);
-
-iftFLIMGraph *iftImageToFLIMGraph(iftImage *img, 
-                                int num_superpixels, int param,
-                                iftImage **label_img,
-                                iftFLIMGraphFeature graph_feat,
-                                iftFLIMGraphType graph_type);
-
-// graph to iftImage / iftMImage
-iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, int band);
-
-// graph from / to MIMG
-iftMImage *iftFLIMGraphToMImage(iftFLIMGraph *graph, iftImage *labels);
-
-iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
-                                   iftFLIMGraph *graph_ref);
-
-void iftMImageToFLIMGraphInplace(iftMImage *mimg, iftFLIMGraph *graph_ref);
-
-//(write in disk)
-void iftFLIMGraphToMIMG(char *graph_dir, char *labels_dir, char *output_dir);
-
-// graph from/to iftMatrix
 iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
                                    int num_adj,
                                    iftFLIMGraphAttention attention_opt,
@@ -206,16 +172,6 @@ iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
 
 iftFLIMGraph *iftFeatureMatrixToFLIMGraph(iftMatrix *matrix,
                                    iftFLIMGraph *graph_ref);
-
-// graph to image activations (one grayscale image per node feature)
-iftImage **iftFlimGraphToActivations(iftFLIMGraph *graph, iftImage *labels);
-
-// get neigbors
-void iftGetNeighborsFLIMGraph(iftFLIMGraph *graph, int *roots, int num_roots, 
-                           int k, double *dissimilarity,
-                           double *feature_reference,
-                           iftDHeap *heap,
-                           bool most_similar);
 
 iftIntArray *iftGetKNeighborsFLIMGraph(int node_index, iftFLIMGraph *graph, int k,
                            int dilation, bool most_similar, iftFLIMGraphAttention attention_opt);

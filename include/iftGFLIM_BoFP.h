@@ -39,10 +39,6 @@ typedef enum {
 /**
  * @enum iftGFLIMDecoderType
  * @brief Enumerates the decoder types for GFLIM.
- * @see iftGFLIMTristateDecoder()
- * @see iftGFLIMHybridDecoder()
- * @see iftGFLIMGraphAdaptiveDecoder()
- * @see iftGFLIMGaussianDecoder()
  */
 typedef enum { 
   IFT_GFLIM_TRISTATE_DECODER,       // Tristate decoder. @see iftGFLIMTristateDecoder()
