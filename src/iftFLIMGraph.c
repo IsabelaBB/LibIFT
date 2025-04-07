@@ -1372,6 +1372,7 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
         graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK)
     {
         iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+#pragma omp parallel for
         for (int i = 0; i < mimg->n; i++)
             gray_img->val[i] = mimg->val[i][0]; //*255;
     }
@@ -1488,19 +1489,27 @@ iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
 
     iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(mimg->m, graph_ref->num_nodes);
     graph->num_edges = graph_ref->num_edges;
-    iftFLIMGraphNode *node = graph->nodes;
-    iftFLIMGraphNode *node_ref = graph_ref->nodes;
+    
+#pragma omp parallel for 
     for (int i = 0; i < mimg->n; i++)
     {
+        iftFLIMGraphNode *node = &(graph->nodes[i]);
+        iftFLIMGraphNode *node_ref = &(graph_ref->nodes[i]);
+        float *mimg_feat = mimg->val[i];
         for (int j = 0; j < mimg->m; j++)
-            node->feats[j] = mimg->val[i][j];
-
+            node->feats[j] = mimg_feat[j];
         node->numPixels = node_ref->numPixels;
-        node->adj = iftSetCopy(node_ref->adj);
         node->numNeighbors = node_ref->numNeighbors;
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    iftFLIMGraphNode *node_ref = graph_ref->nodes;
+    for (int i = 0; i < mimg->n; i++){
+        node->adj = iftSetCopy(node_ref->adj);
         node++;
         node_ref++;
     }
+
     node = NULL;
     node_ref = NULL;
 
@@ -1526,10 +1535,15 @@ void iftMImageToFLIMGraphInplace(iftMImage *mimg,
     {
         iftFree(node->feats);
         node->feats = iftAllocDoubleArray(mimg->m);
+        node++;
+    }
+    
+#pragma omp parallel for 
+    for (int i = 0; i < mimg->n; i++)
+    {
+        iftFLIMGraphNode *node = &(graph_ref->nodes[i]);
         for (int j = 0; j < mimg->m; j++)
             node->feats[j] = mimg->val[i][j];
-
-        node++;
     }
     graph_ref->num_feats = mimg->m;
     node = NULL;
