@@ -187,12 +187,18 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftFLIMGraph *graph,
  */
 void StatisticsFromAllSeedsGraph(iftFileSet *fs_seeds, char *dir, float *mean, float *stdev, float stdev_factor)
 {
-    int nseeds = 0;
+    int nseeds = 0, nfeats = 0;
     char *basename = NULL;
     char filename[200];
     iftFLIMGraph *graph = NULL;
 
-    float *sum_sqrd = iftAllocFloatArray(graph->num_feats);
+    basename = iftFilename(fs_seeds->files[0]->path, "-seeds_graph.txt");
+    sprintf(filename, "%s/%s.json", dir, basename);
+    graph = iftReadFLIMGraph(filename);
+    nfeats = graph->num_feats;
+    iftFree(basename);
+    float *sum_sqrd = iftAllocFloatArray(nfeats);
+    iftDestroyFLIMGraph(&graph);
 
     for (int i = 0; i < fs_seeds->n; i++)
     {
@@ -203,6 +209,8 @@ void StatisticsFromAllSeedsGraph(iftFileSet *fs_seeds, char *dir, float *mean, f
         sprintf(filename, "%s/%s.json", dir, basename);
         graph = iftReadFLIMGraph(filename);
         iftFree(basename);
+        if(nfeats != graph->num_feats)
+            iftError("Number of features in the graph is different from the number of features in the seeds", __func__);
 
         // read the seeds
         iftLabeledSet *S = iftReadSeedsGraph(fs_seeds->files[i]->path);
@@ -213,7 +221,7 @@ void StatisticsFromAllSeedsGraph(iftFileSet *fs_seeds, char *dir, float *mean, f
         {
             int p = seed->elem;
             nseeds += 1;
-            for (int b = 0; b < graph->num_feats; b++)
+            for (int b = 0; b < nfeats; b++)
             {
                 mean[b] += graph->nodes[p].feats[b];
                 sum_sqrd[b] += powf(graph->nodes[p].feats[b], 2);
@@ -225,7 +233,7 @@ void StatisticsFromAllSeedsGraph(iftFileSet *fs_seeds, char *dir, float *mean, f
     }
 
     // compute the mean of the features
-    for (int b = 0; b < graph->num_feats; b++)
+    for (int b = 0; b < nfeats; b++)
     {
         mean[b] = mean[b] / nseeds;
         stdev[b] = sqrtf((sum_sqrd[b] / nseeds) - powf(mean[b], 2)) + stdev_factor;
@@ -906,12 +914,13 @@ iftMImage *iftFLIMGraphAtrousAveragePooling(iftFLIMGraph *graph,
                                                                 graph, pool_size,
                                                                 IFT_GFLIM_AGGREGATION_CONCAT);
         
+        iftDestroyIntArray(&neighbors);
         for (int i = 0, j = 0; i < pool_size; i++)
         {
             for (int b = 0; b < graph->num_feats; b++, j++)
                 pool->val[p][b] += (float)feature_vector[j];
         }
-        iftDestroyIntArray(&neighbors);
+        iftFree(feature_vector);
 
         for (int b = 0; b < graph->num_feats; b++)
             pool->val[p][b] /= (float)pool_size;
@@ -949,13 +958,14 @@ iftMImage *iftFLIMGraphAtrousMaxPooling(iftFLIMGraph *graph,
         double *feature_vector = iftFLIMgraphAggregateFeatures(p, neighbors,
                                                             graph, pool_size,
                                                             IFT_GFLIM_AGGREGATION_CONCAT);
+        iftDestroyIntArray(&neighbors);
         
         for (int i = 0, j = 0; i < pool_size; i++)
         {
             for (int b = 0; b < graph->num_feats; b++, j++)
                 pool->val[p][b] = iftMax(pool->val[p][b], (float)feature_vector[j]);
         }
-        iftDestroyIntArray(&neighbors);
+        iftFree(feature_vector);
     }
 
     if (stride > 1)

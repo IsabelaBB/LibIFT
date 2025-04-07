@@ -1357,7 +1357,7 @@ void iftGFLIMStrideBatch_v2(iftFLIMGraphArray *graph, iftFLIMLayer layer,
             int new_z = iftMax(ceilf(labels_img->val[i]->zsize / (float)layer.pool_stride), 1);
             iftImage *output_labels = iftCreateImage(new_x, new_y, new_z);
             iftFLIMGraph *output_graph = iftGFLIMImageStride(graph->val[i], labels_img->val[i], output_labels, layer.pool_stride);
-            iftDestroyImage(&labels_img->val[i]);
+            iftDestroyImage(&(labels_img->val[i]));
             labels_img->val[i] = output_labels;
             output_labels = NULL;
             iftDestroyFLIMGraph(&(graph->val[i]));
@@ -1667,27 +1667,17 @@ iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, floa
     printf("\t inplace: %s\n", inplace ? "true" : "false");
 #endif
 
-    iftMImageArray *mimgArrayOut = NULL;
-    iftMImage *tmp = NULL;
+    iftMImageArray *mimgArrayOut = mimgArray;
 
     if (!inplace)
         mimgArrayOut = iftCreateMImageArray(mimgArray->n);
 
     for (int i = 0; i < mimgArray->n; i++)
     {
-
-        tmp = iftGFLIMSumMImgToFloatArray(mimgArray->val[i], bias, inplace);
-        if (!inplace)
-        {
-            mimgArrayOut->val[i] = tmp;
-            tmp = NULL;
-        }
+        mimgArrayOut->val[i] = iftGFLIMSumMImgToFloatArray(mimgArray->val[i], bias, inplace);
     }
 
-    if (!inplace)
         return mimgArrayOut;
-    else
-        return mimgArray;
 }
 
 /**
@@ -1718,7 +1708,7 @@ iftMImageArray *iftGFLIMConvLayerBatch(iftFLIMGraphArray *graph, iftMatrix *kern
     iftMImageArray *activ = iftCreateMImageArray(graph->n);
     for (int i = 0; i < graph->n; i++)
     {
-        activ->val[i] = iftGFLIMConvLayer(graph->val[i], kernels, kernel_size, attention_opt, kernel_labels, aggregation_opt, maintain_kernels[i], reduce);
+        activ->val[i] = iftGFLIMConvLayer(graph->val[i], kernels, kernel_size, attention_opt, kernel_labels, aggregation_opt, maintain_kernels == NULL? NULL : maintain_kernels[i], reduce);
     }
     return activ;
 }
@@ -1753,11 +1743,8 @@ void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftFLIMGraphArray *graph,
 
     for (int i = 0; i < activ_array->n; i++)
     {
-        iftFLIMGraph *pooling_graph = iftMImageToFLIMGraph(activ_array->val[i], graph->val[i]);
-        iftDestroyFLIMGraph(&(graph->val[i]));
-        iftGFLIMPoolingLayer(pooling_graph, pool_type, pool_size, pool_stride);
-        graph->val[i] = pooling_graph;
-        pooling_graph = NULL;
+        iftMImageToFLIMGraphInplace(activ_array->val[i], graph->val[i]);
+        iftGFLIMPoolingLayer(graph->val[i], pool_type, pool_size, pool_stride);
     }
 }
 
@@ -2058,7 +2045,7 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
     else
     {
         if (layer.relu)
-            activ_relu = iftMReLUArray(activ, bias_merged, layer.relu);
+            activ_relu = iftMReLUArray(activ, bias_merged, true);
         else
         {
             if (bias_merged != NULL)
