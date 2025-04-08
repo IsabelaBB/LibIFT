@@ -1,17 +1,19 @@
 #bin/bash
 
 function usage {
-	echo "Usage: $0 [-am] [-s split] [-i init_seeds] GRAPH_FEAT SPX_ALG ARCH MARKERS_NAME NLAYERS IMGS_DIR"
+	echo "Usage: $0 [-a] [-s split] [-i init_seeds] IMGS_DIR MARKERS_DIR MARKERS_NAME GRAPH_FEAT SPX_ALG ARCH NLAYERS"
 	echo "Mandatory arguments:"
+	echo "  IMGS_DIR:             Images directory. Ex: ../../datasets/baseline_flim/schisto/image-splits2d"
+	echo "  MARKERS_DIR:          Image markers directory. Ex: ../../datasets/baseline_flim/schisto"
+	echo "  MARKERS_NAME          Name of the image markers folder. Ex: stroke_markers"
 	echo "  GRAPH_FEAT:           How to compute graph nodes features. Options: MEAN, SUM, SUM_MULT_RELSIZE, MEAN_MULT_RELSIZE, MEAN_CONCAT_RELSIZE, MEAN_CONCAT_RELSIZE_NEIGHB, MEAN_CONCAT_RELSIZE_HARALICK, SUM_MULT_RELSIZE_CONCAT_HARALICK, SUM_CONCAT_HARALICK (See iftFLIMGraph.c)"
 	echo "  SPX_ALG:              DISF, ERGC"
 	echo "  ARCH:                 architecture file (.json)"
-	echo "  MARKERS_NAME          image markers path"
-	echo "	NLAYERS				  Number of layers"
+	echo "  NLAYERS               Number of layers"
 	echo "Optional arguments:"
-	echo "  -a:                   write activations"
+	echo "  -a:                   write the activations of the training set per layer"
 	echo "  -s:                   split (1, 2, or 3). Default: 3 splits"
-	echo "  -i:                   initial seeds (needed if SPX_ALG is DISF"
+	echo "  -i:                   number of initial seeds. Needed if SPX_ALG is DISF)"
 	exit 1
 }
 
@@ -36,22 +38,25 @@ if [ ${SPLIT} != "0" ] && [ ${SPLIT} != "1" ] && [ ${SPLIT} != "2" ] && [ ${SPLI
 	exit 1
 fi
 
-if [ "$#" -lt 5 ]; then
+if [ "$#" -lt 7 ]; then
 	echo "num args: $#" 
 	usage
 fi
 
 # Mandatory arguments
-GRAPH_FEAT=$1; # MEAN, SUM, SUM_MULT_RESIZE, MEAN_MULT_RESIZE, MEAN_CONCAT_RESIZE, ..
-SPX_ALG=$2; # DISF, ERGC
-ARCH=$3; # .json file
-MARKERS_NAME=$4;
-NLAYERS=$5;
+IMGS_DIR=$1; # ../../datasets/baseline_flim/schisto/image-splits2d
+MARKERS_DIR=$2; # ../../datasets/baseline_flim/schisto/
+MARKERS_NAME=$3; # stroke_markers
+GRAPH_FEAT=$4; # MEAN, SUM, SUM_MULT_RESIZE, MEAN_MULT_RESIZE, MEAN_CONCAT_RESIZE, ..
+SPX_ALG=$5; # DISF, ERGC
+ARCH=$6; # .json file path
+NLAYERS=$7;
+
 
 function AssignVariables {
 	# Assign variables
-	IMG_DIR="../../datasets/baseline_flim/schisto/image-splits2d/split${s}/orig/train/"	# images directory
-	MARKERS_DIR="../../datasets/baseline_flim/schisto/${MARKERS_NAME}/split${s}/"			# markers directory
+	IMG_PATH="${IMGS_DIR}/split${s}/orig/train/"	# images directory
+	MARKERS_PATH="${MARKERS_DIR}/${MARKERS_NAME}/split${s}/" # markers directory
 	
 	tmp=""
 	if [ "$SPX_ALG" == "DISF" ]; then
@@ -68,7 +73,7 @@ function AssignVariables {
 }
 
 function execGFLIM {
-	ARGS="${IMG_DIR} ${MARKERS_DIR} ${ARCH} ";
+	ARGS="${IMG_PATH} ${MARKERS_PATH} ${ARCH} ";
 	ARGS+="${NLAYERS} "; # nlayers
 	ARGS+="${MODEL_DIR} ${spx} ${GRAPH_FEAT} ${SPX_ALG} ";	
 
@@ -76,15 +81,10 @@ function execGFLIM {
 	
 	[ ${ACTIVATIONS} -eq 1 ] && ARGS+="-act "; # write activations
 	
-	out="split ${s}, alg ${SPX_ALG}, feat ${GRAPH_FEAT}, spx ${spx}, arch ${ARCH}, opt: "
-	[ ${ACTIVATIONS} -eq 1 ] && out+="-act ";
-	out+="-init_seeds ${INIT_SEEDS} ";	# init seeds (DISF)
-	
-	echo "${out}"
-	echo python3 ../demo/GFLIM/GFLIM/GFLIM-train.py ${ARGS};
+	python3 ../demo/GFLIM/GFLIM/GFLIM-train.py ${ARGS};
 }
 
-superpixels=(6000 4000 5000)
+superpixels=(5000 4000 5000)
 
 if [ ${SPLIT} == "0" ]; then
 	for s in 1 2 3; do
