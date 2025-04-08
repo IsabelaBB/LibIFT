@@ -125,7 +125,7 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftFLIMGraph *graph,
 
     int nsamples = iftLabeledSetSize(S);
     int kernel_neighbors = iftMin(graph->num_nodes, kernel_size);
-    int tensor_size = graph->num_feats * kernel_neighbors;
+    int tensor_size = aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT ? graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
     iftDataSet *Z = iftCreateDataSet(nsamples, tensor_size);
 
     iftLabeledSet *seed = S;
