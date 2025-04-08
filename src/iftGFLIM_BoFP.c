@@ -2301,11 +2301,11 @@ float *iftGFLIMDecodeNode(iftFLIMGraphNode node, iftFLIMGraph *graph,
                           float lambda)
 {
     /* estimate mean of activations across channels */
-    float *mean = iftAllocFloatArray(nlabels);
-    float *nkernels = iftAllocFloatArray(nlabels);
+    float mean[2] = {0.0, 0.0};
+    float nkernels[2] = {0.0, 0.0};
     for (int b = 0; b < graph->num_feats; b++)
     {
-        int label = channel_label[b] - min_label;
+        int label = channel_label[b] == -1 ? 0 : 1;
         float mean_feat = node.feats[b];
 
         iftSet *adj = node.adj;
@@ -2317,19 +2317,18 @@ float *iftGFLIMDecodeNode(iftFLIMGraphNode node, iftFLIMGraph *graph,
         mean[label] += mean_feat;
         nkernels[label]++;
     }
-    for (int l = 0; l < nlabels; l++)
-        mean[l] /= (nkernels[l] * (node.numNeighbors + 1));
+    
+    mean[0] /= (nkernels[0] * (node.numNeighbors + 1));
+    mean[1] /= (nkernels[1] * (node.numNeighbors + 1));
 
     float *weight = iftAllocFloatArray(graph->num_feats); // do not compute weight for background
     for (int b = 0; b < graph->num_feats; b++)
     {
-        int l = channel_label[b] - min_label;
-
-        if (l > 1 && mean[0] < lambda * mean[l])
+        if (channel_label[b] > 0 && mean[0] > mean[1])
             weight[b] = 1;
         else
         {
-            if (l == 0 && mean[1] < lambda * mean[0])
+            if (channel_label[b] < 0 && mean[0] < mean[1])
                 weight[b] = -1;
             else
                 weight[b] = 0;
@@ -2377,11 +2376,11 @@ float *iftGFLIMDecodeNode(iftFLIMGraphNode node, iftFLIMGraph *graph,
  * @brief Decode the features using a Graph Adaptive Decoder.
  * @param graph The input graph.
  * @param channel_label An array with the kernel labels.
- * @return The decoded graph.
+ * @return The saliency of the nodes.
  * @note The channel_label is used to define the object and background channels.
  * @note This function normalizes the graph node features.
  */
-float **iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_label)
+float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_label)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -2396,64 +2395,75 @@ float **iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_label)
     printf("\t channel_label: %s\n", channel_label == NULL ? "NULL" : "not NULL");
 #endif
 
-    float lambda = 1.2;
-
-    int max_label = channel_label[0], min_label = channel_label[0];
-    for (int b = 0; b < graph->num_feats; b++)
-    {
-        max_label = iftMax(max_label, channel_label[b]);
-        min_label = iftMin(min_label, channel_label[b]);
-    }
-    int nlabels = max_label - min_label + 1;
-
+    //float lambda = 1.2;
     /* Normalize activations per channel */
-    float *max_channel = iftAllocFloatArray(nlabels);
+    int nchannels[2] = {0, 0};
     for (int b = 0; b < graph->num_feats; b++)
     {
+        int label = channel_label[b] == -1 ? 0 : 1;
         float maxval = graph->nodes[0].feats[b];
         for (int p = 1; p < graph->num_nodes; p++)
         {
             maxval = iftMax(graph->nodes[p].feats[b], maxval);
         }
-        int label = channel_label[b] - min_label;
-        max_channel[label] = maxval;
 
         for (int p = 1; p < graph->num_nodes; p++)
         {
-            if (max_channel[label] > 0)
-                graph->nodes[p].feats[b] /= max_channel[label];
+            if (maxval > 0)
+                graph->nodes[p].feats[b] /= maxval;
             else
                 graph->nodes[p].feats[b] = 0;
         }
+        nchannels[label]++;
     }
-
-    float **saliencyGraph = (float **)iftAlloc(graph->num_nodes, sizeof(float *));
+    
+    float *saliencyGraph = (float *)iftAlloc(graph->num_nodes, sizeof(float));
 
     /* Estimate saliency of each pixel */
+#pragma parallel for
     for (int p = 0; p < graph->num_nodes; p++)
     {
-        float *weight = iftGFLIMDecodeNode(graph->nodes[p], graph, nlabels, min_label, channel_label, lambda);
+        iftFLIMGraphNode node = graph->nodes[p];
 
-        iftFLIMGraphNode *node = &(graph->nodes[p]);
-        saliencyGraph[p] = iftAllocFloatArray(nlabels - 1);
+        /* estimate mean of activations across channels */
+        float mean[2] = {0.0, 0.0};
         for (int b = 0; b < graph->num_feats; b++)
         {
-            int label = channel_label[b] - min_label;
-            if (label > 0)
-            {
-                label--;
-            }
-            saliencyGraph[p][label] += node->feats[b] * weight[b];
-        }
-        for (int l = 0; l < nlabels - 1; l++)
-        {
-            if (saliencyGraph[p][l] < 0) /* RELU */
-                saliencyGraph[p][l] = 0;
-        }
-        iftFree(weight);
-    }
+            int label = channel_label[b] == -1 ? 0 : 1;
+            float mean_feat = node.feats[b];
 
-    iftFree(max_channel);
+            iftSet *adj = node.adj;
+            while (adj != NULL)
+            {
+                mean_feat += graph->nodes[adj->elem].feats[b];
+                adj = adj->next;
+            }
+            mean[label] += mean_feat;
+        }
+
+        mean[0] /= (nchannels[0] * (node.numNeighbors + 1));
+        mean[1] /= (nchannels[1] * (node.numNeighbors + 1));
+
+        float weight[graph->num_feats]; // do not compute weight for background
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            if (channel_label[b] > 0 && mean[0] > mean[1])
+                weight[b] = 1;
+            else
+            {
+                if (channel_label[b] < 0 && mean[0] < mean[1])
+                    weight[b] = -1;
+                else
+                    weight[b] = 0;
+            }
+        }
+
+        for (int b = 0; b < graph->num_feats; b++)
+            saliencyGraph[p] += node.feats[b] * weight[b];
+        
+        if (saliencyGraph[p] < 0) /* RELU */
+            saliencyGraph[p] = 0;
+    }
 
     return (saliencyGraph);
 }
@@ -2519,7 +2529,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
     iftFImage **salie = NULL;
     iftMImage *mimg = NULL;
     float *weight = NULL;
-    float **saliencyGraph = NULL;
+    float *saliencyGraph = NULL;
     iftImageArray *smap = NULL;
 
     scale[0] = (float)label_img0->xsize / (float)label_img->xsize;
@@ -2572,9 +2582,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         // fill the saliency image with the saliency of the graph nodes.
         for (int p = 0; p < label_img->n; p++)
         {
-            int node = label_img->val[p] - 1;
-            for (int l = 0; l < nlabels - 1; l++)
-                salie[l]->val[p] = saliencyGraph[node][l];
+            salie[0]->val[p] = saliencyGraph[label_img->val[p] - 1];
         }
 
         break;
@@ -2605,8 +2613,6 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
 
     if (saliencyGraph != NULL)
     {
-        for (int p = 0; p < graph->num_nodes; p++)
-            iftFree(saliencyGraph[p]);
         iftFree(saliencyGraph);
     }
 

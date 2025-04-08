@@ -923,7 +923,7 @@ iftMImage *iftFLIMGraphAtrousAveragePooling(iftFLIMGraph *graph,
         iftDestroyIntArray(&neighbors);
 
         for (int b = 0; b < graph->num_feats; b++)
-            pool->val[p][b] /= (float)pool_size;
+            pool->val[p][b] /= (float)graph->num_feats;
         
     }
 
