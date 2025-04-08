@@ -64,11 +64,11 @@ typedef struct iftFLIMGraphArray{
 typedef enum {
     IFT_FLIMGRAPH_ATTENTION_NONE,           // No attention
     IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE,   // number of pixels by the total number of pixels in the graph. No softmax
-    IFT_FLIMGRAPH_ATTENTION_NODE_SIZE,    // number of pixels in the neighborhood
-    IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL, // neighbors similarity
-    IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE, // not implemented anymore // number of pixels and neighbors similarity
-    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST,
-    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE,
+    IFT_FLIMGRAPH_ATTENTION_NODE_SIZE,      // number of pixels in the neighborhood
+    IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL,   // neighbors similarity
+    IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE,    // not implemented anymore // number of pixels and neighbors similarity
+    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST, 
+    IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE,                // best attention so far
     IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_POWER2,
     IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB,
     IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY

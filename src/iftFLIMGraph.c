@@ -1342,7 +1342,7 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
 {
     iftImage *label_img_tmp = NULL;
     iftMImage *mimg;
-    iftAdjRel *A;
+    iftAdjRel *A = NULL;
     iftFLIMGraph *graph;
 
     if (iftIsColorImage(img))
@@ -1426,6 +1426,7 @@ iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, i
         for (p = 0; p < img->n; p++)
         {
             img->val[p] = (int)((double)(Imax) * ((graph->nodes[labels->val[p] - 1].feats[b] - min) / (max - min)));
+            //img->val[p] = (int)((double)(Imax) * (graph->nodes[labels->val[p] - 1].feats[b] / max));
         }
     }
 

@@ -640,7 +640,7 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftFLIMGraph *graph,
                 int p = Z1->sample[s].id;
                 iftInsertLabeledSetMarkerAndHandicap(&T, p,
                                                      obj_label_map[p],
-                                                     obj_label_map[p],
+                                                     c,
                                                      0);
             }
         }
@@ -1345,7 +1345,7 @@ void iftGFLIMStrideBatch(iftFLIMGraphArray *graph, iftFLIMLayer layer,
 void iftGFLIMStrideBatch_v2(iftFLIMGraphArray *graph, iftFLIMLayer layer,
                             iftImageArray *labels_img, iftGFLIMStrideType stride)
 {
-    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride <= 1)
+    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride < 2)
         return;
 
     if (stride == IFT_GFLIM_IMAGESTRIDE)
@@ -1677,7 +1677,7 @@ iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, floa
         mimgArrayOut->val[i] = iftGFLIMSumMImgToFloatArray(mimgArray->val[i], bias, inplace);
     }
 
-        return mimgArrayOut;
+    return mimgArrayOut;
 }
 
 /**
@@ -2008,6 +2008,28 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
                                  iftFLIMGraphAttention attention_opt, int *kernel_labels,
                                  iftGFLIMAggregationType aggregation_opt, bool reduce)
 {
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (input == NULL)
+        printf("\t input: NULL \n");
+    else
+        printf("\t input size: %d \n", input->n);
+    if (Kmerged == NULL)
+        printf("\t Kmerged: NULL \n");
+    else
+        printf("\t Kmerged size: %d %d \n", Kmerged->nrows, Kmerged->ncols);
+    if (labels_img == NULL)
+        printf("\t labels_img: NULL \n");
+    else
+        printf("\t labels_img size: %d \n", (int)labels_img->n);
+    printf("\t bias_merged: %s\n", bias_merged == NULL ? "NULL" : "not NULL");
+    printf("\t stride: %d\n", stride);
+    printf("\t attention_opt: %d\n", attention_opt);
+    printf("\t kernel_labels: %s\n", kernel_labels == NULL ? "NULL" : "not NULL");
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+    printf("\t reduce: %s\n", reduce ? "true" : "false");
+#endif
+
     bool **maintain_kernels = NULL;
     if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
     {
@@ -2613,6 +2635,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         iftDestroyFImage(&smap_interp);
         iftDestroyFImage(&salie[l]);
     }
+    iftFree(salie);
 
     return smap;
 }
@@ -2691,13 +2714,10 @@ iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
 {
     iftFLIMGraphArray *input = iftFLIMGraphCreateEmptyFLIMGraphArray(last - first + 1);
 
-#pragma omp parallel for
     for (int k = 0; k <= last - first; k++)
     {
         int i = k + first;
         iftImage *img = iftReadImageByExt(fs->files[i]->path);
-        if (graph_type == IFT_FLIMGRAPH_TYPE_ERGC)
-            initial_seeds = 0;
         input->val[k] = iftImageToFLIMGraph(img, nsuperpixels, initial_seeds, &(label_imgs->val[k]), graph_feat, graph_type);
         iftDestroyImage(&img);
     }

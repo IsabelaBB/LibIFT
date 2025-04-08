@@ -914,16 +914,17 @@ iftMImage *iftFLIMGraphAtrousAveragePooling(iftFLIMGraph *graph,
                                                                 graph, pool_size,
                                                                 IFT_GFLIM_AGGREGATION_CONCAT);
         
-        iftDestroyIntArray(&neighbors);
         for (int i = 0, j = 0; i < pool_size; i++)
         {
             for (int b = 0; b < graph->num_feats; b++, j++)
                 pool->val[p][b] += (float)feature_vector[j];
         }
         iftFree(feature_vector);
+        iftDestroyIntArray(&neighbors);
 
         for (int b = 0; b < graph->num_feats; b++)
             pool->val[p][b] /= (float)pool_size;
+        
     }
 
     if (stride > 1)
@@ -958,14 +959,13 @@ iftMImage *iftFLIMGraphAtrousMaxPooling(iftFLIMGraph *graph,
         double *feature_vector = iftFLIMgraphAggregateFeatures(p, neighbors,
                                                             graph, pool_size,
                                                             IFT_GFLIM_AGGREGATION_CONCAT);
-        iftDestroyIntArray(&neighbors);
-        
         for (int i = 0, j = 0; i < pool_size; i++)
         {
             for (int b = 0; b < graph->num_feats; b++, j++)
                 pool->val[p][b] = iftMax(pool->val[p][b], (float)feature_vector[j]);
         }
         iftFree(feature_vector);
+        iftDestroyIntArray(&neighbors);
     }
 
     if (stride > 1)
