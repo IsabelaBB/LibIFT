@@ -1,16 +1,18 @@
 #bin/bash
 
 function usage {
-	echo "Usage: $0 [-m] [-s split] [-i init_seeds] GRAPH_FEAT SPX_ALG ARCH STRIDE_TYPE DECODER MARKERS_NAME ATTENTION AGGREGATION"
+	echo "Usage: $0 [-m nkernels_per_label] [-s split] [-i init_seeds] IMGS_DIR MARKERS_NAME GRAPH_FEAT SPX_ALG ARCH NLAYERS STRIDE_TYPE DECODER ATTENTION AGGREGATION"
 	echo "Mandatory arguments:"
+	echo "  IMGS_DIR:             Images directory. Ex: ../../datasets/baseline_flim/schisto/image-splits2d"
+	echo "  MARKERS_NAME          Name of the image markers folder. Ex: stroke_markers"
 	echo "  GRAPH_FEAT:           How the features in the graph nodes are computed. Options: MEAN, SUM, SUM_MULT_RELSIZE, MEAN_MULT_RELSIZE, MEAN_CONCAT_RELSIZE, MEAN_CONCAT_RELSIZE_NEIGHB, MEAN_CONCAT_RELSIZE_HARALICK, SUM_MULT_RELSIZE_CONCAT_HARALICK, SUM_CONCAT_HARALICK (See iftFLIMGraph.c)"
 	echo "  SPX_ALG:              DISF, ERGC"
 	echo "  ARCH:                 .json file"
+	echo "  NLAYERS               Number of layers"
 	echo "  STRIDE_TYPE:          none, image-based, graph-based"
 	echo "  DECODER:              tristate, hybrid, graph-adaptive, gaussian"
-	echo "  MARKERS_NAME:         image markers path"
 	echo "  ATTENTION:            Attention option (NONE, NODE_RELSIZE, NODE_SIZE, NEIGHB_SIMIL, COSINE_SIMILARITY, #NEIGHB_SIZE, CLASS_DOMINANCE_TEST, CLASS_DOMINANCE, CLASS_DOMINANCE_WINNER_POWER2, CLASS_DOMINANCE_SOFTMAX_NEIGHB"
-	echo "	AGGREGATION:		  Aggregation option (CONCAT, MEAN, WMEAN)"
+	echo "  AGGREGATION:		  Aggregation option (CONCAT, MEAN, WMEAN)"
 	echo "Optional arguments:"
 	echo "  -m:                   perform a second kmeans per label"
 	echo "  -s:                   split (1, 2, or 3). Default: 3 splits"
@@ -18,19 +20,17 @@ function usage {
 	exit 1
 }
 
-NLAYERS="3";
-
 # Optional arguments
 KMEANS=1;
 SPLIT=0;
 INIT_SEEDS="0";
-KERNEL_REMOVAL=0;
+KERNEL_REMOVAL="0";
 DROPOUT=0;
-while getopts "ms:i:" opt
+while getopts "dm:s:i:" opt
 do
     case "${opt}" in 
-		m) KERNEL_REMOVAL=1;;
-		#d) DROPOUT=1;;
+		d) DROPOUT=1;;
+		m) KERNEL_REMOVAL=${OPTARG};;
         s) SPLIT=${OPTARG};;
 		i) INIT_SEEDS=${OPTARG};;
 		*) exit 1;;
@@ -43,20 +43,22 @@ if [ ${SPLIT} != "0" ] && [ ${SPLIT} != "1" ] && [ ${SPLIT} != "2" ] && [ ${SPLI
 	exit 1
 fi
 
-if [ "$#" -lt 8 ]; then
+if [ "$#" -lt 10 ]; then
 	echo "num args: $#" 
 	usage
 fi
 
 # Mandatory arguments
-GRAPH_FEAT=$1; # MEAN, SUM, SUM_MULT_RESIZE, MEAN_CONCAT_RESIZE
-SPX_ALG=$2; # DISF, ERGC
-ARCH=$3; # .json file
-STRIDE_TYPE=$4; # none, image-based, graph-based
-DECODER=$5; # tristate, hybrid, graph-adaptive, gaussian
-MARKERS_NAME=$6;
-ATTENTION=$7;
-AGGREGATION=$8;
+IMGS_DIR=$1; # ../../datasets/baseline_flim/schisto/image-splits2d
+MARKERS_NAME=$2; # stroke_markers
+GRAPH_FEAT=$3; # MEAN, SUM, SUM_MULT_RESIZE, MEAN_CONCAT_RESIZE
+SPX_ALG=$4; # DISF, ERGC
+ARCH=$5; # .json file path
+NLAYERS=$6;
+STRIDE_TYPE=$7; # none, image-based, graph-based
+DECODER=$8; # tristate, hybrid, graph-adaptive, gaussian
+ATTENTION=$9;
+AGGREGATION=${10};
 
 # Set stride folder name
 case $STRIDE_TYPE in
@@ -71,8 +73,8 @@ case $STRIDE_TYPE in
 		exit 1;;
 esac
 
-function execGFLIM {
-	# model directory
+function AssignVariables {
+	IMG_PATH="${IMGS_DIR}/split${s}/orig/val/";
 	tmp=""
 	if [ "$SPX_ALG" == "DISF" ]; then
 		tmp+="${INIT_SEEDS}-"
@@ -82,8 +84,8 @@ function execGFLIM {
 		tmp+="noKmeans";
 	else 
 		tmp+="kmeans"
-		if [ ${KERNEL_REMOVAL} -eq 1 ]; then
-			tmp+="-reduce";
+		if [ ${KERNEL_REMOVAL} != "0" ]; then
+			tmp+="-reduce${KERNEL_REMOVAL}";
 		fi
 		if [ ${DROPOUT} -eq 1 ]; then
 			tmp+="-dropout";
@@ -92,10 +94,13 @@ function execGFLIM {
 	if [ ${AGGREGATION} != "CONCAT" ]; then
 		tmp+="-agg${AGGREGATION}"
 	fi
-	
-	MODEL_DIR="./schisto/split${s}/${MARKERS_NAME}/gflim-BoFP/${STRIDE_FOLDER_NAME}/${SPX_ALG}/${tmp}/${GRAPH_FEAT}-${ATTENTION}/";	# model directory
 
-	ARGS="../datasets/baseline_flim/schisto/image-splits2d/split${s}/orig/val/ "; 	# img_dir
+	MODEL_DIR="./schisto/split${s}/${MARKERS_NAME}/gflim-BoFP/${STRIDE_FOLDER_NAME}/${SPX_ALG}/${tmp}/${GRAPH_FEAT}-${ATTENTION}/";	# model directory
+}
+
+function execGFLIM {
+
+	ARGS="${IMG_PATH} "; # img_dir
 	ARGS+="${ARCH} "; # arch file path
 	ARGS+="${NLAYERS} "; # nlayers
 	ARGS+="${MODEL_DIR} ${STRIDE_TYPE} ${spx} ${GRAPH_FEAT} ${SPX_ALG} ${DECODER} ";
@@ -103,15 +108,9 @@ function execGFLIM {
 	ARGS+="64 "; # bach size
 	ARGS+="${AGGREGATION} ";
 	
-	if [ "$DROPOUT" -eq 1 ]; then
-		ARGS+="-dropout ";
-	fi	
-	
-	if [ "$SPX_ALG" == "DISF" ]; then
-		ARGS+="-init_seeds ${INIT_SEEDS} ";
-	fi	
+	[ ${DROPOUT} -eq 1 ] && ARGS+="-dropout ";
+	[ "$SPX_ALG" == "DISF" ] && ARGS+="-init_seeds ${INIT_SEEDS} ";
 
-	echo "split ${s}, stride ${STRIDE_TYPE}, spx ${spx}, graph feature ${GRAPH_FEAT}, sup. algorithm ${SPX_ALG}, decoder ${DECODER}, arch ${ARCH}, aggregation ${AGGREGATION}";
 	python3 ../demo/GFLIM/GFLIM-extract.py ${ARGS};
 }
 
@@ -142,10 +141,12 @@ esac
 if [ ${SPLIT} == "0" ]; then
 	for s in 1 2 3; do
 		spx=${superpixels[${s}-1]};
+		AssignVariables;
 		execGFLIM;
 	done;
 else
 	s=$((${SPLIT} + 0));
 	spx=${superpixels[${s}-1]};
+	AssignVariables;
 	execGFLIM;
 fi

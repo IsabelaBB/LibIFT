@@ -1,39 +1,40 @@
 #bin/bash
 
 function usage {
-	echo "Usage: $0 [-am] [-s split] [-i init_seeds] GRAPH_FEAT SPX_ALG ARCH STRIDE_TYPE DECODER MARKERS_NAME ATTENTION AGGREGATION"
+	echo "Usage: $0 [-a] [-m nkernels_per_label] [-s split] [-i init_seeds] IMGS_DIR MARKERS_DIR MARKERS_NAME GRAPH_FEAT SPX_ALG ARCH NLAYERS STRIDE_TYPE DECODER ATTENTION AGGREGATION"
 	echo "Mandatory arguments:"
-	echo "  GRAPH_FEAT:           MEAN, SUM, SUM_MULT_RELSIZE, MEAN_MULT_RELSIZE, MEAN_CONCAT_RELSIZE, MEAN_CONCAT_RELSIZE_NEIGHB, MEAN_CONCAT_RELSIZE_HARALICK, SUM_MULT_RELSIZE_CONCAT_HARALICK, SUM_CONCAT_HARALICK (See iftFLIMGraph.c)"
+	echo "  IMGS_DIR:             Images directory. Ex: ../../datasets/baseline_flim/schisto/image-splits2d"
+	echo "  MARKERS_DIR:          Image markers directory. Ex: ../../datasets/baseline_flim/schisto"
+	echo "  MARKERS_NAME          Name of the image markers folder. Ex: stroke_markers"
+	echo "  GRAPH_FEAT:           How to compute graph nodes features. Options: MEAN, SUM, SUM_MULT_RELSIZE, MEAN_MULT_RELSIZE, MEAN_CONCAT_RELSIZE, MEAN_CONCAT_RELSIZE_NEIGHB, MEAN_CONCAT_RELSIZE_HARALICK, SUM_MULT_RELSIZE_CONCAT_HARALICK, SUM_CONCAT_HARALICK (See iftFLIMGraph.c)"
 	echo "  SPX_ALG:              DISF, ERGC"
 	echo "  ARCH:                 architecture file (.json)"
+	echo "  NLAYERS               Number of layers"
 	echo "  STRIDE_TYPE:          none, image-based, graph-based"
 	echo "  DECODER:              tristate, hybrid, graph-adaptive, gaussian"
-	echo "  MARKERS_NAME          image markers path"
 	echo "  ATTENTION:            Attention option (NONE, NODE_RELSIZE, NODE_SIZE, NEIGHB_SIMIL, COSINE_SIMILARITY, #NEIGHB_SIZE, CLASS_DOMINANCE_TEST, CLASS_DOMINANCE, CLASS_DOMINANCE_WINNER_POWER2, CLASS_DOMINANCE_SOFTMAX_NEIGHB)"
-	echo "	AGGREGATION:		  Aggregation option (CONCAT, MEAN, WMEAN)"
+	echo "  AGGREGATION:          Aggregation option (CONCAT, MEAN, WMEAN)"
 	echo "Optional arguments:"
-	echo "  -a:                   write activations"
+	echo "  -a:                   write the activations of the training set per layer"
 	echo "  -m:                   perform a second kmeans per label"
 	echo "  -s:                   split (1, 2, or 3). Default: 3 splits"
-	echo "  -i:                   initial seeds (needed if SPX_ALG is DISF"
+	echo "  -i:                   number of initial seeds. Needed if SPX_ALG is DISF)"
 	exit 1
 }
-
-NLAYERS="3";
 
 # Optional arguments
 ACTIVATIONS=0;
 KMEANS=1;
 SPLIT=0;
 INIT_SEEDS="0";
-KERNEL_REMOVAL=0;
+KERNEL_REMOVAL="0";
 DROPOUT=0;
-while getopts "ams:i:" opt
+while getopts "adm:s:i:" opt
 do
     case "${opt}" in
         a) ACTIVATIONS=1;;
-		m) KERNEL_REMOVAL=1;;
-		#d) DROPOUT=1;;
+		d) DROPOUT=1;;
+		m) KERNEL_REMOVAL=${OPTARG};;
         s) SPLIT=${OPTARG};;
 		i) INIT_SEEDS=${OPTARG};;
 		*) exit 1;;
@@ -46,20 +47,23 @@ if [ ${SPLIT} != "0" ] && [ ${SPLIT} != "1" ] && [ ${SPLIT} != "2" ] && [ ${SPLI
 	exit 1
 fi
 
-if [ "$#" -lt 8 ]; then
+if [ "$#" -lt 11 ]; then
 	echo "num args: $#" 
 	usage
 fi
 
 # Mandatory arguments
-GRAPH_FEAT=$1; # MEAN, SUM, SUM_MULT_RESIZE, MEAN_MULT_RESIZE, MEAN_CONCAT_RESIZE, ..
-SPX_ALG=$2; # DISF, ERGC
-ARCH=$3; # .json file
-STRIDE_TYPE=$4; # none, image-based, graph-based
-DECODER=$5; # tristate, hybrid, graph-adaptive, gaussian
-MARKERS_NAME=$6;
-ATTENTION=$7;
-AGGREGATION=$8;
+IMGS_DIR=$1; # ../../datasets/baseline_flim/schisto/image-splits2d
+MARKERS_DIR=$2; # ../../datasets/baseline_flim/schisto/
+MARKERS_NAME=$3; # stroke_markers
+GRAPH_FEAT=$4; # MEAN, SUM, SUM_MULT_RESIZE, MEAN_MULT_RESIZE, MEAN_CONCAT_RESIZE, ..
+SPX_ALG=$5; # DISF, ERGC
+ARCH=$6; # .json file path
+NLAYERS=$7;
+STRIDE_TYPE=$8; # none, image-based, graph-based
+DECODER=$9; # tristate, hybrid, graph-adaptive, gaussian
+ATTENTION=${10};
+AGGREGATION=${11};
 
 # Set stride folder name
 case $STRIDE_TYPE in
@@ -76,9 +80,8 @@ esac
 
 function AssignVariables {
 	# Assign variables
-	IMG_DIR="../datasets/baseline_flim/schisto/image-splits2d/split${s}/orig/train/"	# images directory
-	GT_DIR="../datasets/baseline_flim/schisto/image-splits2d/split${s}/label/train/"	# ground truth directory
-	MARKERS_DIR="../datasets/baseline_flim/schisto/${MARKERS_NAME}/split${s}/"			# markers directory
+	IMG_PATH="${IMGS_DIR}/split${s}/orig/train/"	# images directory
+	MARKERS_PATH="${MARKERS_DIR}/${MARKERS_NAME}/split${s}/" # markers directory
 	
 	tmp=""
 	if [ "$SPX_ALG" == "DISF" ]; then
@@ -89,8 +92,8 @@ function AssignVariables {
 		tmp+="noKmeans";
 	else 
 		tmp+="kmeans"
-		if [ ${KERNEL_REMOVAL} -eq 1 ]; then
-			tmp+="-reduce";
+		if [ ${KERNEL_REMOVAL} != "0" ]; then
+			tmp+="-reduce${KERNEL_REMOVAL}";
 		fi
 		if [ ${DROPOUT} -eq 1 ]; then
 			tmp+="-dropout";
@@ -104,24 +107,16 @@ function AssignVariables {
 }
 
 function execGFLIM {
-	ARGS="${IMG_DIR} ${MARKERS_DIR} ${ARCH} ";
+	ARGS="${IMG_PATH} ${MARKERS_PATH} ${ARCH} ";
 	ARGS+="${NLAYERS} "; # nlayers
 	ARGS+="${MODEL_DIR} ${STRIDE_TYPE} ${spx} ${GRAPH_FEAT} ${SPX_ALG} ${DECODER} ${ATTENTION} ${AGGREGATION} ";	
 
-	ARGS+="-init_seeds ${INIT_SEEDS} ";	# init seeds (DISF)
-	
-	[ ${KERNEL_REMOVAL} -eq 1 ] && ARGS+="-reduce_kernels ";
+	[ "$SPX_ALG" == "DISF" ] && ARGS+="-init_seeds ${INIT_SEEDS} ";	# init seeds (DISF)
+	[ ${KERNEL_REMOVAL} != "0" ] && ARGS+="-reduce_kernels ${KERNEL_REMOVAL} ";
 	[ ${DROPOUT} -eq 1 ] && ARGS+="-dropout ";
-	[ ${ACTIVATIONS} -eq 1 ] && ARGS+="-act ";											# write activations
+	[ ${ACTIVATIONS} -eq 1 ] && ARGS+="-act ";	# write activations
 	
-	out="split ${s}, stride ${STRIDE_TYPE}, alg ${SPX_ALG}, feat ${GRAPH_FEAT}, spx ${spx}, arch ${ARCH}, att ${ATTENTION}, agg ${AGGREGATION}, opt: "
-	[ ${ACTIVATIONS} -eq 1 ] && out+="-act ";
-	[ ${KERNEL_REMOVAL} -eq 1 ] && out+="-reduce_kernels ";
-	[ ${DROPOUT} -eq 1 ] && out+="-dropout ";
-	out+="-init_seeds ${INIT_SEEDS} ";	# init seeds (DISF)
-	
-	echo "${out}"
-	python3 ../demo/GFLIM/BoFP/GFLIM-BoFP-train.py ${ARGS};
+	python3 ../demo/GFLIM/GFLIM-BoFP/GFLIM-BoFP-train.py ${ARGS};
 }
 
 
