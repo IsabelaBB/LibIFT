@@ -1353,8 +1353,8 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
     switch (graph_type)
     {
     case IFT_FLIMGRAPH_TYPE_DISF:
-        A = iftCircular(2.0);
-        label_img_tmp = iftERGC(mimg, A, &num_superpixels, param);
+        A = iftCircular(sqrtf(2.0));
+        label_img_tmp = iftDISF(mimg, A, param, num_superpixels, NULL);
         break;
 
     case IFT_FLIMGRAPH_TYPE_ERGC:
