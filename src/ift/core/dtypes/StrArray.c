@@ -73,8 +73,8 @@ char *iftStrArrayAsString(  iftStrArray *sarr) {
     
     sprintf(str, "[");
     for (long i = 0; i <= (sarr->n-2); i++)
-        sprintf(str, "%s\"%s\", ", str, sarr->val[i]);
-    sprintf(str, "%s\"%s\"]", str, sarr->val[sarr->n-1]);
+        sprintf(str+strlen(str), "\"%s\", ", sarr->val[i]);
+    sprintf(str+strlen(str), "\"%s\"]", sarr->val[sarr->n-1]);
     
     return str;
 }
@@ -90,7 +90,7 @@ iftStrArray *iftStrValues(int n, ...) {
     
     for (i = 0; i < n; ++i) {
         str = va_arg ( arguments, const char* );
-        strcpy(array->val[i], str);
+        sprintf(array->val[i], "%s", str);
     }
     
     va_end ( arguments );                  // Cleans up the list

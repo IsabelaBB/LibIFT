@@ -38,6 +38,7 @@ iftGVal iftInitUCharGVal(uchar val) {
 iftGVal iftInitStrGVal(const char *val) {
     char *str = (char *) calloc(strlen(val)+1, sizeof(char));
     strcpy(str, val);
+    str[strlen(val)] = '\0';
     iftGVal gv;
     gv.type = IFT_STR_TYPE;
     gv.str_val = str;
@@ -231,7 +232,7 @@ char *iftGValToString(iftGVal gval) {
             else sprintf(str, "%p", gval.ptr_val);
             break;
         default:
-            strcpy(str, "");
+            strcpy(str, "\0");
             break;
     }
 
@@ -417,5 +418,3 @@ void iftCopyVoxel(iftVoxel *src, iftVoxel *dst) {
     (*dst).z = (*src).z;
     (*dst).t = (*src).t;    
 }
-
-

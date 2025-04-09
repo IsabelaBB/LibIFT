@@ -99,8 +99,8 @@ char *iftFloatArrayAsString(  iftFloatArray *farr) {
     
     sprintf(str, "[");
     for (long i = 0; i <= (farr->n-2); i++)
-        sprintf(str, "%s%f, ", str, farr->val[i]);
-    sprintf(str, "%s%f]", str, farr->val[farr->n-1]);
+        sprintf(str+strlen(str), "%f, ", farr->val[i]);
+    sprintf(str+strlen(str), "%f]", farr->val[farr->n-1]);
     
     return str;
 }

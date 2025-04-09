@@ -1217,10 +1217,10 @@ char *iftMatrixAsString( iftMatrix *mat) {
 	
         sprintf(str_row, "[");
         for (long j = 0; j <= (mat->ncols-2); j++) {
-	  sprintf(str_row, "%s%f, ", str_row, iftMatrixElem(mat, j, i));
+	  sprintf(str_row+strlen(str_row), "%f, ", iftMatrixElem(mat, j, i));
 	  
         }
-        sprintf(str_row, "%s%f]", str_row, iftMatrixElem(mat, mat->ncols-1, i));
+        sprintf(str_row+strlen(str_row), "%f]", iftMatrixElem(mat, mat->ncols-1, i));
 
         aux = str;
         str = iftConcatStrings(3, str, str_row, ", ");
@@ -1230,9 +1230,9 @@ char *iftMatrixAsString( iftMatrix *mat) {
     char *str_row = iftAlloc(2 + (16 * mat->ncols) + (mat->ncols-1), sizeof(char));
     sprintf(str_row, "[");
     for (long j = 0; j <= (mat->ncols-2); j++) {
-        sprintf(str_row, "%s%f, ", str_row, iftMatrixElem(mat, j, mat->nrows-1));
+        sprintf(str_row+strlen(str_row), "%f, ", iftMatrixElem(mat, j, mat->nrows-1));
     }
-    sprintf(str_row, "%s%f]", str_row, iftMatrixElem(mat, mat->ncols-1, mat->nrows-1));
+    sprintf(str_row+strlen(str_row), "%f]", iftMatrixElem(mat, mat->ncols-1, mat->nrows-1));
 
     aux = str;
     str = iftConcatStrings(3, str, str_row, "]");
@@ -1252,9 +1252,9 @@ char *iftStrMatrixAsString( iftStrMatrix *mat) {
 
         sprintf(str_row, "[");
         for (long j = 0; j <= (mat->ncols-2); j++) {
-            sprintf(str_row, "%s\"%s\", ", str_row, iftMatrixElem(mat, j, i));
+            sprintf(str_row+strlen(str_row), "\"%s\", ", iftMatrixElem(mat, j, i));
         }
-        sprintf(str_row, "%s\"%s\"]", str_row, iftMatrixElem(mat, mat->ncols-1, i));
+        sprintf(str_row+strlen(str_row), "\"%s\"]", iftMatrixElem(mat, mat->ncols-1, i));
 
         aux = str;
         str = iftConcatStrings(3, str, str_row, ", ");
@@ -1264,9 +1264,9 @@ char *iftStrMatrixAsString( iftStrMatrix *mat) {
     char *str_row = iftAlloc(2 + (2050 * mat->ncols) + (mat->ncols-1), sizeof(char));        
     sprintf(str_row, "[");
     for (long j = 0; j <= (mat->ncols-2); j++) {
-        sprintf(str_row, "%s\"%s\", ", str_row, iftMatrixElem(mat, j, mat->nrows-1));
+        sprintf(str_row+strlen(str_row), "\"%s\", ", iftMatrixElem(mat, j, mat->nrows-1));
     }
-    sprintf(str_row, "%s\"%s\"]", str_row, iftMatrixElem(mat, mat->ncols-1, mat->nrows-1));
+    sprintf(str_row+strlen(str_row), "\"%s\"]", iftMatrixElem(mat, mat->ncols-1, mat->nrows-1));
 
     aux = str;
     str = iftConcatStrings(3, str, str_row, "]");

@@ -212,7 +212,7 @@ void iftKeyValToString(iftKeyVal kv, char **out_key, char **out_val) {
     // prints the val
     switch(kv.val.type) {
         case IFT_UNTYPED:
-            strcpy(val, "");
+            strcpy(val, "\0");
         case IFT_BOOL_TYPE:
             sprintf(val, "%s", kv.val.bool_val ? "true" : "false");
             break;
@@ -572,7 +572,6 @@ bool iftInsertKeyValIntoDict(iftGVal key, iftGVal val, iftDict *dict) {
     if (key.type == IFT_STR_TYPE) {
         iftSList *SL = iftSplitString(key.str_val, ":");
         
-        
         // string key has a sub-key, which must be an intermediate dict
         if (SL->n > 1) {
             char *sub_key = iftRemoveSListHead(SL);
@@ -640,8 +639,9 @@ bool iftInsertKeyValIntoDict(iftGVal key, iftGVal val, iftDict *dict) {
             iftFree(dict->table[h].key.str_val);
             dict->table[h].key.str_val = NULL;
         }
-        if (dict->table[h].val.type == IFT_STR_TYPE)
+        if (dict->table[h].val.type == IFT_STR_TYPE){
             iftFree(dict->table[h].val.str_val);
+        }
         else if (dict->erase_elements)
             iftFreeGVal(dict->table[h].val);
     }
