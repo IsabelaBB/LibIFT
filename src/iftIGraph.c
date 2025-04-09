@@ -949,7 +949,7 @@ iftIGraph *iftExplicitIGraph(  iftMImage *img,   iftImage *mask,   iftImage *lab
 	   among adjacent voxels, according to A, there are nodes to
 	   form the arcs. One can use it to create a graph on the
 	   surface of a 3D object, for instance. */
-	
+
 	for (p=0; p < img->n; p++) {
 	  s = igraph->index->val[p];
 	  if (s != IFT_NIL){
@@ -1940,7 +1940,7 @@ int *iftIGraphSuperpixelCentersUsingSpatialInformation(iftIGraph *igraph, int *s
 
     featp = iftAllocFloatArray(ndim);
     featq = iftAllocFloatArray(ndim);
-    
+
     feat   = (float **)iftAlloc(nseeds,sizeof(float *));
     nelems = iftAllocFloatArray(nseeds);
     center = iftAllocIntArray(nseeds);
@@ -1951,56 +1951,61 @@ int *iftIGraphSuperpixelCentersUsingSpatialInformation(iftIGraph *igraph, int *s
         for (j = 0; j < igraph->nfeats; ++j)
             seed_features[i][j] = 0;
     }
-
+    
     for (s=0; s < igraph->nnodes; s++) {
         p = igraph->node[s].voxel;
 	
         i = igraph->label[igraph->root[p]]-1;
 
-        nelems[i]++;
-
-        u = iftGetVoxelCoord(igraph->index,p);
-
-        feat[i][0] += u.x;
-        feat[i][1] += u.y;
-        feat[i][2] += u.z;
-        /* update seed features NEW */
-        for (j = 0; j < igraph->nfeats; ++j)
+	if (i >= 0) {
+	  
+	  nelems[i]++;
+	
+	  u = iftGetVoxelCoord(igraph->index,p);
+	  
+	  feat[i][0] += u.x;
+	  feat[i][1] += u.y;
+	  feat[i][2] += u.z;
+	  /* update seed features NEW */
+	  for (j = 0; j < igraph->nfeats; ++j)
             seed_features[i][j] += igraph->feat[p][j];
-    }
-
-    for (i=0; i < nseeds; i++) {
-        for (j=0; j < ndim; j++)
+	}
+	
+	for (i=0; i < nseeds; i++) {
+	  for (j=0; j < ndim; j++)
             feat[i][j] /= nelems[i];
-        /* update seed features NEW */
-        for (j = 0; j < igraph->nfeats; ++j)
+	  /* update seed features NEW */
+	  for (j = 0; j < igraph->nfeats; ++j)
             seed_features[i][j] /= nelems[i];
+	}
     }
-
+    
     /* compute the closest node to each superpixel center */
 
     for (s=0; s < igraph->nnodes; s++) {
-        p     = igraph->node[s].voxel;
-        i     = igraph->label[igraph->root[p]]-1;
-        q     = igraph->node[center[i]].voxel;
+      p     = igraph->node[s].voxel;
+      i     = igraph->label[igraph->root[p]]-1;
+      if (i >= 0){
+	q     = igraph->node[center[i]].voxel;
 
         u = iftGetVoxelCoord(igraph->index,p);
         v = iftGetVoxelCoord(igraph->index,q);
-
+	
         featp[0] = u.x;
         featp[1] = u.y;
         featp[2] = u.z;
-
+	
         featq[0] = v.x;
         featq[1] = v.y;
         featq[2] = v.z;
-
+	
         dist1 = iftFeatDistance(feat[i],featq,ndim);
         dist2 = iftFeatDistance(feat[i],featp,ndim);
         if (dist2 < dist1)
-            center[i]=s;
+	  center[i]=s;
+      }
     }
-
+    
     for (i=0; i < nseeds; i++) {
         iftFree(feat[i]);
     }
@@ -2069,155 +2074,155 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
       //t1 = iftTic();
 
         if (trees_for_removal != NULL)
-            frontier_nodes = iftIGraphTreeRemoval(igraph, &trees_for_removal, pvalue, IFT_INFINITY_DBL);
+	  frontier_nodes = iftIGraphTreeRemoval(igraph, &trees_for_removal, pvalue, IFT_INFINITY_DBL);
 
         while (new_seeds != NULL) { /* insert seeds in the priority
 				       queue Q with cost zero */
-            s = iftRemoveSet(&new_seeds);
-            p = igraph->node[s].voxel;
-	    if (igraph->label[p] != 0){ /* we must avoid removed seeds
-					  from previous iteration */
-	      pvalue[s] = igraph->pvalue[p] = 0;
-	      igraph->root[p] = p;
-	      igraph->pred[p] = IFT_NIL;
-	      iftInsertDHeap(Q,s);
-	    }
+	  s = iftRemoveSet(&new_seeds);
+	  p = igraph->node[s].voxel;
+	  if (igraph->label[p] != 0){ /* we must avoid removed seeds
+					 from previous iteration */
+	    pvalue[s] = igraph->pvalue[p] = 0;
+	    igraph->root[p] = p;
+	    igraph->pred[p] = IFT_NIL;
+	    iftInsertDHeap(Q,s);
+	  }
 	}
-	
+
         while (frontier_nodes != NULL) { /* insert frontier nodes in Q
 					    to represent the previous
 					    seeds */
-            s = iftRemoveSet(&frontier_nodes);
-            if (Q->color[s] == IFT_WHITE)
-                iftInsertDHeap(Q,s);
+	  s = iftRemoveSet(&frontier_nodes);
+	  if (Q->color[s] == IFT_WHITE)
+	    iftInsertDHeap(Q,s);
         }
 
-        switch(igraph->type) {
+	switch(igraph->type) {
 
             case IMPLICIT:
 
-                while (!iftEmptyDHeap(Q)) {
-                    s = iftRemoveDHeap(Q);
-                    p = igraph->node[s].voxel;
-                    //r = igraph->root[p];
-                    index_seed = igraph->label[p] - 1;
-                    //iftVoxel w = iftGetVoxelCoord(igraph->index,r);
-                    igraph->pvalue[p] = pvalue[s];
-                    u = iftGetVoxelCoord(igraph->index,p);
-                    for (i=1; i < igraph->A->n; i++) {
-                        v = iftGetAdjacentVoxel(igraph->A,u,i);
-                        if (iftValidVoxel(igraph->index,v)){
-                            q   = iftGetVoxelIndex(igraph->index,v);
-                            t   = igraph->index->val[q];
-                            if ((t != IFT_NIL) && (Q->color[t] != IFT_BLACK)){
-
-			      tmp = pvalue[s] + pow(alpha*(double)iftFeatDistance(seed_features[index_seed],igraph->feat[q],igraph->nfeats),beta) + (double)iftVoxelDistance(u,v);
-
-                                if (tmp < pvalue[t]){
-                                    pvalue[t]            = tmp;
-
-                                    /* /\* This is used for the old differential version *\/ */
-                                    /* if (igraph->label[p] != igraph->label[q]){ /\* voxels */
-                                    /* 						that */
-                                    /* 						have */
-                                    /* 						changed */
-                                    /* 						labels *\/ */
-                                    /*   iftInsertSet(&T, q); */
-                                    /* } */
-
-                                    igraph->root[q]      = igraph->root[p];
-                                    igraph->label[q]     = igraph->label[p];
-                                    igraph->pred[q]      = p;
-
-                                    if (Q->color[t] == IFT_GRAY){
-                                        iftGoUpDHeap(Q, Q->pos[t]);
-                                    } else {
-                                        iftInsertDHeap(Q,t);
-                                    }
-                                }	else {
-                                    if (igraph->pred[q] == p){
-                                        if (tmp > pvalue[t]) {
-                                            iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
-                                            if (Q->color[s] != IFT_GRAY)
-                                              iftInsertDHeap(Q, s);
-                                        } else { /* tmp == pvalue[t] */
-                                            if ((igraph->label[q] != igraph->label[p])&&(igraph->label[q]!=0)){
-                                                iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
-                                                if (Q->color[s] != IFT_GRAY)
-                                                  iftInsertDHeap(Q, s);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                break;
-
-            case EXPLICIT:
-
-                while (!iftEmptyDHeap(Q)) {
-                    s = iftRemoveDHeap(Q);
-                    p = igraph->node[s].voxel;
-                    //r = igraph->root[p];
-                    index_seed = igraph->label[p] - 1;
-                    u = iftGetVoxelCoord(igraph->index,p);
-                    igraph->pvalue[p] = pvalue[s];
-
-                    for (adj=igraph->node[s].adj; adj != NULL; adj=adj->next) {
-                        t   = adj->elem;
-                        if (Q->color[t] != IFT_BLACK){
-                            q   = igraph->node[t].voxel;
-                            v   = iftGetVoxelCoord(igraph->index,q);
-                            tmp = pvalue[s] + pow(alpha*(double)iftFeatDistance(seed_features[index_seed],igraph->feat[q],igraph->nfeats),beta) + (double)iftVoxelDistance(u,v);
-
-                            if (tmp < pvalue[t]){
-                                pvalue[t]            = tmp;
-
-                                /* /\* This is used for the old differential version *\/ */
-                                /* if (igraph->label[p] != igraph->label[q]){ /\* voxels */
-                                /* 						that */
-                                /* 						have */
-                                /* 						changed */
-                                /* 						labels *\/ */
-                                /*   iftInsertSet(&T, q); */
-                                /* } */
-
-                                igraph->root[q]      = igraph->root[p];
-                                igraph->label[q]     = igraph->label[p];
-                                igraph->pred[q]      = p;
-
-                                if (Q->color[t] == IFT_GRAY){
-                                    iftGoUpDHeap(Q, Q->pos[t]);
-                                } else {
-                                    iftInsertDHeap(Q,t);
-                                }
+	      while (!iftEmptyDHeap(Q)) {
+		s = iftRemoveDHeap(Q);
+		p = igraph->node[s].voxel;
+		//r = igraph->root[p];
+		index_seed = igraph->label[p] - 1;
+		//iftVoxel w = iftGetVoxelCoord(igraph->index,r);
+		igraph->pvalue[p] = pvalue[s];
+		u = iftGetVoxelCoord(igraph->index,p);
+		for (i=1; i < igraph->A->n; i++) {
+		  v = iftGetAdjacentVoxel(igraph->A,u,i);
+		  if (iftValidVoxel(igraph->index,v)){
+		    q   = iftGetVoxelIndex(igraph->index,v);
+		    t   = igraph->index->val[q];
+		    if ((t != IFT_NIL) && (Q->color[t] != IFT_BLACK)){
+		      
+		      tmp = pvalue[s] + pow(alpha*(double)iftFeatDistance(seed_features[index_seed],igraph->feat[q],igraph->nfeats),beta) + (double)iftVoxelDistance(u,v);
+		      
+		      if (tmp < pvalue[t]){
+			pvalue[t]            = tmp;
+			
+			/* /\* This is used for the old differential version *\/ */
+			/* if (igraph->label[p] != igraph->label[q]){ /\* voxels */
+			/* 						that */
+			/* 						have */
+			/* 						changed */
+			/* 						labels *\/ */
+			/*   iftInsertSet(&T, q); */
+			/* } */
+			
+			igraph->root[q]      = igraph->root[p];
+			igraph->label[q]     = igraph->label[p];
+			igraph->pred[q]      = p;
+			
+			if (Q->color[t] == IFT_GRAY){
+			  iftGoUpDHeap(Q, Q->pos[t]);
+			} else {
+			  iftInsertDHeap(Q,t);
+			}
+		      }	else {
+			if (igraph->pred[q] == p){
+			  if (tmp > pvalue[t]) {
+			    iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
+			    if (Q->color[s] != IFT_GRAY)
+			      iftInsertDHeap(Q, s);
+			  } else { /* tmp == pvalue[t] */
+			    if ((igraph->label[q] != igraph->label[p])&&(igraph->label[q]!=0)){
+			      iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
+			      if (Q->color[s] != IFT_GRAY)
+				iftInsertDHeap(Q, s);
+			    }
+			  }
+			}
+		      }
+		    }
+		  }
+		}
+	      }
+	      break;
+		
+	case EXPLICIT:
+	  
+	  while (!iftEmptyDHeap(Q)) {
+	    s = iftRemoveDHeap(Q);
+	    p = igraph->node[s].voxel;
+	    //r = igraph->root[p];
+	    index_seed = igraph->label[p] - 1;
+	    u = iftGetVoxelCoord(igraph->index,p);
+	    igraph->pvalue[p] = pvalue[s];
+	    
+	    for (adj=igraph->node[s].adj; adj != NULL; adj=adj->next) {
+	      t   = adj->elem;
+	      if (Q->color[t] != IFT_BLACK){
+		q   = igraph->node[t].voxel;
+		v   = iftGetVoxelCoord(igraph->index,q);
+		tmp = pvalue[s] + pow(alpha*(double)iftFeatDistance(seed_features[index_seed],igraph->feat[q],igraph->nfeats),beta) + (double)iftVoxelDistance(u,v);
+				
+		if (tmp < pvalue[t]){
+		  pvalue[t]            = tmp;
+		  
+		  /* /\* This is used for the old differential version *\/ */
+		  /* if (igraph->label[p] != igraph->label[q]){ /\* voxels */
+		  /* 						that */
+		  /* 						have */
+		  /* 						changed */
+		  /* 						labels *\/ */
+		  /*   iftInsertSet(&T, q); */
+		  /* } */
+		  
+		  igraph->root[q]      = igraph->root[p];
+		  igraph->label[q]     = igraph->label[p];
+		  igraph->pred[q]      = p;
+		  
+		  if (Q->color[t] == IFT_GRAY){
+		    iftGoUpDHeap(Q, Q->pos[t]);
+		  } else {
+		    iftInsertDHeap(Q,t);
+		  }
 		} else {
-                                if (igraph->pred[q] == p){
-                                    if (tmp > pvalue[t]) {
-                                        iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
-                                        if (Q->color[s] != IFT_GRAY)
-                                          iftInsertDHeap(Q, s);
-                                    } else { /* tmp == pvalue[t] */
-                                        if (igraph->label[q] != igraph->label[p]){
-                                            iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
-                                            if (Q->color[s] != IFT_GRAY)
-                                              iftInsertDHeap(Q, s);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+		  if (igraph->pred[q] == p){
+		    if (tmp > pvalue[t]) {
+		      iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
+		      if (Q->color[s] != IFT_GRAY)
+			iftInsertDHeap(Q, s);
+		    } else { /* tmp == pvalue[t] */
+		      if (igraph->label[q] != igraph->label[p]){
+			iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
+			if (Q->color[s] != IFT_GRAY)
+			  iftInsertDHeap(Q, s);
+		      }
+		    }
+		  }
+		}
+	      }
+	    }
+	  }
+	  
+	  break;
 
-                break;
-
-            case COMPLETE:
-                iftError("Not implemented for complete graphs", "iftIGraphISF_Mean");
+	case COMPLETE:
+	  iftError("Not implemented for complete graphs", "iftIGraphISF_Mean");
         }
-
+	
         iftResetDHeap(Q);
 
         /* /\* This is part of the old version of the DIFT *\/ */
@@ -2401,7 +2406,7 @@ void iftIGraphISFRecomputeSeedsUsingSpatialInformation(iftIGraph *igraph, int *s
 
     /* Compute superpixel centers (i.e., the closest node to the center in the feature space) */
 
-
+       
     center = iftIGraphSuperpixelCentersUsingSpatialInformation(igraph, seed, nseeds, seed_features);
 
 

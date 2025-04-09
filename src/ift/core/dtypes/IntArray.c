@@ -133,9 +133,9 @@ char *iftIntArrayAsString(  iftIntArray *iarr) {
     
     sprintf(str, "[");
     for (long i = 0; i <= (long) (iarr->n-2); i++) {
-        sprintf(str+strlen(str), "%d, ", iarr->val[i]);
+        sprintf(str, "%s%d, ", str, iarr->val[i]);
     }
-    sprintf(str+strlen(str), "%d]", iarr->val[iarr->n-1]);
+    sprintf(str, "%s%d]", str, iarr->val[iarr->n-1]);
     
     return str;
 }

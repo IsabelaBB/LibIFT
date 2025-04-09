@@ -117,8 +117,8 @@ char *iftDblArrayAsString(  iftDblArray *darr) {
     
     sprintf(str, "[");
     for (long i = 0; i <= (darr->n-2); i++)
-        sprintf(str+strlen(str), "%.10lf, ", darr->val[i]);
-    sprintf(str+strlen(str), "%.10lf]", darr->val[darr->n-1]);
+        sprintf(str, "%s%.10lf, ", str, darr->val[i]);
+    sprintf(str, "%s%.10lf]", str, darr->val[darr->n-1]);
     
     return str;
 }

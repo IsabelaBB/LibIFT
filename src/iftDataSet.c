@@ -4721,7 +4721,7 @@ void iftNormalizeDataSetByZScoreInPlace(iftDataSet *Z, iftFeatSpaceParam *fsp, f
 	Z->sample[s].feat[i] = (Z->sample[s].feat[i] - Z->fsp.mean[i])/
 	  Z->fsp.stdev[i];  
       }
-    }
+    }    
 }
 
 iftDataSet *iftNormalizeDataSetByZScore(iftDataSet *Z, iftFeatSpaceParam *fsp, float stdev_factor)
@@ -5690,10 +5690,6 @@ iftFeatSpaceParam iftReadPCAMatrix(char *filename) {
     if (fread(fsp.mean, sizeof(float), fsp.nfeats, fp) != fsp.nfeats)
         iftError("Reading error", "iftReadPCAMatrix");
 
-    fsp.stdev = iftAllocFloatArray(fsp.nfeats);
-    if (fread(fsp.stdev, sizeof(float), fsp.nfeats, fp) != fsp.nfeats)
-        iftError("Reading error", "iftReadPCAMatrix");
-
     // Read Rotation Matrix
     if (fread(&ncols, sizeof(int), 1, fp) != 1)
         iftError("Reading error", "iftReadPCAMatrix");
@@ -5701,7 +5697,7 @@ iftFeatSpaceParam iftReadPCAMatrix(char *filename) {
         iftError("Reading error", "iftReadPCAMatrix");
 
     fsp.R = iftCreateMatrix(ncols, nrows);
-    if (fread(fsp.R->val, sizeof(float), fsp.R->n, fp) != fsp.R->n)
+    if (fread(fsp.R->val, sizeof(double), fsp.R->n, fp) != fsp.R->n)
         iftError("Reading error", "iftReadPCAMatrix");
 
     fclose(fp);
@@ -5725,15 +5721,13 @@ void iftWritePCAMatrix(iftFeatSpaceParam fsp, char *filename) {
         iftError("Writing error", "iftWritePCAMatrix");
     if (fwrite(fsp.mean, sizeof(float), fsp.nfeats, fp) != fsp.nfeats)
         iftError("Writing error", "iftWritePCAMatrix");
-    if (fwrite(fsp.stdev, sizeof(float), fsp.nfeats, fp) != fsp.nfeats)
-        iftError("Writing error", "iftWritePCAMatrix");
 
     // Write Rotation Matrix
     if (fwrite(&fsp.R->ncols, sizeof(int), 1, fp) != 1)
         iftError("Writing error", "iftWritePCAMatrix");
     if (fwrite(&fsp.R->nrows, sizeof(int), 1, fp) != 1)
         iftError("Writing error", "iftWritePCAMatrix");
-    if (fwrite(fsp.R->val, sizeof(float), fsp.R->n, fp) != fsp.R->n)
+    if (fwrite(fsp.R->val, sizeof(double), fsp.R->n, fp) != fsp.R->n)
         iftError("Writing error", "iftWritePCAMatrix");
 
     fclose(fp);

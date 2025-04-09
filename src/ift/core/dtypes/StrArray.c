@@ -73,8 +73,8 @@ char *iftStrArrayAsString(  iftStrArray *sarr) {
     
     sprintf(str, "[");
     for (long i = 0; i <= (sarr->n-2); i++)
-        sprintf(str+strlen(str), "\"%s\", ", sarr->val[i]);
-    sprintf(str+strlen(str), "\"%s\"]", sarr->val[sarr->n-1]);
+        sprintf(str, "%s\"%s\", ", str, sarr->val[i]);
+    sprintf(str, "%s\"%s\"]", str, sarr->val[sarr->n-1]);
     
     return str;
 }

@@ -38,7 +38,6 @@ iftGVal iftInitUCharGVal(uchar val) {
 iftGVal iftInitStrGVal(const char *val) {
     char *str = (char *) calloc(strlen(val)+1, sizeof(char));
     strcpy(str, val);
-    str[strlen(val)] = '\0';
     iftGVal gv;
     gv.type = IFT_STR_TYPE;
     gv.str_val = str;
