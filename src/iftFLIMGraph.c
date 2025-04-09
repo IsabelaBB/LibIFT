@@ -256,10 +256,10 @@ iftFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg)
         return IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE;
     else if (strcmp(arg, "NODE_SIZE") == 0)
         return IFT_FLIMGRAPH_ATTENTION_NODE_SIZE;
-    //else if (strcmp(arg, "NEIGHB_SIZE") == 0)
-    //    return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE;
-    else if (strcmp(arg, "NEIGHB_SIMIL") == 0)
-        return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;
+    /*else if (strcmp(arg, "NEIGHB_SIZE") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE;*/
+    /*else if (strcmp(arg, "NEIGHB_SIMIL") == 0)
+        return IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;*/
     else if (strcmp(arg, "CLASS_DOMINANCE") == 0)
         return IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE;
     else if (strcmp(arg, "CLASS_DOMINANCE_TEST") == 0)
@@ -2867,11 +2867,9 @@ double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *gra
         attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
         break;
 
-    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
-        // attention_vals = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
-        // iftWarning("Attention partially implemented.", __func__);
+    /*case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
         *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
+        break;*/
 
     case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE:
         attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
@@ -3214,8 +3212,8 @@ double *iftFLIMgraphAggregateFeatures(int p,
 iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
                                        int num_adj,
                                        iftFLIMGraphAttention attention_opt,
-                                       iftGFLIMAggregationType aggregation_opt,
-                                       iftIntArray **neighbors_all)
+                                       iftGFLIMAggregationType aggregation_opt/*,
+                                       iftIntArray **neighbors_all*/)
 {
     iftIsValidFLIMGraph(graph);
     if (num_adj < 1)
@@ -3229,11 +3227,11 @@ iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
     {
         iftIntArray *neighbors = iftGetKNeighborsFLIMGraph(p, graph, num_adj, 1, true, attention_opt);
 
-        if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
+        /*if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
         {
             memcpy(neighbors_all[p]->val, neighbors->val, neighbors->n * sizeof(int));
             neighbors_all[p]->n = neighbors->n;
-        }
+        }*/
 
         double *feature_vector = iftFLIMgraphAggregateFeatures(p, neighbors, graph, num_adj, aggregation_opt);
 

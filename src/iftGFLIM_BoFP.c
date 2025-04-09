@@ -1422,15 +1422,15 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
     printf("\t reduce: %s\n", reduce ? "true" : "false");
 #endif
 
-    iftIntArray **neighbors_all = NULL;
+    /*iftIntArray **neighbors_all = NULL;
     if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL)
     {
         neighbors_all = (iftIntArray **)calloc(graph->num_nodes, sizeof(iftIntArray *));
         for (int p = 0; p < graph->num_nodes; p++)
             neighbors_all[p] = iftCreateIntArray(kernel_size);
-    }
+    }*/
 
-    iftMatrix *XI = iftFLIMGraphToFeatureMatrix(graph, kernel_size, attention_opt, aggregation_opt, neighbors_all);
+    iftMatrix *XI = iftFLIMGraphToFeatureMatrix(graph, kernel_size, attention_opt, aggregation_opt/*, neighbors_all*/);
 
 #ifdef PRINT_VALS
     printf("XI: %d %d \n", XI->nrows, XI->ncols);
@@ -1448,7 +1448,7 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
 
     switch (attention_opt)
     {
-    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
+    /*case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
         if (kernel_labels == NULL)
             iftError("kernel_labels is NULL", __func__);
         iftMatrix *XK = iftCreateMatrix(XJ->ncols, XJ->nrows);
@@ -1502,7 +1502,7 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
         iftFree(neighbors_all);
         XJ = XK;
         XK = NULL;
-        break;
+        break;*/
 
     case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST:
 
