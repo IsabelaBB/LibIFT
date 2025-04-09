@@ -1914,9 +1914,8 @@ int iftOtsu(  iftImage *img) {
     int img_max_val = iftMaximumValue(img);
     hist = iftAllocDoubleArray(img_max_val + 1);
 
-    for (i = 0; i < img->n; i++){
+    for (i = 0; i < img->n; i++)
         hist[img->val[i]] += 1.0;
-    }
 
     for (i = 0; i <= img_max_val; i++) {
         hist[i] /= img->n;
@@ -4685,9 +4684,7 @@ iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_sup
 
             // Add spel p to its tree
             superpixel_area[p_label - 1]++;
-            for(int j = 0; j < mimg->m; j++) {
-              superpixel_feats[p_label - 1][j] += mimg->val[p_index][j];
-            }
+            for(int j = 0; j < mimg->m; j++) superpixel_feats[p_label - 1][j] += mimg->val[p_index][j];
 
             // For each adjacent
             for(int i = 1; i < A->n; i++)
@@ -4695,14 +4692,14 @@ iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_sup
                 iftVoxel q_voxel;
 
                 q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-                
+
                 if(iftMValidVoxel(mimg, q_voxel))
                 {
                     int q_index, q_label;
 
                     q_index = iftMGetVoxelIndex(mimg, q_voxel);
                     q_label = label_img->val[q_index];
-                    
+
                     if(heap->color[q_index] != IFT_BLACK)
                     {
                         double cost, color_dist;
@@ -4719,7 +4716,7 @@ iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_sup
                         color_dist = sqrtf(color_dist);
 
                         cost = iftMax(cost_map[p_index], color_dist);
-                        
+
                         if(cost < cost_map[q_index])
                         {
                             cost_map[q_index] = cost;
@@ -4755,8 +4752,8 @@ iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_sup
         
         // Estimate the number of seeds to be removed 
         //num_maintain = iftMax(num_sampl_seeds * exp(-(it + 1)), num_superpixels);
-	      num_maintain  = iftMax(num_seeds*(1.0-decrement_rate),num_superpixels);
-
+	num_maintain  = iftMax(num_seeds*(1.0-decrement_rate),num_superpixels);
+	  
         // Compute the medoids
         for(iftSet *s = seeds; s != NULL; s = s->next)
         {
@@ -4871,3 +4868,252 @@ float iftGetIoUDetection(iftBoundingBox gt_bb, iftBoundingBox pred_bb) {
 
   return IoU;
 }
+
+iftImage *iftDynamicTrees(iftMImage *mimg, iftImage *seeds_in, iftImage *seeds_out){
+  iftImage   *pathval  = NULL, *label = NULL, *root = NULL;
+  iftMImage  *tree   = NULL;
+  int        *nnodes   = NULL;
+  int Imax             = iftRound(sqrtf(mimg->m)*iftMMaximumValue(mimg,-1));
+  iftGQueue  *Q        = NULL;
+  iftAdjRel  *A; 
+  int         i, p, q, r, tmp;
+  iftVoxel    u, v;
+  // Initialization
+
+  if (iftIs3DMImage(mimg))
+    A = iftSpheric(1.0);
+  else
+    A = iftCircular(1.0);
+
+  pathval    = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+  label      = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+  root       = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+  tree       = iftCreateMImage(mimg->xsize, mimg->ysize, mimg->zsize, mimg->m);
+  Q          = iftCreateGQueue(Imax+1, mimg->n, pathval->val);
+  nnodes     = iftAllocIntArray(mimg->n);
+
+  /* Initialize costs */
+    
+  for (p = 0; p < mimg->n; p++){
+    pathval->val[p] = IFT_INFINITY_INT;
+    if (seeds_in->val[p] != 0){
+      root->val[p]    = p;
+      label->val[p]   = seeds_in->val[p];
+      pathval->val[p] = 0;
+    }else{
+      if (seeds_out->val[p] != 0){
+	      root->val[p]    = p;
+	      label->val[p]   = 0;
+	      pathval->val[p] = 0;
+      }
+    }    
+    iftInsertGQueue(&Q, p);
+  }      
+
+  // Image Foresting Transform
+  
+  while (!iftEmptyGQueue(Q)){
+    p           = iftRemoveGQueue(Q);
+    r           = root->val[p];
+    nnodes[r]  += 1;
+    for (int b=0; b < mimg->m; b++) 
+      tree->val[r][b] += mimg->val[p][b];
+    
+    u           = iftMGetVoxelCoord(mimg, p);
+    
+    for (i = 1; i < A->n; i++){
+      v = iftGetAdjacentVoxel(A, u, i);
+      
+      if (iftValidVoxel(mimg, v)){
+        q = iftGetVoxelIndex(mimg, v);
+        if (Q->L.elem[q].color != IFT_BLACK) {
+          float Wi = 0.0;	  
+	  for (int b=0; b < mimg->m; b++)
+	    Wi +=  powf(mimg->val[q][b]-(tree->val[r][b]/nnodes[r]),2.0);
+	  
+	  Wi = iftRound(sqrtf(Wi));
+      
+          tmp = iftMax(pathval->val[p], (int)Wi);
+
+          if (tmp < pathval->val[q])  {
+              if (Q->L.elem[q].color == IFT_GRAY)
+                iftRemoveGQueueElem(Q,q);
+              label->val[q]    = label->val[p];
+              root->val[q]     = root->val[p];
+              pathval->val[q]  = tmp;
+              iftInsertGQueue(&Q, q);
+          }
+        }
+      }
+    }
+  }
+
+  iftDestroyAdjRel(&A);
+  iftDestroyGQueue(&Q);
+  iftDestroyImage(&pathval);
+  iftDestroyImage(&root);
+  iftDestroyMImage(&tree);
+  iftFree(nnodes);
+
+  return (label);
+}
+
+iftSet *iftSalientCompsAboveOtsu(iftImage *label, iftImage *salie)
+{
+  int T = iftOtsu(salie);
+  int nlabels = iftMaximumValue(label);
+  int *csalie = iftAllocIntArray(nlabels + 1);
+  int *nelems = iftAllocIntArray(nlabels + 1);
+  iftSet *SelectedComps = NULL;
+
+  for (int p = 0; p < label->n; p++)
+  {
+    if (label->val[p] > 0)
+    {
+      csalie[label->val[p]] += salie->val[p];
+      /* if (csalie[label->val[p]] == 0) */
+      /* { */
+      /*   csalie[label->val[p]] = salie->val[p]; */
+      /* } */
+      /* else */
+      /* { */
+      /*   if (csalie[label->val[p]] < salie->val[p]) */
+      /*     csalie[label->val[p]] = salie->val[p]; */
+      /* } */
+      nelems[label->val[p]] += 1;
+    }
+  }
+
+  for (int j = 1; j <= nlabels; j++)
+  {
+    if (nelems[j] > 0)
+    {
+      if (csalie[j]/nelems[j] >= T)
+      {
+        iftInsertSet(&SelectedComps, j);
+      }
+    }
+  }
+
+  iftFree(csalie);
+  iftFree(nelems);
+
+  return (SelectedComps);
+}
+
+iftImage *iftDelineateEggComp(
+  iftImage *comps, iftSet *SelectedComps, iftMImage *mimg,
+  float seed_erosion, float seed_dilation
+)
+{
+  /* Set inner markers */
+  iftImage *seeds_in = iftCreateImage(comps->xsize, comps->ysize, comps->zsize);
+  for (int p = 0; p < comps->n; p++)
+  {
+    if (iftSetHasElement(SelectedComps, comps->val[p]))
+    {
+      seeds_in->val[p] = 1;
+    }
+  }
+
+  /* Set outer markers */
+  iftSet *S = NULL;
+  iftImage *bin = iftErodeBin(seeds_in, &S, seed_erosion);
+  iftDestroyImage(&seeds_in);
+  seeds_in = bin;
+  bin = iftDilateBin(seeds_in, &S, seed_dilation);
+  iftImage *seeds_out = iftComplement(bin);
+  iftDestroyImage(&bin);
+  iftDestroySet(&S);
+
+  /* Delineate components simultaneously */
+  iftImage *label = iftDynamicTrees(
+    mimg, seeds_in, seeds_out
+  );
+  iftDestroyImage(&seeds_in);
+  iftDestroyImage(&seeds_out);
+
+  return (label);
+}
+  
+iftImage *iftSelectEggCompFromSaliencyMap(
+  iftImage *saliency, int border_dist,
+  int min_obj_area, int max_obj_area
+) 
+{
+  if (iftMaximumValue(saliency) > 0) {
+    iftImage *aux1 = NULL, *aux2 = NULL;
+    /* Detect binary components */
+    aux1 = iftThreshold(
+    			saliency, iftOtsu(saliency), IFT_INFINITY_INT, 255
+    );
+
+    /* Eliminate components near the image's border */
+    if (border_dist == -1) {
+      aux2 = iftCopyImage(aux1);
+    }
+    else {
+      aux2 = iftRemoveCompNearFrame(aux1, border_dist, border_dist, -1);
+    }
+
+    /* Select components within a given area interval */
+    iftDestroyImage(&aux1);
+    aux1 = iftSelectCompInAreaInterval(
+      aux2, NULL, min_obj_area, max_obj_area
+    );
+
+    /* Label componentes and select the candidates */
+    iftDestroyImage(&aux2);
+    aux2 = iftFastLabelComp(aux1, NULL);
+    iftDestroyImage(&aux1);
+
+    return aux2;
+  }
+  // If return was not reached, return an mask with 0's only 
+  else {
+    return saliency;
+  }
+}
+
+iftImage *iftSMansoniDelineation(
+  iftMImage *mimg, iftImage *saliency, int border_dist,
+  int min_obj_area, int max_obj_area, float seed_erosion,
+  float seed_dilation
+)
+{
+  iftImage *aux1 = NULL, *aux2 = NULL;
+  int Lmax=0;
+
+  aux1 = iftSelectEggCompFromSaliencyMap(
+    saliency, border_dist, min_obj_area, max_obj_area
+  );
+  
+  if ((Lmax=iftMaximumValue(aux1)) > 0) {
+    /* iftSet *SelectedComps = iftSalientCompsAboveOtsu(aux1, saliency);  */
+    /* if (SelectedComps != NULL) {  */
+      //Select all components
+    iftSet *SelectedComps = NULL;
+    for (int j=1; j <= Lmax; j++)
+      iftInsertSet(&SelectedComps, j);
+    // Delineate components
+    aux2 = iftDelineateEggComp(aux1, SelectedComps, mimg, \
+			       seed_erosion, seed_dilation);
+    /* Select components within a given area interval */
+    iftDestroyImage(&aux1);
+    aux1 = iftSelectCompInAreaInterval(aux2, NULL, \
+				       min_obj_area, max_obj_area);
+    iftDestroyImage(&aux2);
+    iftDestroySet(&SelectedComps);
+    return aux1;
+  /* }  */
+  }
+  
+  if (aux1 != saliency)
+    iftDestroyImage(&aux1);
+  
+  // If return was not reached, return an mask with 0's only
+  iftImage *bin = iftCreateImageFromImage(saliency);
+  
+  return bin;
+}
+

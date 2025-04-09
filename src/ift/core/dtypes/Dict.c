@@ -491,6 +491,7 @@ void iftPrintDictAux(  iftDict *dict, int tab, int newline) {
         unsigned long elem = 0;
         if (!iftIsDictEmpty(dict)) {
             for (iftKeyVal keyval = iftDictFirst(dict); iftDictValidKey(keyval); keyval = iftDictNext(dict, keyval), ++elem) {
+                
                 if(elem>0)//do not add comma to the first element
                     printf(",");
                 for (int i=0; i<newline; i++) printf("\n");
@@ -571,6 +572,7 @@ bool iftInsertKeyValIntoDict(iftGVal key, iftGVal val, iftDict *dict) {
     if (key.type == IFT_STR_TYPE) {
         iftSList *SL = iftSplitString(key.str_val, ":");
         
+        
         // string key has a sub-key, which must be an intermediate dict
         if (SL->n > 1) {
             char *sub_key = iftRemoveSListHead(SL);
@@ -638,11 +640,10 @@ bool iftInsertKeyValIntoDict(iftGVal key, iftGVal val, iftDict *dict) {
             iftFree(dict->table[h].key.str_val);
             dict->table[h].key.str_val = NULL;
         }
-        if (dict->table[h].val.type == IFT_STR_TYPE){
+        if (dict->table[h].val.type == IFT_STR_TYPE)
             iftFree(dict->table[h].val.str_val);
-        }else if (dict->erase_elements){
+        else if (dict->erase_elements)
             iftFreeGVal(dict->table[h].val);
-        }
     }
     
     dict->table[h].key = key;

@@ -1118,6 +1118,33 @@ iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_sup
 //! swig(newobject)
 float iftGetIoUDetection(iftBoundingBox gt_bb, iftBoundingBox pred_bb);
 
+
+//! swig(newobject)
+iftImage *iftDynamicTrees(iftMImage *mimg, iftImage *seeds_in, iftImage *seeds_out);
+
+//! swig(newobject)
+iftSet *iftSalientCompsAboveOtsu(iftImage *label, iftImage *salie);
+
+//! swig(newobject)
+iftImage *iftDelineateEggComp(
+  iftImage *comps, iftSet *SelectedComps, iftMImage *mimg,
+  float seed_erosion, float seed_dilation
+);
+
+//! swig(newobject)
+iftImage *iftSelectEggCompFromSaliencyMap(
+  iftImage *saliency, int border_dist,
+  int min_obj_area, int max_obj_area
+);
+
+//! swig(newobject)
+iftImage *iftSMansoniDelineation(
+  iftMImage *mimg, iftImage *saliency, int border_dist,
+  int min_obj_area, int max_obj_area, float seed_erosion, 
+  float seed_dilation
+);
+
+
 #ifdef __cplusplus
 }
 #endif

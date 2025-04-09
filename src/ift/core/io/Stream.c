@@ -24,9 +24,6 @@ char *iftReadFileAsString(const char *format, ...) {
     fseek(fp, 0, SEEK_SET);
     
     char *data = (char*) iftAlloc((len+1), sizeof(char));
-    if(data == NULL) {
-        iftError("Cannot allocate memory for the file content", "iftReadFileAsString");
-    }
     if (fread(data, 1, len, fp) != len)
         iftError("Number of read chars is different from the allocated string size", "iftReadFileAsString");
     

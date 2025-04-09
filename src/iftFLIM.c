@@ -598,9 +598,10 @@ iftMatrix *iftSelectRelevantKernelsByKmeans(iftMatrix *K, int ngroups, iftKmeans
     iftDestroyMatrix(&Kt);
     
     if (distance == NULL)
-        distance = iftEuclideanDistance;
+    distance = iftEuclideanDistance;
 
     iftRandomSeed(42);
+
 
     iftMatrix *kernels = iftCreateMatrix(ngroups, Z->nfeats);
 

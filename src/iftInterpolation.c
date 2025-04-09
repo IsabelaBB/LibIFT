@@ -555,94 +555,83 @@ iftImage *iftInterp2DByNearestNeighbor(  iftImage *img, float sx, float sy) {
 	return interp;
 }
 
-iftMImage *iftMInterp2D(iftMImage *mimg, float sx, float sy)
+iftMImage * iftMInterp2D(iftMImage *mimg, float sx, float sy)
 {
-  iftMImage *ximg, *yimg;
-  int xsize, ysize;
-
+  iftMImage  *ximg, *yimg;  
+  int        xsize,ysize;
+	
   if (mimg->zsize != 1)
-    iftError("Image must be 2D", "iftMInterp2D");
-  if ((sx <= 0.0) || (sy <= 0.0))
-    iftError("Invalid scale factors", "iftMInterp2D");
-
-  xsize = iftRound(fabs(sx * mimg->xsize));
-  ysize = iftRound(fabs(sy * mimg->ysize));
-
-  if (sx != 1.0)
-  {
-
+      iftError("Image must be 2D", "iftMInterp2D");
+  if ((sx <= 0.0)||(sy <= 0.0))
+      iftError("Invalid scale factors", "iftMInterp2D");
+  
+  xsize= iftRound(fabs(sx * mimg->xsize));
+  ysize= iftRound(fabs(sy * mimg->ysize));
+  
+  if (sx != 1.0) {
+    
     /* Interpolate along x */
 
     ximg = iftCreateMImage(xsize, mimg->ysize, 1, mimg->m);
-    ximg->dx = mimg->dx / sx;
+    ximg->dx = mimg->dx/sx;
     ximg->dy = mimg->dy;
-    ximg->dz = mimg->dz;
+    ximg->dz = mimg->dz;      
 
-#pragma omp parallel for shared(ximg, mimg, sx)
-    for (int b = 0; b < mimg->m; b++)
-    {
+#pragma omp parallel for shared(ximg, mimg, sx)    
+    for (int b = 0; b < mimg->m ; b++){
       iftVoxel u, v, w;
-      u.z = v.z = w.z = 0;
-      for (v.y = 0; v.y < ximg->ysize; v.y++)
-      {
-        u.y = w.y = v.y;
-        for (v.x = 0; v.x < ximg->xsize; v.x++)
-        {
-          int q = iftMGetVoxelIndex(ximg, v);
-          u.x = (int)(v.x / sx);
-          float dx = (v.x / sx) - u.x;
-          w.x = ((u.x + 1) == mimg->xsize) ? u.x : u.x + 1;
-          int p = iftMGetVoxelIndex(mimg, u);
-          int r = iftMGetVoxelIndex(mimg, w);
-          ximg->val[q][b] = mimg->val[p][b] * (1.0 - dx) + mimg->val[r][b] * dx;
-        }
+      u.z=v.z=w.z=0; 
+      for (v.y = 0; v.y < ximg->ysize; v.y++){
+	u.y = w.y = v.y;
+	for (v.x = 0; v.x < ximg->xsize; v.x++)
+	  {  
+	    int q    = iftMGetVoxelIndex(ximg,v); 
+	    u.x  = (int)(v.x/sx);
+	    float dx   = (v.x/sx) - u.x; 
+	    w.x  = ((u.x+1)==mimg->xsize)?u.x:u.x+1;
+	    int p    = iftMGetVoxelIndex(mimg,u); 
+	    int r    = iftMGetVoxelIndex(mimg,w); 
+	    ximg->val[q][b] = mimg->val[p][b]*(1.0-dx) + mimg->val[r][b]*dx;
+	  }
       }
     }
-  }
-  else
-  {
+  } else {
     ximg = iftCopyMImage(mimg);
   }
-
-  if (sy != 1.0)
-  {
-
+		
+  if (sy != 1.0) {
+		
     /* Interpolate along y */
-
+		
     yimg = iftCreateMImage(xsize, ysize, 1, mimg->m);
     yimg->dx = ximg->dx;
-    yimg->dy = ximg->dy / sy;
+    yimg->dy = ximg->dy/sy;
     yimg->dz = ximg->dz;
 
-#pragma omp parallel for shared(yimg, ximg, sy)
-    for (int b = 0; b < mimg->m; b++)
-    {
-      iftVoxel u, v, w;
-      u.z = v.z = w.z = 0;
-      for (v.x = 0; v.x < yimg->xsize; v.x++)
-      {
-        u.x = w.x = v.x;
-        for (v.y = 0; v.y < yimg->ysize; v.y++)
-        {
-          int q = iftMGetVoxelIndex(yimg, v);
-          u.y = (int)(v.y / sy);
-          float dy = (v.y / sy) - u.y;
-          w.y = ((u.y + 1) == ximg->ysize) ? u.y : u.y + 1;
-          int p = iftMGetVoxelIndex(ximg, u);
-          int r = iftMGetVoxelIndex(ximg, w);
-          yimg->val[q][b] = ximg->val[p][b] * (1.0 - dy) + ximg->val[r][b] * dy;
-        }
+#pragma omp parallel for shared(yimg, ximg, sy)    
+    for (int b = 0; b < mimg->m ; b++){
+      iftVoxel u,v,w;
+      u.z=v.z=w.z=0; 
+      for (v.x = 0; v.x < yimg->xsize; v.x++){
+	u.x = w.x = v.x;
+	for (v.y = 0; v.y < yimg->ysize; v.y++){  
+	  int q    = iftMGetVoxelIndex(yimg,v); 
+	  u.y  = (int)(v.y/sy);
+	  float dy   = (v.y/sy) - u.y; 
+	  w.y  = ((u.y+1)==ximg->ysize)?u.y:u.y+1;
+	  int p    = iftMGetVoxelIndex(ximg,u); 
+	  int r    = iftMGetVoxelIndex(ximg,w); 
+	  yimg->val[q][b] = ximg->val[p][b]*(1.0-dy) + ximg->val[r][b]*dy;
+	}
       }
     }
-  }
-  else
-  {
+  } else { 
     yimg = iftCopyMImage(ximg);
   }
 
   iftDestroyMImage(&ximg);
 
-  return (yimg);
+  return(yimg);
 }
 
 iftImage *iftInterp(  iftImage *img, float sx, float sy, float sz)

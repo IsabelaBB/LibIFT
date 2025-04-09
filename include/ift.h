@@ -131,6 +131,7 @@
 #include "iftFLIMGraph.h"
 #include "iftGFLIM.h"
 #include "iftGFLIM_BoFP.h"
+#include "iftDecode.h"
 
 #ifdef IFT_GPU
     #include "iftDeepLearning.cuh"

@@ -270,9 +270,9 @@ iftImage *iftFImageToImage(  iftFImage *img1, int Imax) {
             img2->val[p] = (int) (Imax * ((img1->val[p] - img1_min_val) /
                                   (img1_max_val - img1_min_val)));
         }
-    } /*else {
+    } else {
         iftWarning("Image is empty", "iftFImageToImage");
-    }*/
+    }
 
     img2->dx = img1->dx;
     img2->dy = img1->dy;

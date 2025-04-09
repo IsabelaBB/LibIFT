@@ -40,6 +40,7 @@ typedef struct _iftFLIMLayer {
   bool topology;
 } iftFLIMLayer;
 
+//! swig(destroyer = iftDestroyFLIMArch)
 typedef struct _iftFLIMArch {
   int nlayers;                  /* number of layers */
   iftFLIMLayer *layer;          /* convolutional layer */

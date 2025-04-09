@@ -49,6 +49,7 @@ iftVoxel    iftMGetVoxelCoord(   iftMImage *img, int p);
 //! swig(newobject, stable)
 iftMImage  *iftCreateMImage(int xsize,int ysize,int zsize, int nbands);
 
+  
 void        iftDestroyMImage(iftMImage **img);
 
 iftMImage  *iftCopyMImage(iftMImage *img);

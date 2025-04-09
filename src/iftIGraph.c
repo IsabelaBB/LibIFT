@@ -966,7 +966,9 @@ iftIGraph *iftExplicitIGraph(  iftMImage *img,   iftImage *mask,   iftImage *lab
 	  }
 	}
 	
-      } else {
+      } else { /* This part IS LIKELY bugged since it is not taking
+		  into account the mask, given igraph->index->val[]
+		  when mask != null */
 	
 	/* voxels in the mask are the nodes, but the arcs are formed
 	   between nodes that fall in adjacent regions, according to
@@ -1952,6 +1954,7 @@ int *iftIGraphSuperpixelCentersUsingSpatialInformation(iftIGraph *igraph, int *s
 
     for (s=0; s < igraph->nnodes; s++) {
         p = igraph->node[s].voxel;
+	
         i = igraph->label[igraph->root[p]]-1;
 
         nelems[i]++;
@@ -2018,11 +2021,9 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
     iftDHeap  *Q;
     double    *pvalue = iftAllocDoubleArray(igraph->nnodes);
     iftSet    *adj=NULL, *S=NULL, *new_seeds=NULL, *frontier_nodes=NULL, *trees_for_removal=NULL;
-    /* iftSet    *T =NULL; /\* This is part of the old version of the DIFT *\/ */
     float     **seed_features; // NEW
 
     //    timer *t1, *t2;
-
 
     new_seeds_flag = 1.0;
 
@@ -2061,17 +2062,17 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
         i++; S = S->next;
     }
 
-
     /* differential optimum-path forest computation */
     for (it=0; (it < niters); it++) {
 
-      //        printf("iteration %d\n",it+1);
-      //        t1 = iftTic();
+      //printf("iteration %d\n",it+1);
+      //t1 = iftTic();
 
         if (trees_for_removal != NULL)
             frontier_nodes = iftIGraphTreeRemoval(igraph, &trees_for_removal, pvalue, IFT_INFINITY_DBL);
 
-        while (new_seeds != NULL) { /* insert seeds in the priority queue Q with cost zero */
+        while (new_seeds != NULL) { /* insert seeds in the priority
+				       queue Q with cost zero */
             s = iftRemoveSet(&new_seeds);
             p = igraph->node[s].voxel;
 	    if (igraph->label[p] != 0){ /* we must avoid removed seeds
@@ -2083,7 +2084,9 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
 	    }
 	}
 	
-        while (frontier_nodes != NULL) { /* insert frontier nodes in Q to represent the previous seeds */
+        while (frontier_nodes != NULL) { /* insert frontier nodes in Q
+					    to represent the previous
+					    seeds */
             s = iftRemoveSet(&frontier_nodes);
             if (Q->color[s] == IFT_WHITE)
                 iftInsertDHeap(Q,s);
@@ -2092,7 +2095,6 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
         switch(igraph->type) {
 
             case IMPLICIT:
-
 
                 while (!iftEmptyDHeap(Q)) {
                     s = iftRemoveDHeap(Q);
@@ -2170,7 +2172,6 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
                             v   = iftGetVoxelCoord(igraph->index,q);
                             tmp = pvalue[s] + pow(alpha*(double)iftFeatDistance(seed_features[index_seed],igraph->feat[q],igraph->nfeats),beta) + (double)iftVoxelDistance(u,v);
 
-
                             if (tmp < pvalue[t]){
                                 pvalue[t]            = tmp;
 
@@ -2192,7 +2193,7 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
                                 } else {
                                     iftInsertDHeap(Q,t);
                                 }
-                            }	else {
+		} else {
                                 if (igraph->pred[q] == p){
                                     if (tmp > pvalue[t]) {
                                         iftIGraphSubTreeRemoval(igraph,t,pvalue,IFT_INFINITY_DBL,Q);
@@ -2216,7 +2217,6 @@ int iftIGraphISF_Mean(iftIGraph *igraph, iftImage *seeds, double alpha, double b
             case COMPLETE:
                 iftError("Not implemented for complete graphs", "iftIGraphISF_Mean");
         }
-
 
         iftResetDHeap(Q);
 
@@ -2401,7 +2401,9 @@ void iftIGraphISFRecomputeSeedsUsingSpatialInformation(iftIGraph *igraph, int *s
 
     /* Compute superpixel centers (i.e., the closest node to the center in the feature space) */
 
+
     center = iftIGraphSuperpixelCentersUsingSpatialInformation(igraph, seed, nseeds, seed_features);
+
 
     //min_area  =  (int)((igraph->nnodes / (float)nseeds) / 5.0);
     //area = iftAllocIntArray(nseeds);
