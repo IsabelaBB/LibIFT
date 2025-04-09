@@ -423,7 +423,7 @@ FLIMGraphConvolutionalLayer(iftFLIMGraphArray *graph,
 
         // normalize the graph
         if (use_bias == NULL) iftNormalizeFLIMGraphByZScore(graph->val[i], mean, stdev);
-        imgM = iftFLIMGraphToFeatureMatrix(graph->val[i], arch->layer[layer].kernel_size[0] * arch->layer[layer].kernel_size[1], IFT_FLIMGRAPH_ATTENTION_NONE, IFT_GFLIM_AGGREGATION_CONCAT, NULL);
+        imgM = iftFLIMGraphToFeatureMatrix(graph->val[i], arch->layer[layer].kernel_size[0] * arch->layer[layer].kernel_size[1], IFT_FLIMGRAPH_ATTENTION_NONE, IFT_GFLIM_AGGREGATION_CONCAT/*, NULL*/);
 
         // convolution
         iftMatrix *conv = iftMultMatrices(imgM, kernelbank); // (n, m*k) x (m*k, k*k) = (n, k*k)
