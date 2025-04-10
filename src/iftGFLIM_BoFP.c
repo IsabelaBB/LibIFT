@@ -2380,7 +2380,7 @@ float *iftGFLIMDecodeNode(iftFLIMGraphNode node, iftFLIMGraph *graph,
  * @note The channel_label is used to define the object and background channels.
  * @note This function normalizes the graph node features.
  */
-float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_weight)
+float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, float *channel_weight)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -2413,13 +2413,13 @@ float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_weight)
             else
                 graph->nodes[p].feats[b] = 0;
         }
-        nchannels[channel_weight[b] == -1 ? 1 : 0]++; // count the number of channels for each label
+        nchannels[channel_weight[b] < 1 ? 1 : 0]++; // count the number of channels for each label
     }
     
     float *saliencyGraph = (float *)iftAlloc(graph->num_nodes, sizeof(float));
 
     /* Estimate saliency of each pixel */
-#pragma parallel for
+//#pragma parallel for
     for (int p = 0; p < graph->num_nodes; p++)
     {
         iftFLIMGraphNode node = graph->nodes[p];
@@ -2435,7 +2435,7 @@ float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_weight)
                 mean_feat += graph->nodes[adj->elem].feats[b];
                 adj = adj->next;
             }
-            mean[channel_weight[b] == -1 ? 1 : 0] += mean_feat;
+            mean[channel_weight[b] < 1 ? 1 : 0] += mean_feat;
         }
         mean[0] /= (nchannels[0] * (node.numNeighbors + 1));
         mean[1] /= (nchannels[1] * (node.numNeighbors + 1));
@@ -2443,16 +2443,16 @@ float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, int *channel_weight)
         for (int b = 0; b < graph->num_feats; b++)
         {
             // b is obj and mean_{obj} > mean_{bkg}
-            if (channel_weight[b] > 0 && mean[0] > mean[1])
+            if (channel_weight[b] > 0 && mean[0]*1.2 > mean[1])
                 saliencyGraph[p] += node.feats[b];
             else
             {
                 // b is bkg and mean_{obj} < mean_{bkg}
-                if (channel_weight[b] < 0 && mean[0] < mean[1])
+                if (channel_weight[b] < 0 && mean[0] < 1.2*mean[1])
                     saliencyGraph[p] -= node.feats[b];
             }
         }
-        
+
         if (saliencyGraph[p] < 0) /* RELU */
             saliencyGraph[p] = 0;
     }
@@ -2566,7 +2566,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
     case IFT_GFLIM_GRAPHADAPTIVE_DECODER:
         if (truelabels == NULL)
             iftError("truelabels must be not NULL with graph adaptive decoder", __func__);
-
+        weight = iftAllocFloatArray(graph->num_feats);
         for (int l = 0; l < nlabels; l++)
         {
             /* set weights */
@@ -2579,12 +2579,12 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
             }
             saliencyGraph = iftGFLIMGraphAdaptiveDecoder(graph, weight);
             salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
-        // fill the saliency image with the saliency of the graph nodes.
-        for (int p = 0; p < label_img->n; p++)
-        {
+            // fill the saliency image with the saliency of the graph nodes.
+            for (int p = 0; p < label_img->n; p++)
+            {
                 salie[l]->val[p] = saliencyGraph[label_img->val[p] - 1];
             }
-            iftFree(&saliencyGraph);
+            iftFree(saliencyGraph);
         }
 
         break;
