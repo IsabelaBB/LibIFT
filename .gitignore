@@ -36,3 +36,5 @@ bin/
 build/
 lib/
 Scripts_GFLIM/schisto
+Datasets/
+Results/
