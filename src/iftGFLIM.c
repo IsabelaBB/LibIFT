@@ -618,9 +618,6 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
 
     StatisticsFromAllSeedsGraph(fs_seeds, tmp_dir, mean, stdev, arch->stdev_factor);
 
-    printf("\nLayer %d\n", layer_index);
-    fflush(stdout);
-
     for (int i = 0; i < ngraphs; i++)
     {
         basename = iftFilename(fs_seeds->files[i]->path, "-seeds_graph.txt");
@@ -629,8 +626,8 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
         sprintf(filename, "%s/%s.json", tmp_dir, basename);
         iftFLIMGraph *graph = iftReadFLIMGraph(filename);
 
-        printf("Processing file %s: %d of %d files\r", basename, i + 1, ngraphs);
-        fflush(stdout);
+        //printf("Processing file %s: %d of %d files\r", basename, i + 1, ngraphs);
+        //fflush(stdout);
 
         /* read seeds */
         iftLabeledSet *S = iftReadSeedsGraph(fs_seeds->files[i]->path);
