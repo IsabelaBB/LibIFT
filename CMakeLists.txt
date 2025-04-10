@@ -114,7 +114,7 @@ if(IFT_GPU)
 endif()
 
 install (TARGETS ift
-        ARCHIVE DESTINATION lib
-        LIBRARY DESTINATION lib)
+        ARCHIVE DESTINATION ${CMAKE_CURRENT_LIST_DIR}/lib
+        LIBRARY DESTINATION ${CMAKE_CURRENT_LIST_DIR}/lib)
 
 #add_subdirectory(demo)
