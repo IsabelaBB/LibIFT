@@ -1,6 +1,6 @@
 {
 	"stdev_factor": 0.010000,
-	"nlayers": 4,
+	"nlayers": 3,
 	"apply_intrinsic_atrous": false,
 	"layer1": {
 		"conv": {
@@ -33,21 +33,6 @@
 		}
 	},
 	"layer3": {
-		"conv": {
-			"kernel_size": [5, 5, 0],
-			"nkernels_per_marker": 5,
-			"dilation_rate": [1, 1, 0],
-			"nkernels_per_image": 10000,
-			"noutput_channels": 64
-		},
-		"relu": true,
-		"pooling": {
-			"type": "max_pool",
-			"size": [3, 3, 0],
-			"stride": 1
-		}
-	},
-	"layer4": {
 		"conv": {
 			"kernel_size": [5, 5, 0],
 			"nkernels_per_marker": 5,
