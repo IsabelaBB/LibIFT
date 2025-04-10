@@ -117,4 +117,4 @@ install (TARGETS ift
         ARCHIVE DESTINATION ${CMAKE_CURRENT_LIST_DIR}/lib
         LIBRARY DESTINATION ${CMAKE_CURRENT_LIST_DIR}/lib)
 
-#add_subdirectory(demo)
+add_subdirectory(demo)
