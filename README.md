@@ -13,9 +13,9 @@
 mkdir build; cd build; cmake ..; make; make install;
 ```
 
-## GFLIM:
+## GFLIM
 
-- Programs: https://github.com/IsabelaBB/GFLIM_BoFP
+- Programs: <https://github.com/IsabelaBB/GFLIM_BoFP>
 
 The following files are required to create a model:
 
