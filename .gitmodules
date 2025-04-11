@@ -1,4 +1,4 @@
 [submodule "GFLIM"]
 	path = demo/GFLIM
 	url = https://github.com/IsabelaBB/GFLIM_BoFP
-	branch = stable
+	branch = main
