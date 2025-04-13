@@ -2104,7 +2104,7 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
  */
 iftFImage *HybridAdaptativeDecoder(iftMImage *mimg, float *channel_label)
 {
-    float *weight = TriStateAdaptativeWeigth(mimg); // get the same weigths as the tri-state decoder
+    float *weight = iftGFLIMTriStateAdaptativeWeigth(mimg); // get the same weigths as the tri-state decoder
 
     iftFImage *salie = iftCreateFImage(mimg->xsize, mimg->ysize, mimg->zsize);
 
@@ -2500,7 +2500,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
     switch (decoder)
     {
     case IFT_GFLIM_TRISTATE_DECODER:
-        printf("\t decoder: TriStateAdaptativeDecoder\n");
+        printf("\t decoder: iftGFLIMTriStateAdaptativeDecoder\n");
         break;
 
     case IFT_GFLIM_HYBRID_DECODER:
@@ -2540,7 +2540,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
     {
     case IFT_GFLIM_TRISTATE_DECODER:
         mimg = iftFLIMGraphToMImage(graph, label_img);
-        salie[0] = TriStateAdaptativeDecoder(mimg);
+        salie[0] = iftGFLIMTriStateAdaptativeDecoder(mimg);
         break;
 
     case IFT_GFLIM_HYBRID_DECODER:
@@ -2682,7 +2682,7 @@ iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_di
     printf("\t graph_type: %d\n", graph_type);
 #endif
 
-    iftFLIMGraphArray *input = iftFLIMGraphCreateEmptyFLIMGraphArray(last - first + 1);
+    iftFLIMGraphArray *input = iftCreateEmptyFLIMGraphArray(last - first + 1);
 
 #pragma omp parallel for
     for (int k = 0; k <= last - first; k++)
@@ -2715,7 +2715,7 @@ iftFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
                                                     iftFLIMGraphType graph_type,
                                                     iftImageArray *label_imgs)
 {
-    iftFLIMGraphArray *input = iftFLIMGraphCreateEmptyFLIMGraphArray(last - first + 1);
+    iftFLIMGraphArray *input = iftCreateEmptyFLIMGraphArray(last - first + 1);
 
     for (int k = 0; k <= last - first; k++)
     {

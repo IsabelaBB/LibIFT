@@ -63,9 +63,9 @@ void iftGFLIMPoolingLayer(iftFLIMGraph *graph,
 
 /* --------------------- GFLIM decoder ----------------------------- */
 
-float *TriStateAdaptativeWeigth(iftMImage *mimg);
+float *iftGFLIMTriStateAdaptativeWeigth(iftMImage *mimg);
 
-iftFImage *TriStateAdaptativeDecoder(iftMImage *mimg);
+iftFImage *iftGFLIMTriStateAdaptativeDecoder(iftMImage *mimg);
 
 #ifdef __cplusplus
 }

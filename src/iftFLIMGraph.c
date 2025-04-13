@@ -7,13 +7,13 @@
  */
 
 /**
- * @fn iftFLIMGraphCreateEmptyFLIMGraphArray
+ * @fn iftCreateEmptyFLIMGraphArray
  * @brief Create an array with n empty graphs.
  * @param n The number of graphs.
  * @return An array with n empty graphs.
  * @note The graphs are allocated but not initialized.
  */
-iftFLIMGraphArray *iftFLIMGraphCreateEmptyFLIMGraphArray(int n)
+iftFLIMGraphArray *iftCreateEmptyFLIMGraphArray(int n)
 {
     iftFLIMGraphArray *array = (iftFLIMGraphArray *)calloc(1, sizeof(iftFLIMGraphArray));
     array->val = (iftFLIMGraph **)calloc(n, sizeof(iftFLIMGraph *));

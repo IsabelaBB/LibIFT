@@ -114,7 +114,7 @@ typedef enum {
 
 
 /* --------------------- GraphArray functions ----------------------------- */
-iftFLIMGraphArray *iftFLIMGraphCreateEmptyFLIMGraphArray(int n);
+iftFLIMGraphArray *iftCreateEmptyFLIMGraphArray(int n);
 void iftDestroyFLIMGraphArray(iftFLIMGraphArray **arr);
 
 /* --------------------- FLIMGraph construction ----------------------------- */

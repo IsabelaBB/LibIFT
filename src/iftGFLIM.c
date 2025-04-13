@@ -397,7 +397,7 @@ FLIMGraphConvolutionalLayer(iftFLIMGraphArray *graph,
     // Set input parameters
     int ninput_channels = graph->val[0]->num_feats;
     char *basename = NULL;
-    iftFLIMGraphArray *output_graph = iftFLIMGraphCreateEmptyFLIMGraphArray(graph->n);
+    iftFLIMGraphArray *output_graph = iftCreateEmptyFLIMGraphArray(graph->n);
 
     // Read consensus parameters of the current layer
 
@@ -539,7 +539,7 @@ iftMatrix *ConsensusKernelbankGraph(iftFileSet *fs_seeds,
 }
 
 /**
- * @fn iftFLIMGraphLearnLayer
+ * @fn iftGFLIMTrainLayer
  * @brief Learn a layer
  * @param input_dir directory with input files
  * @param markers_dir directory with seeds files
@@ -703,7 +703,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
     {
         basename = iftFilename(fs_seeds->files[i]->path, "-seeds_graph.txt");
         sprintf(filename, "%s/%s.json", tmp_dir, basename);
-        iftFLIMGraphArray *graph = iftFLIMGraphCreateEmptyFLIMGraphArray(1);
+        iftFLIMGraphArray *graph = iftCreateEmptyFLIMGraphArray(1);
         graph->val[0] = iftReadFLIMGraph(filename);
         output = FLIMGraphConvolutionalLayer(graph, arch, 0, layer_index, atrous_factor, param_dir);
         iftDestroyFLIMGraphArray(&graph);
@@ -778,7 +778,7 @@ void FLIMGraphExtractFeaturesFromLayerPerBatch(iftFileSet *fs_graphs, int first,
     char ext[20];
     sprintf(ext, "%s", iftFileExt(fs_graphs->files[0]->path));
     char **basename = (char **)calloc(ngraphs, sizeof(char *));
-    input = iftFLIMGraphCreateEmptyFLIMGraphArray(ngraphs);
+    input = iftCreateEmptyFLIMGraphArray(ngraphs);
     output = NULL;
 
     /* Load batch */
@@ -1031,7 +1031,7 @@ void iftGFLIMPoolingLayer(iftFLIMGraph *graph,
  * @param mimg MImage to compute the weights
  * @return float* Array of weights for each MImage band
  */
-float *TriStateAdaptativeWeigth(iftMImage *mimg)
+float *iftGFLIMTriStateAdaptativeWeigth(iftMImage *mimg)
 {
     float *weight = iftAllocFloatArray(mimg->m);
     float *mean = iftAllocFloatArray(mimg->m);
@@ -1155,9 +1155,9 @@ float *TriStateAdaptativeWeigth(iftMImage *mimg)
  * @param mimg MImage to decode
  * @return iftFImage* Decoded image
  */
-iftFImage *TriStateAdaptativeDecoder(iftMImage *mimg)
+iftFImage *iftGFLIMTriStateAdaptativeDecoder(iftMImage *mimg)
 {
-    float *weight = TriStateAdaptativeWeigth(mimg);
+    float *weight = iftGFLIMTriStateAdaptativeWeigth(mimg);
 
     iftFImage *salie = iftCreateFImage(mimg->xsize, mimg->ysize, mimg->zsize);
 
