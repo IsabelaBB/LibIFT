@@ -1035,22 +1035,6 @@ float *iftGFLIMTriStateAdaptativeWeigth(iftMImage *mimg)
 {
     float *weight = iftAllocFloatArray(mimg->m);
     float *mean = iftAllocFloatArray(mimg->m);
-    float *maxval = iftAllocFloatArray(mimg->m);
-
-    /* Normalize activations */
-    for (int b = 0; b < mimg->m; b++)
-        maxval[b] = iftMMaximumValue(mimg, b);
-    for (int p = 0; p < mimg->n; p++)
-    {
-        for (int b = 0; b < mimg->m; b++)
-        {
-            if (maxval[b] > 0.0)
-                mimg->val[p][b] /= maxval[b];
-            else
-                mimg->val[p][b] = 0.0;
-        }
-    }
-    iftFree(maxval);
 
     /* Estimate the mean activation per channel */
     for (int p = 0; p < mimg->n; p++)
@@ -1091,6 +1075,9 @@ float *iftGFLIMTriStateAdaptativeWeigth(iftMImage *mimg)
         else
             low_end = means_otsu;
         high_end = means_otsu + stdev;
+
+        printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
+            low_end, high_end, means_otsu, stdev, mu);
 
         /* Estimate the weight of each channel */
         iftImage *band = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
