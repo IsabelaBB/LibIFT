@@ -76,6 +76,8 @@ iftGFLIMDecoderType iftGLFLIMGetDecoderType(const char *name)
         return IFT_GFLIM_GRAPHADAPTIVE_DECODER;
     if (strcmp(name, "gaussian") == 0)
         return IFT_GFLIM_GAUSSIAN_DECODER;
+    if (strcmp(name, "test") == 0)
+        return IFT_GFLIM_TEST_DECODER;
     iftError("Invalid decoder type: %s. The options are tristate, hybrid, graph-adaptive, and gaussian", __func__, name);
     return IFT_GFLIM_TRISTATE_DECODER;
 }
@@ -1402,7 +1404,7 @@ void iftGFLIMStrideBatch_v2(iftFLIMGraphArray *graph, iftFLIMLayer layer,
 iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
                              int kernel_size, iftFLIMGraphAttention attention_opt,
                              int *kernel_labels, iftGFLIMAggregationType aggregation_opt,
-                             bool *maintain_kernels, bool reduce)
+                             /*bool *maintain_kernels,*/ bool reduce)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1508,7 +1510,7 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
 
         if (kernel_labels == NULL)
             iftError("kernel_labels is NULL", __func__);
-        A = iftFLIMGraphAttentionClassDominance_test(XJ, graph, kernel_labels);
+        A = iftFLIMGraphAttentionClassDominance_v2(XJ, graph, kernel_labels);
         break;
 
     case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE:
@@ -1537,12 +1539,10 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
         if (reduce)
         {
             iftMatrix *XA = iftMatricesMultiplicationPointWise(XJ, A);
-            for (int i = 0; i < XA->ncols * XA->nrows; i++)
-                XA->val[i] = fabs(XA->val[i] - XJ->val[i]);
-
-            iftMatrix *sumAttention = iftComputeSumVectorBycolumn(A);
-            iftDestroyMatrix(&XA);
             iftDestroyMatrix(&A);
+
+            iftMatrix *X_diff = iftMatricesSubtractionPointWise(XA, XJ);
+            iftMatrix *sumAttention = iftComputeSumVectorBycolumn(X_diff);
 
             // Remove from XJ half of the cols per label with the smallest attention values
 
@@ -1555,57 +1555,51 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
                     nlabels = kernel_labels[i];
             }
             nlabels = nlabels - minLabel + 1;
-
-            // iftMatrix *new_XA = iftCreateMatrix(nkernels_maintain, XJ->nrows);
-            iftMatrix *new_XA = iftCreateMatrix(XJ->ncols, XJ->nrows);
-            for (int i = 0; i < XJ->ncols * XJ->nrows; i++)
-                new_XA->val[i] = XJ->val[i];
-
+            
             int k = 0;
-            for (int l = minLabel; l <= nlabels; l++)
+            for (int l = minLabel + 1; l <= nlabels; l++)
             {
-                double *att_heap = iftAllocDoubleArray(XJ->ncols);
-                iftDHeap *heap = iftCreateDHeap(XJ->ncols, att_heap);
-                heap->removal_policy = MINVALUE;
+                float min_val = IFT_INFINITY_FLT;
+                float max_val = IFT_INFINITY_FLT_NEG;
                 int nkernels = 0;
-
                 for (int i = 0; i < XJ->ncols; i++)
                 {
-                    if (kernel_labels[i] == l)
-                    {
-                        att_heap[i] = (double)iftMatrixElem(sumAttention, i, 0);
-                        iftInsertDHeap(heap, i);
+                    if (kernel_labels[i] == l){
+                        iftMatrixElem(sumAttention, i, 0) /= XJ->nrows;
+                        min_val = iftMin(min_val, iftMatrixElem(sumAttention, i, 0));
+                        max_val = iftMax(max_val, iftMatrixElem(sumAttention, i, 0));
                         nkernels++;
                     }
                 }
-                int nkernels_remove = nkernels / 3;
-
-                // copy to a matrix the rows with the smallest attention values
-                printf("label %d: ", l);
-                for (int j = 0; j < nkernels_remove && !iftEmptyDHeap(heap); j++)
+                
+                iftImage *otsu_img = iftCreateImage(nkernels, 1, 1);
+                for (int i = 0, j = 0; i < XJ->ncols; i++)
                 {
-                    int channel = iftRemoveDHeap(heap);
-                    printf("k:%d c:%d sum_diff:%f, ", k, channel, att_heap[channel]);
-                    maintain_kernels[channel] = true;
-                    for (int i = 0; i < XJ->nrows; i++)
-                    {
-                        // iftMatrixElem(new_XA, k, i) = iftMatrixElem(XJ, channel, i);
-                        iftMatrixElem(new_XA, channel, i) = 0.0;
+                    if (kernel_labels[i] == l){
+                        iftMatrixElem(sumAttention, i, 0) = 255*(iftMatrixElem(sumAttention, i, 0) - min_val)/(max_val - min_val);
+                        otsu_img->val[j++] = (int)iftMatrixElem(sumAttention, i, 0);
+                        //printf("c:%d diff:%d, ", i, (int)iftMatrixElem(sumAttention, i, 0));
                     }
-                    k++;
                 }
-                printf("\n");
-                iftDestroyDHeap(&heap);
-                iftFree(att_heap);
+                int otsu_threshold = iftOtsu(otsu_img);
+                iftDestroyImage(&otsu_img);
+                //printf("\n\notsu_threshold: %d \n\n", otsu_threshold);
+
+                for (int i = 0; i < XJ->ncols; i++)
+                {
+                    if (kernel_labels[i] == l && (int)iftMatrixElem(sumAttention, i, 0) <= otsu_threshold)
+                    {
+                        for (int j = 0; j < XJ->nrows; j++)
+                            iftMatrixElem(XJ, i, j) = iftMatrixElem(XA, i, j);
+                    }
+                }
             }
-            printf("\n");
-            for (int i = 0; i < XJ->ncols; i++)
-                maintain_kernels[i] = true;
+            iftDestroyMatrix(&XA);
+            //printf("\n");
+            /*for (int i = 0; i < XJ->ncols; i++)
+                maintain_kernels[i] = true;*/
 
             iftDestroyMatrix(&sumAttention);
-            iftDestroyMatrix(&XJ);
-            XJ = new_XA;
-            new_XA = NULL;
         }
         else
         {
@@ -1690,7 +1684,7 @@ iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, floa
  */
 iftMImageArray *iftGFLIMConvLayerBatch(iftFLIMGraphArray *graph, iftMatrix *kernels, int kernel_size,
                                        iftFLIMGraphAttention attention_opt, int *kernel_labels,
-                                       iftGFLIMAggregationType aggregation_opt, bool **maintain_kernels, bool reduce)
+                                       iftGFLIMAggregationType aggregation_opt, /*bool **maintain_kernels,*/ bool reduce)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1708,7 +1702,7 @@ iftMImageArray *iftGFLIMConvLayerBatch(iftFLIMGraphArray *graph, iftMatrix *kern
     iftMImageArray *activ = iftCreateMImageArray(graph->n);
     for (int i = 0; i < graph->n; i++)
     {
-        activ->val[i] = iftGFLIMConvLayer(graph->val[i], kernels, kernel_size, attention_opt, kernel_labels, aggregation_opt, maintain_kernels == NULL? NULL : maintain_kernels[i], reduce);
+        activ->val[i] = iftGFLIMConvLayer(graph->val[i], kernels, kernel_size, attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels == NULL? NULL : maintain_kernels[i],*/ reduce);
     }
     return activ;
 }
@@ -1796,43 +1790,54 @@ iftFLIMGraph *iftGFLIMEncodeLayer(iftFLIMGraph *graph,
     printf("\t reduce: %s\n", reduce ? "true" : "false");
 #endif
 
-    bool *channels_maintain = NULL;
-
+    /*bool *channels_maintain = NULL;
     if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
-        channels_maintain = iftAllocBoolArray(Kernels->ncols);
+        channels_maintain = iftAllocBoolArray(Kernels->ncols);*/
 
-    iftMImage *activ = iftGFLIMConvLayer(graph, Kernels, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, channels_maintain, reduce);
-
-    float *bias_aux = NULL;
-    if (bias != NULL && channels_maintain != NULL)
-    {
-        bias_aux = iftAllocFloatArray(activ->m);
-        for (int i = 0, j = 0; i < Kernels->ncols; i++)
-        {
-            if (channels_maintain[i])
-            {
-                bias_aux[j] = bias[i];
-                j++;
-            }
-        }
-    }
-    else
-        bias_aux = bias;
-
-    iftFree(channels_maintain);
+    iftMImage *activ = iftGFLIMConvLayer(graph, Kernels, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, /*channels_maintain,*/ reduce);
 
     iftMImage *activ_relu = NULL;
-    if (layer.relu)
-        activ_relu = iftMReLU(activ, bias_aux, true);
-    else
+    /*if (channels_maintain != NULL)
     {
-        if (bias_aux != NULL)
-            activ_relu = iftGFLIMSumMImgToFloatArray(activ, bias_aux, true);
+        float *bias_aux = iftAllocFloatArray(activ->m);
+        if(bias != NULL)
+        {
+            for (int i = 0, j = 0; i < Kernels->ncols; i++)
+            {
+                if (channels_maintain[i])
+                {
+                    bias_aux[j] = bias[i];
+                    j++;
+                }
+            }
+        }
+        if (layer.relu)
+            activ_relu = iftMReLU(activ, bias_aux, true);
         else
-            activ_relu = activ;
+        {
+            if (bias_aux != NULL)
+                activ_relu = iftGFLIMSumMImgToFloatArray(activ, bias_aux, true);
+            else
+                activ_relu = activ;
+        }
+        if (bias_aux != NULL && bias_aux != bias)
+            iftFree(bias_aux);
+        
+        iftFree(channels_maintain);
     }
-    if (bias_aux != NULL && bias_aux != bias)
-        iftFree(bias_aux);
+    else
+    {*/
+        if (layer.relu)
+            activ_relu = iftMReLU(activ, bias, true);
+        else
+        {
+            if (bias != NULL)
+                activ_relu = iftGFLIMSumMImgToFloatArray(activ, bias, true);
+            else
+                activ_relu = activ;
+        }
+    //}
+
 
 #ifdef PRINT_VALS
     printf("activ_relu: %d %d %d %ld \n", activ_relu->xsize, activ_relu->ysize, activ_relu->zsize, activ_relu->m);
@@ -1936,20 +1941,20 @@ void iftGFLIMEncodeLayerBatch(iftFLIMGraphArray *input,
     printf("\t layer_index: %d\n", layer_index);
 #endif
 
-    bool **maintain_kernels = NULL;
+    /*bool **maintain_kernels = NULL;
     if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
     {
         maintain_kernels = iftAlloc(input->n, sizeof(bool *));
         for (int i = 0; i < input->n; i++)
             maintain_kernels[i] = iftAlloc(Kmerged->ncols, sizeof(bool));
-    }
+    }*/
 
     /* convolution */
-    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, maintain_kernels, reduce);
+    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels,*/ reduce);
 
     /* activation and bias */
     iftMImageArray *activ_relu = activ;
-    if (maintain_kernels != NULL && bias_merged != NULL)
+    /*if (maintain_kernels != NULL && bias_merged != NULL)
     {
         for (int i = 0; i < activ_relu->n; i++)
         {
@@ -1969,9 +1974,12 @@ void iftGFLIMEncodeLayerBatch(iftFLIMGraphArray *input,
 
             iftFree(bias_aux);
         }
+        for (int i = 0; i < input->n; i++)
+            iftFree(maintain_kernels[i]);
+        iftFree(maintain_kernels);
     }
     else
-    {
+    {*/
         if (layer.relu)
             activ_relu = iftMReLUArray(activ, bias_merged, layer.relu);
         else
@@ -1981,14 +1989,7 @@ void iftGFLIMEncodeLayerBatch(iftFLIMGraphArray *input,
                 activ_relu = iftGFLIMSumMImgArrayToFloatArray(activ, bias_merged, true);
             }
         }
-    }
-
-    if (maintain_kernels != NULL)
-    {
-        for (int i = 0; i < input->n; i++)
-            iftFree(maintain_kernels[i]);
-        iftFree(maintain_kernels);
-    }
+    //}
 
     activ = NULL;
 
@@ -2030,20 +2031,20 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
     printf("\t reduce: %s\n", reduce ? "true" : "false");
 #endif
 
-    bool **maintain_kernels = NULL;
+    /*bool **maintain_kernels = NULL;
     if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
     {
         maintain_kernels = iftAlloc(input->n, sizeof(bool *));
         for (int i = 0; i < input->n; i++)
             maintain_kernels[i] = iftAlloc(Kmerged->ncols, sizeof(bool));
-    }
+    }*/
 
     /* convolution */
-    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, maintain_kernels, reduce);
+    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels,*/ reduce);
 
     /* activation and bias */
     iftMImageArray *activ_relu = activ;
-    if (maintain_kernels != NULL && bias_merged != NULL)
+    /*if (maintain_kernels != NULL && bias_merged != NULL)
     {
         for (int i = 0; i < activ_relu->n; i++)
         {
@@ -2063,9 +2064,12 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
 
             iftFree(bias_aux);
         }
+        for (int i = 0; i < input->n; i++)
+            iftFree(maintain_kernels[i]);
+        iftFree(maintain_kernels);
     }
     else
-    {
+    {*/
         if (layer.relu)
             activ_relu = iftMReLUArray(activ, bias_merged, true);
         else
@@ -2075,14 +2079,7 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
                 activ_relu = iftGFLIMSumMImgArrayToFloatArray(activ, bias_merged, true);
             }
         }
-    }
-
-    if (maintain_kernels != NULL)
-    {
-        for (int i = 0; i < input->n; i++)
-            iftFree(maintain_kernels[i]);
-        iftFree(maintain_kernels);
-    }
+    //}
 
     activ = NULL;
 
@@ -2095,6 +2092,140 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
 }
 
 // ============ FUNCTIONS TO DECODE FEATURES ============ //
+
+/**
+ * @brief 
+ */
+iftFImage *TestAdaptativeDecoder(iftFLIMGraph *graph, float *channel_label, int label)
+{
+    float *weight = iftAllocFloatArray(graph->num_feats);
+    float *mean = iftAllocFloatArray(graph->num_feats);
+
+    int num_pixels = 0;
+    /* Estimate the mean activation per channel */
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            mean[b] += graph->nodes[p].feats[b] * graph->nodes[p].numPixels;
+        num_pixels += graph->nodes[p].numPixels;
+    }
+
+    // Just so it is easier to compute the otsu
+    iftImage *means_image = iftCreateImage(graph->num_feats, 1, 1);
+    float max_mean = 0.0;
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        mean[b] /= (float)num_pixels;
+        means_image->val[b] = mean[b] * 255;
+        if (means_image->val[b] > max_mean)
+            max_mean = means_image->val[b];
+    }
+
+    if (max_mean > 0.0)
+    {
+        // Compute otsu threshold as a way to separate foreground bands from background bands
+        float mu = 0.0, stdev = 0.0;
+        for (int b = 0; b < graph->num_feats; b++)
+            mu += mean[b];
+        mu /= graph->num_feats;
+        int means_otsu = iftOtsu(means_image); 
+
+        // Compute the standard deviation
+        for (int b = 0; b < graph->num_feats; b++)
+            stdev += (mean[b] - mu) * (mean[b] - mu);
+        stdev = sqrtf(stdev / graph->num_feats) * sqrtf(stdev / graph->num_feats);
+
+        // Compute the low and high threshold values
+        float low_end, high_end;
+        if (means_otsu > 0.1)
+            low_end = means_otsu - stdev;
+        else
+            low_end = means_otsu;
+        high_end = means_otsu + stdev;
+
+        printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
+            low_end, high_end, means_otsu, stdev, mu);
+
+        /* Estimate the weight of each channel */
+        //iftImage *band = iftCreateImage(graph->num_nodes, 1, 1);
+        iftImage *band = iftCreateImage(num_pixels, 1, 1);
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            // Get one activation (a channel/band from mimg) and convert it from 0-1 to 0-255
+            for (int p = 0, x = 0; p < graph->num_nodes; p++) {
+                float feat = graph->nodes[p].feats[b];
+                for (int q = 0; q < graph->nodes[p].numPixels; q++, x++){
+                    band->val[x] = feat * 255;
+                }
+            }
+
+            // find the maximum value of the band
+            int max_band = iftMaximumValue(band); // the difference to the img version of this decoder is here. The otsu here consider node values, i.e, the nodes' sizes are not considered.
+
+            if (max_band > 0.0)
+            {
+                // Compute another otsu to separate foreground pixels from background pixels
+                int otsu_band = iftOtsu(band);
+
+                // Compute the foreground proportion of the band 
+                // as the proportion of pixels above otsu_band
+                float fg_proportion = 0;
+                for (int p = 0; p < band->n; p++)
+                {
+                    if (band->val[p] >= otsu_band) 
+                        fg_proportion += 1;//graph->nodes[p].numPixels;
+                }
+                fg_proportion /= num_pixels;
+
+                // weight the band according to the high/low threshold and the foreground proportion
+                if (mean[b] >= high_end && fg_proportion > 0.2)
+                {
+                    weight[b] = -1.0;
+                }
+                else if (mean[b] <= low_end && fg_proportion < 0.1)
+                {
+                    weight[b] = +1.0;
+                }
+                else
+                {
+                    weight[b] = 0.0;
+                }
+            }
+            else
+            {
+                weight[b] = 0.0;
+            }
+        }
+        iftDestroyImage(&band);
+    }
+    else
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            weight[b] = 0.0;
+    }
+
+    iftFree(mean);
+    iftDestroyImage(&means_image);
+
+    iftFImage *salie = iftCreateFImage(graph->num_nodes, 1, 1);
+
+    /* decode layer */
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            if (channel_label[b] != -1) // only foreground channels are weigthed
+                salie->val[p] += graph->nodes[p].feats[b] * weight[b];
+        }
+        if (salie->val[p] < 0)
+            salie->val[p] = 0;
+    }
+
+    iftFree(weight);
+
+    return (salie);
+}
+
 
 /**
  * @brief Decode the MImage using the hybrid adaptive decoder
@@ -2147,14 +2278,10 @@ iftFImage *iftGFLIMGaussianDecoder(iftMImage *mimg, float adj_radius, float *cha
 
     iftFImage *salie = iftCreateFImage(mimg->xsize, mimg->ysize, mimg->zsize);
     float *weight = iftAllocFloatArray(mimg->m);
-    float *maxval = iftAllocFloatArray(mimg->m);
     int nobj = 0, nbkg = 0;
-
-    /* Normalize activations per channel */
 
     for (int b = 0; b < mimg->m; b++)
     {
-        maxval[b] = iftMMaximumValue(mimg, b);
         if (channel_label[b] > 0)
         { /* object channel */
             nobj++;
@@ -2164,16 +2291,6 @@ iftFImage *iftGFLIMGaussianDecoder(iftMImage *mimg, float adj_radius, float *cha
             nbkg++;
         }
     }
-
-    for (int p = 0; p < mimg->n; p++)
-    {
-        for (int b = 0; b < mimg->m; b++)
-        {
-            if (maxval[b] > IFT_EPSILON)
-                mimg->val[p][b] = mimg->val[p][b] / maxval[b];
-        }
-    }
-    iftFree(maxval);
 
     /* Estimate saliency of each pixel */
 
@@ -2185,7 +2302,6 @@ iftFImage *iftGFLIMGaussianDecoder(iftMImage *mimg, float adj_radius, float *cha
 
     for (int p = 0; p < mimg->n; p++)
     {
-
         /* estimate mean and stdev of activations across channels */
 
         float mean[2] = {0.0, 0.0}, var[2] = {0.0, 0.0};
@@ -2400,19 +2516,6 @@ float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, float *channel_weight)
     int nchannels[2] = {0, 0}; // number of channels for label
     for (int b = 0; b < graph->num_feats; b++)
     {
-        // get the maximum value of the channel
-        float maxval = graph->nodes[0].feats[b];
-        for (int p = 1; p < graph->num_nodes; p++)
-            maxval = iftMax(graph->nodes[p].feats[b], maxval);
-
-        // normalize the channel
-        for (int p = 1; p < graph->num_nodes; p++)
-        {
-            if (maxval > 0)
-                graph->nodes[p].feats[b] /= maxval;
-            else
-                graph->nodes[p].feats[b] = 0;
-        }
         nchannels[channel_weight[b] < 1 ? 1 : 0]++; // count the number of channels for each label
     }
     
@@ -2443,12 +2546,12 @@ float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, float *channel_weight)
         for (int b = 0; b < graph->num_feats; b++)
         {
             // b is obj and mean_{obj} > mean_{bkg}
-            if (channel_weight[b] > 0 && mean[0]*1.2 > mean[1])
+            if (channel_weight[b] > 0 && mean[0] > mean[1])
                 saliencyGraph[p] += node.feats[b];
             else
             {
                 // b is bkg and mean_{obj} < mean_{bkg}
-                if (channel_weight[b] < 0 && mean[0] < 1.2*mean[1])
+                if (channel_weight[b] < 0 && mean[0] < mean[1])
                     saliencyGraph[p] -= node.feats[b];
             }
         }
@@ -2524,15 +2627,28 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
     float *saliencyGraph = NULL;
     iftImageArray *smap = NULL;
 
-    scale[0] = (float)label_img0->xsize / (float)label_img->xsize;
-    scale[1] = (float)label_img0->ysize / (float)label_img->ysize;
-    scale[2] = (float)label_img0->zsize / (float)label_img->zsize;
-
     if (IFT_GFLIM_TRISTATE_DECODER)
         nlabels = 1;
 
     if (nlabels == 0)
         iftError("Number of labels must be greater than 0: %d", __func__, nlabels);
+
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        // get the maximum value of the channel
+        double maxval = graph->nodes[0].feats[b];
+        for (int p = 1; p < graph->num_nodes; p++)
+            maxval = iftMax(graph->nodes[p].feats[b], maxval);
+
+        // normalize the channel
+        for (int p = 0; p < graph->num_nodes; p++)
+        {
+            if (maxval > 0)
+                graph->nodes[p].feats[b] /= maxval;
+            else
+                graph->nodes[p].feats[b] = 0;
+        }
+    }
 
     salie = (iftFImage **)calloc(nlabels, sizeof(iftFImage *));
 
@@ -2541,6 +2657,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
     case IFT_GFLIM_TRISTATE_DECODER:
         mimg = iftFLIMGraphToMImage(graph, label_img);
         salie[0] = iftGFLIMTriStateAdaptativeDecoder(mimg);
+        iftDestroyMImage(&mimg);
         break;
 
     case IFT_GFLIM_HYBRID_DECODER:
@@ -2561,6 +2678,36 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
             }
             salie[l] = HybridAdaptativeDecoder(mimg, weight);
         }
+        iftDestroyMImage(&mimg);
+        iftFree(weight);
+        break;
+
+    case IFT_GFLIM_TEST_DECODER:
+        if (truelabels == NULL)
+            iftError("truelabels must be not NULL with hybrid decoder", __func__);
+
+        weight = iftAllocFloatArray(graph->num_feats);
+        /* Estimate saliency of each pixel */
+        for (int l = 0; l < nlabels; l++)
+        {
+            /* set weights */
+            for (int k = 0; k < graph->num_feats; k++)
+            {
+                if ((l + 1) == truelabels[k])
+                    weight[k] = +1;
+                else
+                    weight[k] = -1;
+            }
+            iftFImage *salie_graph = TestAdaptativeDecoder(graph, weight, l);
+
+            salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
+            // fill the saliency image with the saliency of the graph nodes.
+            for (int p = 0; p < label_img->n; p++)
+                salie[l]->val[p] = salie_graph->val[label_img->val[p] - 1];
+            
+            iftFree(salie_graph);
+        }
+        iftFree(weight);
         break;
 
     case IFT_GFLIM_GRAPHADAPTIVE_DECODER:
@@ -2586,7 +2733,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
             }
             iftFree(saliencyGraph);
         }
-
+        iftFree(weight);
         break;
 
     case IFT_GFLIM_GAUSSIAN_DECODER:
@@ -2606,6 +2753,8 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
             }
             salie[l] = iftGFLIMGaussianDecoder(mimg, 1.5, weight);
         }
+        iftDestroyMImage(&mimg);
+        iftFree(weight);
         break;
 
     default:
@@ -2613,10 +2762,11 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         break;
     }
 
-    iftDestroyMImage(&mimg);
-    iftFree(weight);
-
     smap = iftCreateImageArray(nlabels);
+
+    scale[0] = (float)label_img0->xsize / (float)label_img->xsize;
+    scale[1] = (float)label_img0->ysize / (float)label_img->ysize;
+    scale[2] = (float)label_img0->zsize / (float)label_img->zsize;
 
     for (int l = 0; l < nlabels; l++)
     {

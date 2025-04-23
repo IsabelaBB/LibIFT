@@ -44,7 +44,8 @@ typedef enum {
   IFT_GFLIM_TRISTATE_DECODER,       // Tristate decoder. @see iftGFLIMTristateDecoder()
   IFT_GFLIM_HYBRID_DECODER,         // Hybrid decoder. @see iftGFLIMHybridDecoder()
   IFT_GFLIM_GRAPHADAPTIVE_DECODER,  // Graph adaptive decoder. @see iftGFLIMGraphAdaptiveDecoder()
-  IFT_GFLIM_GAUSSIAN_DECODER        // Gaussian decoder. @see iftGFLIMGaussianDecoder()
+  IFT_GFLIM_GAUSSIAN_DECODER,        // Gaussian decoder. @see iftGFLIMGaussianDecoder()
+  IFT_GFLIM_TEST_DECODER
 } iftGFLIMDecoderType;
 
 typedef enum { // not used
@@ -125,7 +126,7 @@ iftMImageArray *iftGFLIMConvLayerBatch(iftFLIMGraphArray *graph,
                                       iftFLIMGraphAttention attention_opt, 
                                       int *kernel_labels, 
                                       iftGFLIMAggregationType aggregation_opt, 
-                                      bool **maintain_kernels, bool reduce);
+                                      /*bool **maintain_kernels,*/ bool reduce);
 void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftFLIMGraphArray *graph, 
                           char *pool_type, int pool_size, int pool_stride);
 iftFLIMGraph *iftGFLIMEncodeLayer(iftFLIMGraph *graph, 
