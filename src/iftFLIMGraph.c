@@ -2509,7 +2509,111 @@ iftMatrix *iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLI
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominance_winner
+ * @fn iftFLIMGraphAttentionClassDominance_v2
+ * @brief Compute attention values using class dominance
+ * @param H: matrix with the features
+ * @param graph: graph with node relations and features
+ * @param kernel_labels: labels of the kernels
+ * @return iftMatrix* attention values for the neighbors
+ */
+iftMatrix *iftFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+{
+    // get the number of labels and the minimum label
+    int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
+    for (int i = 1; i < H->ncols; i++)
+    {
+        if (kernel_labels[i] < minLabel)
+            minLabel = kernel_labels[i];
+        if (kernel_labels[i] > nlabels)
+            nlabels = kernel_labels[i];
+    }
+    nlabels = nlabels - minLabel + 1;
+
+    iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
+    for (int i = 0; i < H->nrows; i++)
+    {
+        // min-max normalization
+        double min[nlabels], max[nlabels];
+        for (int i = 0; i < nlabels; i++)
+        {
+            min[i] = IFT_INFINITY_FLT;
+            max[i] = IFT_INFINITY_FLT_NEG;
+        }
+        for (int j = 0; j < H->ncols; j++)
+        {
+            int label = kernel_labels[j] - minLabel;
+            if (iftMatrixElem(H, j, i) < min[label])
+                min[label] = iftMatrixElem(H, j, i);
+            if (iftMatrixElem(H, j, i) > max[label])
+                max[label] = iftMatrixElem(H, j, i);
+        }
+
+        double label_strength[nlabels];
+        int nkernels[nlabels];
+        for (int j = 0; j < nlabels; j++)
+        {
+            label_strength[j] = 0;
+            nkernels[j] = 0;
+        }
+
+        // compute kernel strength and 
+        for (int j = 0; j < H->ncols; j++)
+        {
+            int label = kernel_labels[j] - minLabel;
+            
+            if (max[label] == min[label])
+                iftMatrixElem(H_norm, j, i) = 0;
+            else
+                iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
+
+            label_strength[label] += iftMatrixElem(H_norm, j, i);
+            nkernels[label]++;
+        }
+
+        for (int j = 0; j < nlabels; j++)
+            label_strength[j] /= nkernels[j];
+
+        for (int j = 0; j < H->ncols; j++)
+        {
+            int label = kernel_labels[j] - minLabel;
+            
+            double ls = label_strength[1];
+            if(label == 0) ls = 1.0 - ls; 
+
+            double max_val = iftMax(ls, iftMatrixElem(H_norm, j, i));
+
+            double label_dominance = 0;
+            if (max_val != 0)
+                label_dominance = (ls - iftMatrixElem(H_norm, j, i)) / max_val; // [-1,1]
+
+            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
+        }
+    }
+
+    iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
+    for (int i = 0; i < H->nrows; i++)
+    {
+        for (int j = 0; j < H->ncols; j++)
+        {
+
+            iftMatrixElem(attention_vals, j, i) = 0;
+            iftSet *node = graph->nodes[i].adj;
+            while (node != NULL)
+            {
+                iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
+                node = node->next;
+            }
+
+            iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
+            iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
+        }
+    }
+    iftDestroyMatrix(&H_norm);
+    return attention_vals;
+}
+
+/**
+ * @fn iftFLIMGraphAttentionClassDominance
  * @brief Compute attention values using class dominance
  * @param H: matrix with the features
  * @param graph: graph with node relations and features
@@ -2578,20 +2682,8 @@ iftMatrix *iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph
 
             double label_dominance = 0;
             if (max_val != 0)
-                label_dominance = (label_strength[label] - iftMatrixElem(H_norm, j, i)) / iftMax(label_strength[label], iftMatrixElem(H_norm, j, i)); // [-1,1]
+                label_dominance = (label_strength[label] - iftMatrixElem(H_norm, j, i)) / max_val; // [-1,1]
 
-            /*if((i == 61 && j == 24) || (i == 12 && j == 21))
-            {
-                printf("A[%d][%d] = %f*((%f-%f)/%f) + 1 = (%f * %f) + 1 = %f, \n", i, j,
-                    iftMatrixElem(H_norm, j, i), label_strength[label], iftMatrixElem(H_norm, j, i), max_val,
-                    iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
-            }*/
-
-            /*if(i == 1)
-            {
-                printf("A[%d][%d] = (%f * %f) + 1 = %f \n", i, j,
-                    iftMatrixElem(H_norm, j, i), label_dominance, (iftMatrixElem(H_norm, j, i)*label_dominance)+1);
-            }*/
             iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
         }
     }
@@ -2601,6 +2693,11 @@ iftMatrix *iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph
     {
         for (int j = 0; j < H->ncols; j++)
         {
+            int label = kernel_labels[j] - minLabel;
+            if(label == 0){
+                iftMatrixElem(attention_vals, j, i) = 1;
+                continue;
+            }
             iftMatrixElem(attention_vals, j, i) = 0;
             iftSet *node = graph->nodes[i].adj;
             while (node != NULL)
@@ -2614,231 +2711,6 @@ iftMatrix *iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph
         }
     }
     iftDestroyMatrix(&H_norm);
-    return attention_vals;
-}
-
-iftMatrix *iftFLIMGraphAttentionClassDominance_v2(iftMatrix *X, iftMatrix *W, iftFLIMGraph *graph, int *kernel_labels)
-{
-    iftMatrix *H = iftMultMatrices(X, W);
-
-    iftMatrix *softmax_H = iftCreateMatrix(H->ncols, H->nrows);
-    // znorm
-    for (int j = 0; j < H->ncols; j++)
-    {
-        double sum2 = 0, sum = 0;
-        for (int i = 0; i < H->nrows; i++)
-        {
-            sum += iftMatrixElem(H, j, i);
-            sum2 += iftMatrixElem(H, j, i) * iftMatrixElem(H, j, i);
-        }
-        double mean = sum / H->nrows;
-        double std = sqrt(sum2 / H->nrows - mean * mean);
-        if (std < IFT_EPSILON && std > -IFT_EPSILON)
-        {
-            if (std < 0)
-                std = -IFT_EPSILON;
-            else
-                std = IFT_EPSILON;
-        }
-        for (int i = 0; i < H->nrows; i++)
-            iftMatrixElem(softmax_H, j, i) = (iftMatrixElem(H, j, i) - mean) / std;
-    }
-
-    iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-
-    for (int i = 0; i < H->nrows; i++)
-    {
-        double max = IFT_INFINITY_FLT_NEG;
-        for (int j = 0; j < H->ncols; j++)
-        {
-            if (iftMatrixElem(H, j, i) > max)
-                max = iftMatrixElem(softmax_H, j, i);
-        }
-
-        // Xi size for cosine similarity
-        double sumXi = 0, sumWj = 0;
-        for (int j = 0; j < X->ncols; j++)
-            sumXi += pow(iftMatrixElem(X, j, i), 2);
-        sumXi = sqrt(sumXi);
-
-        // Compute the inidividual kernels contributions: Softmax(Hij)
-        double softmax_norm = 0;
-        for (int j = 0; j < H->ncols; j++)
-        {
-            double e = exp(iftMatrixElem(softmax_H, j, i) - max); // handling high exponentials
-            iftMatrixElem(softmax_H, j, i) = e;
-            softmax_norm += e;
-        }
-        if (softmax_norm == 0)
-            softmax_norm = 1;
-
-        double Afg = IFT_INFINITY_FLT_NEG, Abg = IFT_INFINITY_FLT_NEG;
-        for (int j = 0; j < H->ncols; j++)
-        {
-            iftMatrixElem(softmax_H, j, i) /= softmax_norm; // softmax normalization
-
-            if (kernel_labels[j] == 2)
-                Afg = iftMax(iftMatrixElem(softmax_H, j, i), Afg);
-            else
-                Abg = iftMax(iftMatrixElem(softmax_H, j, i), Abg);
-        }
-        double dominance_score = (Afg - Abg) / (Afg + Abg); // [-1,1]
-        // printf("Dominance score: %f, Afg:%f, Abg:%f \n", dominance_score, Afg, Abg);
-
-        for (int j = 0; j < H->ncols; j++)
-        {
-            // compute dominance score [0,1] according to the kernel class
-            double ds;
-            if (kernel_labels[j] == 1)
-                ds = -dominance_score;
-            else
-                ds = dominance_score;
-            ds = iftMax(ds, 0);
-
-            // Wj size for cosine similarity
-            double sumWj = 0;
-            for (int k = 0; k < W->nrows; k++)
-                sumWj += pow(iftMatrixElem(W, j, k), 2);
-            sumWj = sqrt(sumWj);
-
-            // compute cosine similarity
-            double cosine = iftMatrixElem(H, j, i) / (sumXi * sumWj);
-
-            /*if(j == 125)
-                printf("H[%d][%d] = %f * Max(%f * (%f + %f),0.8) = %f\n", i, j, iftMatrixElem(H, j, i), cosine, ds, iftMatrixElem(softmax_H, j, i), iftMatrixElem(H, j, i)*iftMax(cosine*(ds + iftMatrixElem(softmax_H, j, 0)), 0.8));
-            */
-
-            iftMatrixElem(attention_vals, j, i) = iftMax(cosine * (ds + iftMatrixElem(softmax_H, j, 0)), 0.8);
-        }
-    }
-    iftDestroyMatrix(&softmax_H);
-
-    // iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    // iftDestroyMatrix(&attention_vals);
-    return attention_vals;
-}
-
-iftMatrix *iftFLIMGraphAttentionClassDominance_v1(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels, double ambiguity_penalty, double smoothnes)
-{
-    if (graph->num_nodes != H->nrows)
-        iftError("Number of nodes in the graph %ld is different from the number of rows in the matrix %d", __func__, graph->num_nodes, H->nrows);
-
-    iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
-    // the energy is the L2 norm of the kernel features
-    for (int i = 0; i < H->nrows; i++)
-    {
-        double max = IFT_INFINITY_FLT_NEG;
-        for (int j = 0; j < H->ncols; j++)
-        {
-            if (iftMatrixElem(H, j, i) > max)
-                max = iftMatrixElem(H, j, i);
-        }
-
-        // Compute the inidividual kernels contributions (Softmax(H))
-        double softmax_norm = 0;
-        iftMatrix *softmax_H = iftCreateMatrix(H->ncols, 1);
-        for (int j = 0; j < H->ncols; j++)
-        {
-            double h = iftMatrixElem(H, j, i) - max;
-            if (h < IFT_EPSILON && h > -IFT_EPSILON) // handling low exponentials
-            {
-                if (h >= 0)
-                    h = IFT_EPSILON;
-                else
-                    h = -IFT_EPSILON;
-            }
-            double e = exp(h); // handling high exponentials
-
-            iftMatrixElem(softmax_H, j, 0) = e;
-            softmax_norm += e;
-        }
-        if (softmax_norm == 0)
-            softmax_norm = 1;
-
-        // and compute class energy (L2 norm of H) to determine the class dominance
-        double energy_fg = 0, energy_bg = 0;
-        for (int j = 0; j < H->ncols; j++)
-        {
-            iftMatrixElem(softmax_H, j, 0) /= softmax_norm;
-            double h = iftMatrixElem(softmax_H, j, 0);
-            if (kernel_labels[j] == 2)
-            {
-                // energy_fg = iftMax(energy_fg, iftMatrixElem(H, j, i));
-                energy_fg += pow(h, 2);
-            }
-            else
-            {
-                // energy_bg = iftMax(energy_bg, iftMatrixElem(H, j, i));
-                energy_bg += pow(h, 2);
-            }
-        }
-        energy_fg = sqrt(energy_fg); // Efg = sqrt(sum(Hij^2) for all j in fg kernels)
-        energy_bg = sqrt(energy_bg); // Ebg = sqrt(sum(Hij^2) for all j in bg kernels)
-
-        // compute class dominance to determine which class should be enforced and which should be supressed.
-        double class_dominance_score = (energy_fg - energy_bg) / (energy_fg + energy_bg + IFT_EPSILON); // [-1,1], where > 0 means fg dominance and < 0 bg dominance
-        /*if(i == 34){
-            printf("Energy fg: %f, Energy bg: %f, Class dominance: %f\n", energy_fg, energy_bg, class_dominance_score);
-        }*/
-
-        // Let D be the class dominance score and lambda be ReLU(D) for foreground dominance and ReLU(-D) for background dominance.
-        // Compute attention values for each kernel j and a node i as Aij = Softmax(Hij) * (lambda + beta * |D|)
-        // Lambda gives a "boost" on the dominant classe, increasing separability.
-        // For non-dominant kernel classes, lambda is 0. Otherwise lambda is in (0,1).
-        // D indicates how separated the classes are in node i, |D| > 0 and is fixed to all kernels.
-        for (int j = 0; j < H->ncols; j++)
-        {
-            double att = ambiguity_penalty * fabs(class_dominance_score); // beta * |D|
-            if (kernel_labels[j] == 2)
-                att += iftMax(0, class_dominance_score);
-            else
-                att += iftMax(0, -class_dominance_score);
-
-            /*if(i == 34){
-                printf("A[%d][%d] = %f * %f = %f\n", i, j, att, iftMatrixElem(softmax_H, j, 0), att * iftMatrixElem(softmax_H, j, 0));
-            }*/
-            iftMatrixElem(attention_vals, j, i) = att * iftMatrixElem(softmax_H, j, 0);
-        }
-        iftDestroyMatrix(&softmax_H);
-    }
-
-    /*
-    iftMatrix *laplacian_smoothing = iftCreateMatrix(H->ncols, H->nrows);
-    // apply laplacian smoothing to the attention values
-    // Aij = Aij + (smoothness/|N(i)|) * sum(Akj) for all k in N(i)
-    for(int i=0; i < graph->num_nodes; i++)
-    {
-        for(int j = 0; j < H->ncols; j++)
-            iftMatrixElem(laplacian_smoothing, j, i) = 0;
-
-        iftSet *adj = graph->nodes[i].adj;
-        while(adj != NULL)
-        {
-            for(int j = 0; j < H->ncols; j++)
-                iftMatrixElem(laplacian_smoothing, j, i) += iftMatrixElem(attention_vals, j, adj->elem);
-            adj = adj->next;
-        }
-        double smoothness_norm = smoothnes/graph->nodes[i].numNeighbors;
-        for(int j = 0; j < H->ncols; j++){
-            if(i == 34)
-            {
-                printf("H[%d][%d] = %f * (%f + %f * %f) = %f \n", i, j, iftMatrixElem(H, j, i), iftMatrixElem(attention_vals, j, i), iftMatrixElem(laplacian_smoothing, j, i), smoothness_norm, iftMatrixElem(H, j, i) * (iftMatrixElem(attention_vals, j, i) + iftMatrixElem(laplacian_smoothing, j, i) * iftMatrixElem(laplacian_smoothing, j, i)));
-            }
-            iftMatrixElem(laplacian_smoothing, j, i) *= smoothness_norm;
-        }
-    }
-
-    iftMatrix *attention_final = iftSumMatrices(attention_vals, laplacian_smoothing);
-    iftDestroyMatrix(&laplacian_smoothing);
-    iftDestroyMatrix(&attention_vals);
-
-    iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_final);
-    iftDestroyMatrix(&attention_final);
-    */
-
-    // iftMatrix *out = iftMatricesMultiplicationPointWise(H, attention_vals);
-    // iftDestroyMatrix(&attention_vals);
-
     return attention_vals;
 }
 
