@@ -153,6 +153,7 @@ iftMatrix *iftFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntAr
 double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *graph, iftFLIMGraphAttention *attention_opt);
 iftMatrix * iftFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
+iftMatrix * iftFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 iftMatrix * iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 double *iftFLIMGraphAttentionCosineSimilarity(iftFLIMGraph *graph, iftIntArray *neighbors);
