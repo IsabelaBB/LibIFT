@@ -1,9 +1,10 @@
 #bin/bash
 
 function usage {
-	echo "Usage: $0 [-m nkernels_per_label] [-s split] [-i init_seeds] IMGS_DIR MARKERS_NAME GRAPH_FEAT SPX_ALG ARCH NLAYERS STRIDE_TYPE DECODER ATTENTION AGGREGATION BATCH_SIZE"
+	echo "Usage: $0 [-m nkernels_per_label] [-s split] [-i init_seeds] IMGS_DIR DS_NAME MARKERS_NAME GRAPH_FEAT SPX_ALG ARCH NLAYERS STRIDE_TYPE DECODER ATTENTION AGGREGATION NUM_SUPERPIXELS BATCH_SIZE"
 	echo "Mandatory arguments:"
 	echo "  IMGS_DIR:             Images directory. Example: ../Datasets/schisto/image-splits2d "
+	echo "  DS_NAME:              Dataset name. Example: schisto "
 	echo "  MARKERS_NAME          Name of the image markers folder. Example: stroke_markers"
 	echo "  GRAPH_FEAT:           Graph features option (See iftFLIMGraphFeature at iftFLIMGraph.h). Examples: MEAN, SUM"
 	echo "  SPX_ALG:              Superpixel segmentation option (see iftFLIMGraphType at iftFLIMGraph.h). Options: DISF, ERGC"
@@ -13,6 +14,7 @@ function usage {
 	echo "  DECODER:              Decode option (see iftGFLIMDecoderType at iftGFLIM_BoFP.h). Example: hybrid "
 	echo "  ATTENTION:            Attention option (see iftFLIMGraphAttention at iftFLIMGraph.h). Examples: NONE, CLASS_DOMINANCE"
 	echo "  AGGREGATION:		  Aggregation option (see iftGFLIMAggregationType at iftFLIMGraph.h). Options: CONCAT, MEAN, WMEAN"
+	echo "  NUM_SUPERPIXELS:      Number of superpixels (> 0)"
 	echo "  BATCH_SIZE            Batch size (> 0). Example: 64"
 	echo "Optional arguments:"
 	echo "  -m:                   perform a second kmeans per label"
@@ -44,23 +46,25 @@ if [ ${SPLIT} != "0" ] && [ ${SPLIT} != "1" ] && [ ${SPLIT} != "2" ] && [ ${SPLI
 	exit 1
 fi
 
-if [ "$#" -lt 11 ]; then
+if [ "$#" -lt 13 ]; then
 	echo "num args: $#" 
 	usage
 fi
 
 # Mandatory arguments
 IMGS_DIR=$1; 
-MARKERS_NAME=$2; 
-GRAPH_FEAT=$3; 
-SPX_ALG=$4; 
-ARCH=$5; 
-NLAYERS=$6;
-STRIDE_TYPE=$7; 
-DECODER=$8; 
-ATTENTION=$9;
-AGGREGATION=${10};
-BATCH_SIZE=${11};
+DS_NAME=$2;
+MARKERS_NAME=$3; 
+GRAPH_FEAT=$4; 
+SPX_ALG=$5; 
+ARCH=$6; 
+NLAYERS=$7;
+STRIDE_TYPE=$8; 
+DECODER=$9; 
+ATTENTION=${10};
+AGGREGATION=${11};
+NUM_SUPERPIXELS=${12};
+BATCH_SIZE=${13};
 
 # Set stride folder name
 case $STRIDE_TYPE in
@@ -81,7 +85,7 @@ function execGFLIM {
 	if [ "$SPX_ALG" == "DISF" ]; then
 		tmp+="${INIT_SEEDS}-"
 	fi
-	tmp+="${spx}/"
+	tmp+="${NUM_SUPERPIXELS}/"
 	if [ ${KMEANS} -eq 0 ]; then # not used
 		tmp+="noKmeans";
 	else 
@@ -97,9 +101,9 @@ function execGFLIM {
 		tmp+="-agg${AGGREGATION}"
 	fi
 
-	MODEL_DIR="../Results/schisto/split${s}/${MARKERS_NAME}/gflim-BoFP/${STRIDE_FOLDER_NAME}/${SPX_ALG}/${tmp}/${GRAPH_FEAT}-${ATTENTION}/";	# model directory
+	MODEL_DIR="../Results/${DS_NAME}/split${s}/${MARKERS_NAME}/gflim-BoFP/${STRIDE_FOLDER_NAME}/${SPX_ALG}/${tmp}/${GRAPH_FEAT}-${ATTENTION}/";	# model directory
 
-	ARGS="${IMG_PATH} ${ARCH} ${NLAYERS} ${MODEL_DIR} ${STRIDE_TYPE} ${spx} ${GRAPH_FEAT} ${SPX_ALG} ${DECODER} ${ATTENTION} ${BATCH_SIZE} ${AGGREGATION} ";
+	ARGS="${IMG_PATH} ${ARCH} ${NLAYERS} ${MODEL_DIR} ${STRIDE_TYPE} ${NUM_SUPERPIXELS} ${GRAPH_FEAT} ${SPX_ALG} ${DECODER} ${ATTENTION} ${BATCH_SIZE} ${AGGREGATION} ";
 	
 	[ ${DROPOUT} -eq 1 ] && ARGS+="-dropout ";
 	[ "$SPX_ALG" == "DISF" ] && ARGS+="-init_seeds ${INIT_SEEDS} ";
@@ -107,38 +111,11 @@ function execGFLIM {
 	python3 ../demo/GFLIM/GFLIM-extract.py ${ARGS};
 }
 
-# Assign superpixels based on the stride type and split
-case ${STRIDE_TYPE} in
-	"none")
-		if [ ${KMEANS} -eq 0 ]; then
-			superpixels=(3000 4000 5000)
-		else
-			superpixels=(6000 4000 5000)
-		fi
-		;;
-	"image-based")
-		superpixels=(4000 4000 5000);
-		;;
-	"graph-based")
-		if [ ${KMEANS} -eq 0 ]; then
-			superpixels=(5000 8000 8000)
-		else
-			superpixels=(6000 7000 7000);
-		fi
-		;;
-	*)
-		echo "Invalid STRIDE_TYPE: $STRIDE_TYPE"
-		exit 1;;
-esac
-
-
 if [ ${SPLIT} == "0" ]; then
 	for s in 1 2 3; do
-		spx=${superpixels[${s}-1]};
 		execGFLIM;
 	done;
 else
 	s=$((${SPLIT} + 0));
-	spx=${superpixels[${s}-1]};
 	execGFLIM;
 fi
