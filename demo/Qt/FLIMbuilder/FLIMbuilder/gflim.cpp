@@ -14,7 +14,7 @@ GFLIM::GFLIM()
     this->create_graphs = true;
 
     this->device = -1;
-    ift_arch = nullptr;
+    this->ift_arch = nullptr;
 }
 
 GFLIM::~GFLIM()
@@ -303,43 +303,38 @@ bool GFLIM::TrainLayer(int layer)
     // Setting layer input as previous layer output
     QString layer_input;
     QString layer_output;
-    QString layer_image_list;
-    bool done = TRUE;
 
     if (layer == 1)
-    {
         layer_input = this->graphs_dir;
-        layer_output = this->param_dir + "/layer" + QVariant(layer).toString() + "/";
-    }
     else
     {
         QDir weight_dir(this->param_dir);
         QFileInfoList weight_list = weight_dir.entryInfoList(QStringList() << "Weights" << QString("conv%1-*").arg(layer - 1), QDir::Files);
 
-        if (weight_list.empty())
-        { // previous layer has no weights
-            done = this->TrainLayer(layer - 1);
-        }
-        if (!done)
+        // previous layer has no weights
+        if(!this->modelExists(layer-1))
         {
+            qWarning("Could not found the previous layer's weights.");
             return FALSE;
         }
-
         layer_input = this->param_dir + "/layer" + QVariant(layer - 1).toString() + "/";
-        layer_output = this->param_dir + "/layer" + QVariant(layer).toString() + "/";
     }
+
+    layer_output = this->param_dir + "/layer" + QVariant(layer).toString() + "/";
 
     if (iftDirExists(layer_output.toUtf8().data()))
-    {
         iftRemoveDir(layer_output.toUtf8().data());
-        iftMakeDir(layer_output.toUtf8().data());
-    }
-    else
-    {
-        iftMakeDir(layer_output.toUtf8().data());
-    }
+
+    iftMakeDir(layer_output.toUtf8().data());
 
     // Creating architecture file for layer
+    QFile *save_arch = new QFile(this->param_dir + QString("arch_layer%1.json").arg(layer));
+    if (!save_arch->open(QIODevice::WriteOnly))
+    {
+        qWarning("Could not open arch file");
+        return FALSE;
+    }
+
     QJsonObject json_layer;
     json_layer.insert("stdev_factor", this->arch_json.value(QString("stdev_factor")));
     json_layer.insert("nlayers", 1);
@@ -347,14 +342,6 @@ bool GFLIM::TrainLayer(int layer)
     json_layer.insert("layer1", this->arch_json.value(QString("layer") + QVariant(layer).toString()));
 
     QJsonDocument *save = new QJsonDocument(json_layer);
-    QFile *save_arch = new QFile(this->param_dir + QString("arch_layer%1.json").arg(layer));
-
-    if (!save_arch->open(QIODevice::WriteOnly))
-    {
-        qWarning("Could not open arch file");
-        return FALSE;
-    }
-
     save_arch->write(save->toJson());
     save_arch->close();
 
@@ -369,13 +356,13 @@ bool GFLIM::TrainLayer(int layer)
                        tmp_arch,
                        layer_output.toUtf8().data());
 
+
     // Writting architecture in case it changed
     delete save;
     delete save_arch;
     this->arch_path = this->param_dir + "/arch.json";
 
     this->arch_json[QString("layer%1").arg(layer)].toObject()["noutput_channels"] = tmp_arch->layer[layer].noutput_channels;
-    save = new QJsonDocument(this->arch_json);
     save_arch = new QFile(this->arch_path);
 
     if (!save_arch->open(QIODevice::WriteOnly))
@@ -384,6 +371,7 @@ bool GFLIM::TrainLayer(int layer)
         return FALSE;
     }
 
+    save = new QJsonDocument(this->arch_json);
     save_arch->write(save->toJson());
     save_arch->close();
     delete save;
