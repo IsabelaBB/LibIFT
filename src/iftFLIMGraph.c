@@ -455,7 +455,14 @@ void iftWriteFLIMGraph(iftFLIMGraph *graph, char *filename)
         node++;
     }
     node = NULL;
+    char *old_locale = setlocale(LC_ALL, NULL);
+	if (old_locale) {
+		old_locale = strdup(old_locale);
+	}
+	setlocale(LC_ALL, "C");
     iftWriteJson(info, filename);
+    setlocale(LC_ALL, old_locale);
+	free(old_locale);
 
     for (int i = 0; i < graph->num_nodes; i++)
     {
