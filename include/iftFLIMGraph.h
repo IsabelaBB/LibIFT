@@ -20,6 +20,9 @@ extern "C" {
 #include "ift/core/io/Json.h"
 #include "ift/core/io/Dir.h"
 #include "iftSegmentation.h"
+#include<locale.h>
+
+#define	LC_ALL		  __LC_ALL
 
 typedef struct iftFLIMGraphNode iftFLIMGraphNode;
 
