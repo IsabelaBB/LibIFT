@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: pyift
+Version: 0.1
+Summary: Python  wrapper of libift
+Author: LIDS
+Maintainer: Jordao Bragantini
+Maintainer-email: jordao.bragantini@gmail.com
+License-File: LICENSE.txt
+Dynamic: author
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: summary
