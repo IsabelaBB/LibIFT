@@ -40,8 +40,8 @@ if(IFT_GPU)
     file(GLOB IFT_CUDA_SRC ${CMAKE_CURRENT_LIST_DIR}/src/*.cu)
 endif()
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11 -g -Wall")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11 -g -Wall -fPIC")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -g -Wall -fPIC")
 
 if(IFT_DEBUG OR CMAKE_BUILD_TYPE STREQUAL Debug)
     add_definitions(-DIFT_DEBUG=1)
