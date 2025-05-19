@@ -2092,10 +2092,276 @@ void iftGFLIMEncodeLayerBatch_v2(iftFLIMGraphArray *input,
 
 // ============ FUNCTIONS TO DECODE FEATURES ============ //
 
+iftFImage *TestAdaptativeDecoder2(iftFLIMGraph *graph, int *channel_label, int label)
+{
+    float *weight = iftAllocFloatArray(graph->num_feats);
+    float *mean = iftAllocFloatArray(graph->num_feats);
+
+    int num_pixels = 0;
+    /* Estimate the mean activation per channel */
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            mean[b] += graph->nodes[p].feats[b] * graph->nodes[p].numPixels;
+        num_pixels += graph->nodes[p].numPixels;
+    }
+
+    // Just so it is easier to compute the otsu
+    iftImage *means_image = iftCreateImage(graph->num_feats, 1, 1);
+    float max_mean = 0.0;
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        mean[b] /= (float)num_pixels;
+        means_image->val[b] = mean[b] * 255;
+        if (means_image->val[b] > max_mean)
+            max_mean = means_image->val[b];
+    }
+
+    if (max_mean > 0.0)
+    {
+        // Compute otsu threshold as a way to separate foreground bands from background bands
+        float mu = 0.0, stdev = 0.0;
+        for (int b = 0; b < graph->num_feats; b++)
+            mu += mean[b];
+        mu /= graph->num_feats;
+        int means_otsu = iftOtsu(means_image); 
+
+        // Compute the standard deviation
+        for (int b = 0; b < graph->num_feats; b++)
+            stdev += (mean[b] - mu) * (mean[b] - mu);
+        stdev = sqrtf(stdev / graph->num_feats) * sqrtf(stdev / graph->num_feats);
+
+        // Compute the low and high threshold values
+        float low_end, high_end;
+        if (means_otsu > 0.1)
+            low_end = means_otsu - stdev;
+        else
+            low_end = means_otsu;
+        high_end = means_otsu + stdev;
+
+        /*printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
+            low_end, high_end, means_otsu, stdev, mu);*/
+
+        /* Estimate the weight of each channel */
+        //iftImage *band = iftCreateImage(graph->num_nodes, 1, 1);
+        iftImage *band = iftCreateImage(num_pixels, 1, 1);
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            // Get one activation (a channel/band from mimg) and convert it from 0-1 to 0-255
+            for (int p = 0, x = 0; p < graph->num_nodes; p++) {
+                float feat = graph->nodes[p].feats[b];
+                for (int q = 0; q < graph->nodes[p].numPixels; q++, x++){
+                    band->val[x] = feat * 255;
+                }
+            }
+
+            // find the maximum value of the band
+            int max_band = iftMaximumValue(band); // the difference to the img version of this decoder is here. The otsu here consider node values, i.e, the nodes' sizes are not considered.
+
+            if (max_band > 0.0)
+            {
+                // Compute another otsu to separate foreground pixels from background pixels
+                int otsu_band = iftOtsu(band);
+
+                // Compute the foreground proportion of the band 
+                // as the proportion of pixels above otsu_band
+                float fg_proportion = 0;
+                for (int p = 0; p < band->n; p++)
+                {
+                    if (band->val[p] >= otsu_band) 
+                        fg_proportion += 1;//graph->nodes[p].numPixels;
+                }
+                fg_proportion /= num_pixels;
+                
+                // weight the band according to the high/low threshold and the foreground proportion
+                if (/*mean[b] >= high_end &&*/ fg_proportion > 0.2 && channel_label[b] == 1)
+                {
+                    if(label != 0) weight[b] = -1.0;
+                    else weight[b] = 1.0;
+                }
+                else if (/*mean[b] <= low_end &&*/ fg_proportion < 0.1 && channel_label[b] != 1)
+                {
+                    if(label != 0) weight[b] = 1.0;
+                    else weight[b] = -1.0;
+                }
+                else
+                {
+                    weight[b] = 0.0;
+                }
+            }
+            else
+            {
+                weight[b] = 0.0;
+            }
+        }
+        iftDestroyImage(&band);
+    }
+    else
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            weight[b] = 0.0;
+    }
+
+    iftFree(mean);
+    iftDestroyImage(&means_image);
+
+    iftFImage *salie = iftCreateFImage(graph->num_nodes, 1, 1);
+
+    /* decode layer */
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            //if (channel_label[b] != -1) // only foreground channels are weigthed
+            salie->val[p] += graph->nodes[p].feats[b] * weight[b];
+        }
+        if (salie->val[p] < 0)
+            salie->val[p] = 0;
+    }
+
+    iftFree(weight);
+
+    return (salie);
+}
+
+
+iftFImage *TestAdaptativeDecoder(iftFLIMGraph *graph, int *channel_label, int label)
+{
+    float *weight = iftAllocFloatArray(graph->num_feats);
+    float *mean = iftAllocFloatArray(graph->num_feats);
+
+    int num_pixels = 0;
+    /* Estimate the mean activation per channel */
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            mean[b] += graph->nodes[p].feats[b] * graph->nodes[p].numPixels;
+        num_pixels += graph->nodes[p].numPixels;
+    }
+
+    // Just so it is easier to compute the otsu
+    iftImage *means_image = iftCreateImage(graph->num_feats, 1, 1);
+    float max_mean = 0.0;
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        mean[b] /= (float)num_pixels;
+        means_image->val[b] = mean[b] * 255;
+        if (means_image->val[b] > max_mean)
+            max_mean = means_image->val[b];
+    }
+
+    if (max_mean > 0.0)
+    {
+        // Compute otsu threshold as a way to separate foreground bands from background bands
+        float mu = 0.0, stdev = 0.0;
+        for (int b = 0; b < graph->num_feats; b++)
+            mu += mean[b];
+        mu /= graph->num_feats;
+        int means_otsu = iftOtsu(means_image); 
+
+        // Compute the standard deviation
+        for (int b = 0; b < graph->num_feats; b++)
+            stdev += (mean[b] - mu) * (mean[b] - mu);
+        stdev = sqrtf(stdev / graph->num_feats) * sqrtf(stdev / graph->num_feats);
+
+        // Compute the low and high threshold values
+        float low_end, high_end;
+        if (means_otsu > 0.1)
+            low_end = means_otsu - stdev;
+        else
+            low_end = means_otsu;
+        high_end = means_otsu + stdev;
+
+        /*printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
+            low_end, high_end, means_otsu, stdev, mu);*/
+
+        /* Estimate the weight of each channel */
+        //iftImage *band = iftCreateImage(graph->num_nodes, 1, 1);
+        iftImage *band = iftCreateImage(num_pixels, 1, 1);
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            // Get one activation (a channel/band from mimg) and convert it from 0-1 to 0-255
+            for (int p = 0, x = 0; p < graph->num_nodes; p++) {
+                float feat = graph->nodes[p].feats[b];
+                for (int q = 0; q < graph->nodes[p].numPixels; q++, x++){
+                    band->val[x] = feat * 255;
+                }
+            }
+
+            // find the maximum value of the band
+            int max_band = iftMaximumValue(band); // the difference to the img version of this decoder is here. The otsu here consider node values, i.e, the nodes' sizes are not considered.
+
+            if (max_band > 0.0)
+            {
+                // Compute another otsu to separate foreground pixels from background pixels
+                int otsu_band = iftOtsu(band);
+
+                // Compute the foreground proportion of the band 
+                // as the proportion of pixels above otsu_band
+                float fg_proportion = 0;
+                for (int p = 0; p < band->n; p++)
+                {
+                    if (band->val[p] >= otsu_band) 
+                        fg_proportion += 1;//graph->nodes[p].numPixels;
+                }
+                fg_proportion /= num_pixels;
+                
+                // weight the band according to the high/low threshold and the foreground proportion
+                if (/*mean[b] >= high_end &&*/ fg_proportion > 0.2 && channel_label[b] == 1)
+                {
+                    if(label != 0) weight[b] = -1.0;
+                    else weight[b] = 1.0;
+                }
+                else if (/*mean[b] <= low_end &&*/ fg_proportion < 0.1 && channel_label[b] != 1)
+                {
+                    if(label != 0) weight[b] = 1.0;
+                    else weight[b] = -1.0;
+                }
+                else
+                {
+                    weight[b] = 0.0;
+                }
+            }
+            else
+            {
+                weight[b] = 0.0;
+            }
+        }
+        iftDestroyImage(&band);
+    }
+    else
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            weight[b] = 0.0;
+    }
+
+    iftFree(mean);
+    iftDestroyImage(&means_image);
+
+    iftFImage *salie = iftCreateFImage(graph->num_nodes, 1, 1);
+
+    /* decode layer */
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            //if (channel_label[b] != -1) // only foreground channels are weigthed
+            salie->val[p] += graph->nodes[p].feats[b] * weight[b];
+        }
+        if (salie->val[p] < 0)
+            salie->val[p] = 0;
+    }
+
+    iftFree(weight);
+
+    return (salie);
+}
+
+
 /**
  * @brief 
  */
-iftFImage *TestAdaptativeDecoder(iftFLIMGraph *graph, float *channel_label, int label)
+iftFImage *HybridAdaptativeDecoderGraph(iftFLIMGraph *graph, float *channel_label, int label)
 {
     float *weight = iftAllocFloatArray(graph->num_feats);
     float *mean = iftAllocFloatArray(graph->num_feats);
@@ -2257,13 +2523,130 @@ iftFImage *HybridAdaptativeDecoder(iftMImage *mimg, float *channel_label)
 
 /**
  * @fn iftGFLIMGaussianDecoder
+ * @return The decoded graph.
+ */
+iftFImage *iftGFLIMGaussianDecoder(iftFLIMGraph *graph, int *channel_label)
+{
+
+    iftFImage *salie = iftCreateFImage(graph->num_nodes, 1, 1);
+    float *weight = iftAllocFloatArray(graph->num_feats);
+    int nobj = 0, nbkg = 0;
+
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        if (channel_label[b] > 1)
+        { /* object channel */
+            nobj++;
+        }
+        else
+        { /* background channel */
+            nbkg++;
+        }
+    }
+
+    /* Estimate saliency of each pixel */
+
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        /* estimate mean and stdev of activations across channels */
+
+        float mean[2] = {0.0, 0.0}, var[2] = {0.0, 0.0};
+        
+        iftSet *adj = graph->nodes[p].adj;
+        float sum_size = 0;
+        float sum_feats[2] = {0.0, 0.0};
+        float sum_feats_2[2] = {0.0, 0.0};
+
+        while(adj != NULL)
+        {
+            double *feats = graph->nodes[adj->elem].feats;
+            float size = (float)graph->nodes[adj->elem].numPixels;
+            sum_size += size;
+
+            for (int b = 0; b < graph->num_feats; b++)
+            {
+                if (channel_label[b] == 1)
+                { /* background channel */
+                    sum_feats[1] += feats[b] * size;
+                    sum_feats_2[1] += pow(feats[b] * size, 2);
+                }
+                else
+                { /* object channel */
+                    sum_feats[0] += feats[b] * size;
+                    sum_feats_2[0] += pow(feats[b] * size, 2);
+                }
+            }
+            adj = adj->next;
+        }
+
+        float neighb_size = graph->nodes[p].numNeighbors * sum_size;
+
+        mean[0] = sum_feats[0] / (nobj * neighb_size);
+        mean[1] = sum_feats[1] / (nbkg * neighb_size);
+        
+        var[0] = (sum_feats_2[0] / (nobj * neighb_size)) - pow(mean[0], 2);
+        var[1] = (sum_feats_2[1] / (nbkg * neighb_size)) - pow(mean[1], 2);
+
+        /* It is expected two Gaussian distributions G0 and G1 of
+           activations around mean[0] and mean[1]. We may expect that
+           object pixels generate mean[0] >> mean[1] and the other way
+           around for background pixels. We may use the the probability
+           values of these distributions to estimate weights. */
+
+        float P0, P1;
+        double *feats = graph->nodes[p].feats;
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            // obj
+            if (var[0] <= IFT_EPSILON) var[0] = 1.0;
+            P0 = exp(-powf(feats[b] - mean[0], 2) / (2.0 * var[0]));
+            
+            // bkg
+            if (var[1] <= IFT_EPSILON) var[1] = 1.0;
+            P1 = exp(-powf(feats[b] - mean[1], 2) / (2.0 * var[1]));
+
+            if ((channel_label[b] > 1) && (P0 > P1))
+            {
+                weight[b] = 1; // P0;
+            }
+            else
+            {
+                if ((channel_label[b] == 1) && (P0 < P1))
+                {
+                    weight[b] = -1; // P1
+                }
+                else
+                {
+                    weight[b] = 0;
+                }
+            }
+        }
+
+        /* Estimate the salience map using one neuron per pixel -- it is
+           no longer a point-wise convolution */
+
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            salie->val[p] += feats[b] * weight[b];
+        }
+        if (salie->val[p] < 0)
+            salie->val[p] = 0;
+    }
+    iftFree(weight);
+
+    return (salie);
+}
+
+
+/**
+ * @fn iftGFLIMGaussianDecoder
  * @brief Decode the features using a Gaussian decoder.
  * @param mimg The input mimage.
  * @param adj_radius The adjacency radius.
  * @param channel_label An array with the kernel labels.
  * @return The decoded image.
  */
-iftFImage *iftGFLIMGaussianDecoder(iftMImage *mimg, float adj_radius, float *channel_label)
+iftFImage *iftGFLIMGaussianDecoder_bkp(iftMImage *mimg, float adj_radius, float *channel_label)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -2688,15 +3071,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         /* Estimate saliency of each pixel */
         for (int l = 0; l < nlabels; l++)
         {
-            /* set weights */
-            for (int k = 0; k < graph->num_feats; k++)
-            {
-                if ((l + 1) == truelabels[k])
-                    weight[k] = +1;
-                else
-                    weight[k] = -1;
-            }
-            iftFImage *salie_graph = TestAdaptativeDecoder(graph, weight, l);
+            iftFImage *salie_graph = TestAdaptativeDecoder(graph, truelabels, l);
 
             salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
             // fill the saliency image with the saliency of the graph nodes.
@@ -2705,7 +3080,6 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
             
             iftFree(salie_graph);
         }
-        iftFree(weight);
         break;
 
     case IFT_GFLIM_GRAPHADAPTIVE_DECODER:
@@ -2737,22 +3111,16 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
     case IFT_GFLIM_GAUSSIAN_DECODER:
         if (truelabels == NULL)
             iftError("truelabels must be not NULL with gaussian decoder", __func__);
-        mimg = iftFLIMGraphToMImage(graph, label_img);
-        weight = iftAllocFloatArray(graph->num_feats);
         for (int l = 0; l < nlabels; l++)
         {
-            /* set weights */
-            for (int k = 0; k < graph->num_feats; k++)
-            {
-                if ((l + 1) == truelabels[k])
-                    weight[k] = +1;
-                else
-                    weight[k] = -1;
-            }
-            salie[l] = iftGFLIMGaussianDecoder(mimg, 1.5, weight);
+            iftFImage *salie_graph = iftGFLIMGaussianDecoder(graph, truelabels);
+            salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
+            // fill the saliency image with the saliency of the graph nodes.
+            for (int p = 0; p < label_img->n; p++)
+                salie[l]->val[p] = salie_graph->val[label_img->val[p] - 1];
+            
+            iftFree(salie_graph);
         }
-        iftDestroyMImage(&mimg);
-        iftFree(weight);
         break;
 
     default:
