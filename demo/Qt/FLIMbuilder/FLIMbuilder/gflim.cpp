@@ -348,6 +348,12 @@ bool GFLIM::TrainLayer(int layer)
     // Reading architecture
     iftFLIMArch *tmp_arch = iftReadFLIMArch((this->param_dir + QString("arch_layer%1.json").arg(layer)).toUtf8().data());
 
+    printf("input:%s seeds_dir:%s model:%s layer:%d output:%s \n", layer_input.toUtf8().data(),
+           this->seeds_dir.toUtf8().data(),
+           this->param_dir.toUtf8().data(),
+           layer,
+           layer_output.toUtf8().data());
+
     // char *activ_dir, char *markers_dir, char *param_dir, int layer_index, iftFLIMArch *arch, char *output_dir
     iftGFLIMTrainLayer(layer_input.toUtf8().data(),
                        this->seeds_dir.toUtf8().data(),

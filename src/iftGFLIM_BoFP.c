@@ -1556,7 +1556,6 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
             }
             nlabels = nlabels - minLabel + 1;
             
-            int k = 0;
             for (int l = minLabel + 1; l <= nlabels; l++)
             {
                 float min_val = IFT_INFINITY_FLT;
@@ -2143,8 +2142,8 @@ iftFImage *TestAdaptativeDecoder(iftFLIMGraph *graph, float *channel_label, int 
             low_end = means_otsu;
         high_end = means_otsu + stdev;
 
-        printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
-            low_end, high_end, means_otsu, stdev, mu);
+        /*printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
+            low_end, high_end, means_otsu, stdev, mu);*/
 
         /* Estimate the weight of each channel */
         //iftImage *band = iftCreateImage(graph->num_nodes, 1, 1);
@@ -2686,7 +2685,6 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
         if (truelabels == NULL)
             iftError("truelabels must be not NULL with hybrid decoder", __func__);
 
-        weight = iftAllocFloatArray(graph->num_feats);
         /* Estimate saliency of each pixel */
         for (int l = 0; l < nlabels; l++)
         {

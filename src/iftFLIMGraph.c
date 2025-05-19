@@ -340,12 +340,13 @@ iftFLIMGraphType iftGFLIMGetGraphType(const char *name)
  */
 iftFLIMGraph *iftReadFLIMGraph(char *filename)
 {
+
     if (!iftFileExists(filename))
         iftError("Graph file does not exist", __func__);
     iftDict *graph_dict = iftReadJson(filename);
 
-    unsigned long num_nodes = (unsigned long)iftGetLongValFromDict("num_nodes", graph_dict);
-    unsigned long num_feats = (unsigned long)iftGetLongValFromDict("num_feats", graph_dict);
+    unsigned long num_nodes = (unsigned long)iftGetLongValFromDict("num_nodes", graph_dict); 
+    unsigned long num_feats = (unsigned long)iftGetLongValFromDict("num_feats", graph_dict); 
 
     bool directed = false;
     if (iftDictContainKey("directed", graph_dict, NULL))
@@ -357,7 +358,7 @@ iftFLIMGraph *iftReadFLIMGraph(char *filename)
         iftError("Number of features must be greater than 0", __func__);
 
     iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(num_feats, num_nodes);
-    graph->num_edges = (unsigned long)iftGetLongValFromDict("num_edges", graph_dict);
+    graph->num_edges = (unsigned long)iftGetLongValFromDict("num_edges", graph_dict); 
 
     char name[50];
     iftFLIMGraphNode *node = graph->nodes;
@@ -2885,6 +2886,11 @@ iftIntArray *iftGetKNeighborsFLIMGraph(int node_index,
                                        iftFLIMGraph *graph, int k,
                                        int dilation, bool most_similar, iftFLIMGraphAttention attention_opt)
 {
+    if(graph == NULL)
+        iftError("Graph is NULL", __func__);
+    if(graph->num_nodes < 1)
+        iftError("Graph has no nodes: %d", __func__, graph->num_nodes);
+
     double *dissimilarity = (double *)malloc(graph->num_nodes * sizeof(double));
     iftIntArray *neighbors = iftCreateIntArray(k);
 
@@ -2898,6 +2904,9 @@ iftIntArray *iftGetKNeighborsFLIMGraph(int node_index,
         auxiliaryHeap->removal_policy = MAXVALUE;
     else
         heap->removal_policy = MAXVALUE;
+
+    if(node_index < 0 || node_index >= graph->num_nodes)
+        iftError("Node index out of bounds: %d", __func__, node_index);
 
     dissimilarity[node_index] = 0.0;
     iftInsertDHeap(auxiliaryHeap, node_index);

@@ -1076,8 +1076,8 @@ float *iftGFLIMTriStateAdaptativeWeigth(iftMImage *mimg)
             low_end = means_otsu;
         high_end = means_otsu + stdev;
 
-        printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
-            low_end, high_end, means_otsu, stdev, mu);
+        /*printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
+            low_end, high_end, means_otsu, stdev, mu);*/
 
         /* Estimate the weight of each channel */
         iftImage *band = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);

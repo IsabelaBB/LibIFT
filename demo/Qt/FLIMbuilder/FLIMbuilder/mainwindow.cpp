@@ -2574,7 +2574,7 @@ void MainWindow::on_pbSelectKernelsManual_clicked()
     updateActivations();
     this->setCursor(QCursor(Qt::ArrowCursor));
 
-    reply = QMessageBox::question(this, "Message", "Do you wish to update the FLIM Architecture?.",
+    reply = QMessageBox::question(this, "Message", "Do you wish to update the FLIM Architecture?",
                                   QMessageBox::Yes|QMessageBox::No);
     if (reply == QMessageBox::Yes) {
         QJsonValueRef ref = FLIMVariation == 0 ? this->flim->arch_json[QString("layer")+QVariant(layer).toString()].toObject()[QString("conv")]
