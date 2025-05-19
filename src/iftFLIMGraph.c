@@ -2122,7 +2122,7 @@ iftMatrix *iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph 
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftFLIMGraphAttentionClassDominancePower2_bkp(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -2716,6 +2716,108 @@ iftMatrix *iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph
 
             iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
             iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
+        }
+    }
+    iftDestroyMatrix(&H_norm);
+    return attention_vals;
+}
+
+/**
+ * @fn iftFLIMGraphAttentionClassDominance
+ * @brief Compute attention values using class dominance
+ * @param H: matrix with the features
+ * @param graph: graph with node relations and features
+ * @param kernel_labels: labels of the kernels
+ * @return iftMatrix* attention values for the neighbors
+ */
+iftMatrix *iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+{
+    // get the number of labels and the minimum label
+    int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
+    for (int i = 1; i < H->ncols; i++)
+    {
+        if (kernel_labels[i] < minLabel)
+            minLabel = kernel_labels[i];
+        if (kernel_labels[i] > nlabels)
+            nlabels = kernel_labels[i];
+    }
+    nlabels = nlabels - minLabel + 1;
+
+    iftMatrix *H_norm = iftCreateMatrix(H->ncols, H->nrows);
+    for (int i = 0; i < H->nrows; i++)
+    {
+        // min-max normalization
+        double min[nlabels], max[nlabels];
+        for (int i = 0; i < nlabels; i++)
+        {
+            min[i] = IFT_INFINITY_FLT;
+            max[i] = IFT_INFINITY_FLT_NEG;
+        }
+        for (int j = 0; j < H->ncols; j++)
+        {
+            int label = kernel_labels[j] - minLabel;
+            if (iftMatrixElem(H, j, i) < min[label])
+                min[label] = iftMatrixElem(H, j, i);
+            if (iftMatrixElem(H, j, i) > max[label])
+                max[label] = iftMatrixElem(H, j, i);
+        }
+
+        double label_strength[nlabels];
+        int nkernels[nlabels];
+        for (int j = 0; j < nlabels; j++)
+        {
+            label_strength[j] = 0;
+            nkernels[j] = 0;
+        }
+
+        for (int j = 0; j < H->ncols; j++)
+        {
+            int label = kernel_labels[j] - minLabel;
+            if (max[label] == min[label])
+                iftMatrixElem(H_norm, j, i) = 0;
+            else
+                iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H, j, i) - min[label]) / (max[label] - min[label]);
+
+            label_strength[label] += iftMatrixElem(H_norm, j, i);
+            nkernels[label]++;
+        }
+
+        for (int j = 0; j < nlabels; j++)
+            label_strength[j] /= nkernels[j];
+
+        for (int j = 0; j < H->ncols; j++)
+        {
+            int label = kernel_labels[j] - minLabel;
+            double max_val = iftMax(label_strength[label], iftMatrixElem(H_norm, j, i));
+
+            double label_dominance = 0;
+            if (max_val != 0)
+                label_dominance = (label_strength[label] - iftMatrixElem(H_norm, j, i)) / max_val; // [-1,1]
+
+            iftMatrixElem(H_norm, j, i) = (iftMatrixElem(H_norm, j, i) * label_dominance) + 1;
+        }
+    }
+
+    iftMatrix *attention_vals = iftCreateMatrix(H->ncols, H->nrows);
+    for (int i = 0; i < H->nrows; i++)
+    {
+        for (int j = 0; j < H->ncols; j++)
+        {
+            int label = kernel_labels[j] - minLabel;
+            if(label == 0){
+                iftMatrixElem(attention_vals, j, i) = 1;
+                continue;
+            }
+            iftMatrixElem(attention_vals, j, i) = 0;
+            iftSet *node = graph->nodes[i].adj;
+            while (node != NULL)
+            {
+                iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
+                node = node->next;
+            }
+
+            iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
+            iftMatrixElem(attention_vals, j, i) = powf(iftMatrixElem(attention_vals, j, i),2) + powf(iftMatrixElem(H_norm, j, i),2);
         }
     }
     iftDestroyMatrix(&H_norm);

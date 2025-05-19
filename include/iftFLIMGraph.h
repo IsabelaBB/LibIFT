@@ -125,6 +125,7 @@ iftFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes);
 void iftDestroyFLIMGraph(iftFLIMGraph **graph);
 void iftInsertFLIMGraphNeighborNode(iftFLIMGraphNode *node, int neighbor);
 bool iftIsValidFLIMGraph(iftFLIMGraph *graph);
+iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool copy_features);
 
 /* --------------------- FLIMGraph convert from string to a type ----------------------------- */
 iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name);
@@ -150,14 +151,16 @@ void iftMImageToFLIMGraphInplace(iftMImage *mimg, iftFLIMGraph *graph_ref);
 iftImage **iftFLIMGraphToActivations(iftFLIMGraph *graph, iftImage *labels);
 
 /* --------------------- FLIMGraph attention ----------------------------- */
+double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *graph, iftFLIMGraphAttention *attention_opt);
+
+iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
+iftMatrix *iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
+
 double *iftFLIMGraphAttentionRelNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors);
 double *iftFLIMGraphAttentionNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors);
 iftMatrix *iftFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntArray *neighbors, int *kernel_labels, int label);
-double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *graph, iftFLIMGraphAttention *attention_opt);
 iftMatrix * iftFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
-iftMatrix * iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 iftMatrix * iftFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
-iftMatrix * iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 iftMatrix * iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels);
 double *iftFLIMGraphAttentionCosineSimilarity(iftFLIMGraph *graph, iftIntArray *neighbors);
 

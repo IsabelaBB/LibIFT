@@ -120,6 +120,10 @@ void iftGFLIMPoolingLayer(iftFLIMGraph *graph,
                         int pool_stride);
 iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, 
                                                 float *bias, bool inplace);
+iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
+                              int kernel_size, iftFLIMGraphAttention attention_opt,
+                              int *kernel_labels, iftGFLIMAggregationType aggregation_opt,
+                              /*bool *maintain_kernels,*/ bool reduce);
 iftMImageArray *iftGFLIMConvLayerBatch(iftFLIMGraphArray *graph, 
                                       iftMatrix *kernels, 
                                       int kernel_size, 
