@@ -45,7 +45,8 @@ typedef enum {
   IFT_GFLIM_HYBRID_DECODER,         // Hybrid decoder. @see iftGFLIMHybridDecoder()
   IFT_GFLIM_GRAPHADAPTIVE_DECODER,  // Graph adaptive decoder. @see iftGFLIMGraphAdaptiveDecoder()
   IFT_GFLIM_GAUSSIAN_DECODER,        // Gaussian decoder. @see iftGFLIMGaussianDecoder()
-  IFT_GFLIM_TEST_DECODER
+  IFT_GFLIM_TEST_DECODER,
+  IFT_GFLIM_MEAN_DECODER,         // Mean decoder. @see iftGFLIMMeanDecoder()
 } iftGFLIMDecoderType;
 
 typedef enum { // not used

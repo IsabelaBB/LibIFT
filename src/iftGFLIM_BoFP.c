@@ -78,6 +78,8 @@ iftGFLIMDecoderType iftGLFLIMGetDecoderType(const char *name)
         return IFT_GFLIM_GAUSSIAN_DECODER;
     if (strcmp(name, "test") == 0)
         return IFT_GFLIM_TEST_DECODER;
+    if (strcmp(name, "mean") == 0)
+        return IFT_GFLIM_MEAN_DECODER;
     iftError("Invalid decoder type: %s. The options are tristate, hybrid, graph-adaptive, and gaussian", __func__, name);
     return IFT_GFLIM_TRISTATE_DECODER;
 }
@@ -2946,6 +2948,86 @@ float *iftGFLIMGraphAdaptiveDecoder(iftFLIMGraph *graph, float *channel_weight)
 }
 
 /**
+ * @fn iftGFLIMMeanAdaptiveDecoder
+ * @brief Decode the features using a Mean Adaptive Decoder.
+ * @param graph The input graph.
+ * @param channel_label An array with the kernel labels.
+ * @return The saliency of the nodes.
+ * @note The channel_label is used to define the object and background channels.
+ * @note This function normalizes the graph node features.
+ */
+float *iftGFLIMMeanAdaptiveDecoder(iftFLIMGraph *graph, float *channel_weight)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (label_img == NULL)
+        printf("\t label_img: NULL \n");
+    else
+        printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
+    printf("\t channel_label: %s\n", channel_label == NULL ? "NULL" : "not NULL");
+#endif
+
+    //float lambda = 1.2;
+    /* Normalize activations per channel */
+    int nchannels[2] = {0, 0}; // number of channels for label
+    for (int b = 0; b < graph->num_feats; b++)
+    {
+        nchannels[channel_weight[b] < 1 ? 1 : 0]++; // count the number of channels for each label
+    }
+    
+    float *saliencyGraph = (float *)iftAlloc(graph->num_nodes, sizeof(float));
+
+    /* Estimate saliency of each pixel */
+//#pragma parallel for
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        iftFLIMGraphNode node = graph->nodes[p];
+
+        /* estimate mean of activations across channels for a node p */
+        float mean[2] = {0.0, 0.0};
+        float neighbors_size = 0; // include the node itself
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            float mean_feat = node.feats[b] * node.numPixels; // use the number of pixels to weight the mean
+            neighbors_size += node.numPixels; // include the node itself
+            iftSet *adj = node.adj;
+            while (adj != NULL)
+            {
+                mean_feat += graph->nodes[adj->elem].feats[b] * graph->nodes[adj->elem].numPixels;
+                neighbors_size += graph->nodes[adj->elem].numPixels; // include the neighbor
+                adj = adj->next;
+            }
+            mean[channel_weight[b] < 1 ? 1 : 0] += mean_feat;
+        }
+        mean[0] /= (nchannels[0] * (node.numNeighbors + 1) * neighbors_size);
+        mean[1] /= (nchannels[1] * (node.numNeighbors + 1) * neighbors_size);
+
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            // b is obj and mean_{obj} > mean_{bkg}
+            if (channel_weight[b] > 0 && mean[0] > mean[1])
+                saliencyGraph[p] += node.feats[b];
+            else
+            {
+                // b is bkg and mean_{obj} < mean_{bkg}
+                if (channel_weight[b] < 0 && mean[0] < mean[1])
+                    saliencyGraph[p] -= node.feats[b];
+            }
+        }
+
+        if (saliencyGraph[p] < 0) /* RELU */
+            saliencyGraph[p] = 0;
+    }
+
+    return (saliencyGraph);
+}
+
+
+/**
  * @fn iftGFLIMDecodeLayer
  * @brief Decode a layer.
  * @param graph The input graph.
@@ -3066,7 +3148,7 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
 
     case IFT_GFLIM_TEST_DECODER:
         if (truelabels == NULL)
-            iftError("truelabels must be not NULL with hybrid decoder", __func__);
+            iftError("truelabels must be not NULL with test decoder", __func__);
 
         /* Estimate saliency of each pixel */
         for (int l = 0; l < nlabels; l++)
@@ -3097,6 +3179,32 @@ iftImageArray *iftGFLIMDecodeLayer(iftFLIMGraph *graph,
                     weight[k] = -1;
             }
             saliencyGraph = iftGFLIMGraphAdaptiveDecoder(graph, weight);
+            salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
+            // fill the saliency image with the saliency of the graph nodes.
+            for (int p = 0; p < label_img->n; p++)
+            {
+                salie[l]->val[p] = saliencyGraph[label_img->val[p] - 1];
+            }
+            iftFree(saliencyGraph);
+        }
+        iftFree(weight);
+        break;
+
+    case IFT_GFLIM_MEAN_DECODER:
+        if (truelabels == NULL)
+            iftError("truelabels must be not NULL with graph adaptive decoder", __func__);
+        weight = iftAllocFloatArray(graph->num_feats);
+        for (int l = 0; l < nlabels; l++)
+        {
+            /* set weights */
+            for (int k = 0; k < graph->num_feats; k++)
+            {
+                if ((l + 1) == truelabels[k])
+                    weight[k] = +1;
+                else
+                    weight[k] = -1;
+            }
+            saliencyGraph = iftGFLIMMeanAdaptiveDecoder(graph, weight);
             salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
             // fill the saliency image with the saliency of the graph nodes.
             for (int p = 0; p < label_img->n; p++)
