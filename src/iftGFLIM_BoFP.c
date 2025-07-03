@@ -1543,11 +1543,12 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
             iftMatrix *XA = iftMatricesMultiplicationPointWise(XJ, A);
             iftDestroyMatrix(&A);
 
+            // compute the sum of the difference between the original and the attention matrix
+            // 'sumAttention' contain the sum of the difference between the XJ and XA
             iftMatrix *X_diff = iftMatricesSubtractionPointWise(XA, XJ);
             iftMatrix *sumAttention = iftComputeSumVectorBycolumn(X_diff);
-
-            // Remove from XJ half of the cols per label with the smallest attention values
-
+            
+            // compute the number of labels
             int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
             for (int i = 1; i < XJ->ncols; i++)
             {
@@ -1560,6 +1561,7 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
             
             for (int l = minLabel + 1; l <= nlabels; l++)
             {
+                // compute the number of kernels and min and max values of the attention for the current label
                 float min_val = IFT_INFINITY_FLT;
                 float max_val = IFT_INFINITY_FLT_NEG;
                 int nkernels = 0;
@@ -1573,21 +1575,23 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
                     }
                 }
                 
+                // normalize the attention values for the current label and put them in 'otsu_img'
                 iftImage *otsu_img = iftCreateImage(nkernels, 1, 1);
                 for (int i = 0, j = 0; i < XJ->ncols; i++)
                 {
                     if (kernel_labels[i] == l){
                         iftMatrixElem(sumAttention, i, 0) = 255*(iftMatrixElem(sumAttention, i, 0) - min_val)/(max_val - min_val);
                         otsu_img->val[j++] = (int)iftMatrixElem(sumAttention, i, 0);
-                        //printf("c:%d diff:%d, ", i, (int)iftMatrixElem(sumAttention, i, 0));
                     }
                 }
+
+                // perform otsu thresholding on the attention difference values of kernels with the same labels
                 int otsu_threshold = iftOtsu(otsu_img);
                 iftDestroyImage(&otsu_img);
-                //printf("\n\notsu_threshold: %d \n\n", otsu_threshold);
 
                 for (int i = 0; i < XJ->ncols; i++)
                 {
+                    // maintain the attention values of the kernels that are below the otsu threshold (i.e., their values decrease after the attention)
                     if (kernel_labels[i] == l && (int)iftMatrixElem(sumAttention, i, 0) <= otsu_threshold)
                     {
                         for (int j = 0; j < XJ->nrows; j++)
@@ -1596,9 +1600,6 @@ iftMImage *iftGFLIMConvLayer(iftFLIMGraph *graph, iftMatrix *kernels,
                 }
             }
             iftDestroyMatrix(&XA);
-            //printf("\n");
-            /*for (int i = 0; i < XJ->ncols; i++)
-                maintain_kernels[i] = true;*/
 
             iftDestroyMatrix(&sumAttention);
         }
@@ -2273,9 +2274,6 @@ iftFImage *TestAdaptativeDecoder(iftFLIMGraph *graph, int *channel_label, int la
         else
             low_end = means_otsu;
         high_end = means_otsu + stdev;
-
-        /*printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
-            low_end, high_end, means_otsu, stdev, mu);*/
 
         /* Estimate the weight of each channel */
         //iftImage *band = iftCreateImage(graph->num_nodes, 1, 1);
