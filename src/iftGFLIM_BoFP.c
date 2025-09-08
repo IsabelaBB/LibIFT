@@ -430,7 +430,7 @@ iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
  * @param label_img0 The image with the superpixels in "layer 0" (network's input). It maps the image pixels to the graph nodes (from 1).
  * @return The set of updated graph markers.
  */
-iftLabeledSet *iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage *label_img0)
+void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage *label_img0)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -502,7 +502,7 @@ iftLabeledSet *iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img,
     for (int i = 0; i < num_nodes; i++)
         class_count[i] = iftAlloc(nclasses, sizeof(int));
 
-    // compute the number of pixels per class at each node
+    // compute the number of nodes per class at each node
     tmp = S;
     while (tmp != NULL)
     {
@@ -510,8 +510,46 @@ iftLabeledSet *iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img,
         class_count[node][tmp->label - minclass]++;
         tmp = tmp->next;
     }
-    free(nodes_map);
+    
+    tmp = S;
+    iftBMap *visited = iftCreateBMap(num_nodes); // to avoid inserting the same node multiple times
+    while (tmp != NULL)
+    {
+        int node0 = tmp->elem;
+        int node = nodes_map[node0] - 1; // map node0 to node
 
+        if(iftBMapValue(visited, node) == 0)
+        {
+            iftBMapSetValue(visited, node, 1); // mark node as visited
+
+            int max_class = 0;
+            int max_count = class_count[node][0];
+            for (int c = 1; c < nclasses; c++)
+            {
+                if (class_count[node][c] > max_count)
+                {
+                    max_class = c;
+                    max_count = class_count[node][c];
+                }
+            }
+            if (max_count > 0){
+                tmp->elem = node;
+                tmp->marker = max_class + minclass;
+                tmp->label = max_class + minclass;
+            }
+            else
+                iftError("Node %d has no class assigned", __func__, node0);
+        
+            tmp = tmp->next;
+        }else{
+            tmp = tmp->next;
+            iftRemoveLabeledSetElem(&S, node0); // remove the node if it was already visited
+        }
+    }
+    free(nodes_map);
+    iftDestroyBMap(&visited);
+    
+    /*
     iftLabeledSet *T = NULL;
     for (int p = 0; p < num_nodes; p++)
     {
@@ -527,8 +565,14 @@ iftLabeledSet *iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img,
         }
         if (max_count > 0)
             iftInsertLabeledSetMarkerAndHandicap(&T, p, max_class + minclass, max_class + minclass, 0);
-    }
-    return T;
+    }*/
+
+
+    for (int i = 0; i < num_nodes; i++)
+        iftFree(class_count[i]);
+    iftFree(class_count);
+    
+    //    return T;
 }
 
 // ============ CONVERT FROM SEEDS/GRAPH TO DATASET ============ //
@@ -850,26 +894,19 @@ iftMatrix *iftGFLIMCreateLayerModel(iftFLIMGraph *graph, iftLabeledSet *S,
     printf("\t aggregation_opt: %d\n", aggregation_opt);
 #endif
 
-    iftLabeledSet *T = NULL;
-
     switch (stride)
     {
     case IFT_GFLIM_GRAPHSTRIDE:
         if (graph->num_nodes != iftMaximumValue(label_img0))
-            T = iftGFLIMUpdateGraphMarkers(S, label_img, label_img0);
-        else
-            T = S;
+            iftGFLIMUpdateGraphMarkers(S, label_img, label_img0);
         break;
 
     case IFT_GFLIM_IMAGESTRIDE:
         if (label_img->xsize != label_img0->xsize || label_img->ysize != label_img0->ysize)
-            T = iftGFLIMUpdateGraphMarkers(S, label_img, label_img0);
-        else
-            T = S;
+            iftGFLIMUpdateGraphMarkers(S, label_img, label_img0);
         break;
 
     case IFT_GFLIM_NOSTRIDE:
-        T = S;
         break;
 
     default:
@@ -877,7 +914,7 @@ iftMatrix *iftGFLIMCreateLayerModel(iftFLIMGraph *graph, iftLabeledSet *S,
         break;
     }
 
-    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, T, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, aggregation_opt);
+    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, S, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, aggregation_opt);
 
 #ifdef PRINT_VALS
     printf("Dataset %s\n", basename);
@@ -947,10 +984,8 @@ iftMatrix *iftGFLIMCreateLayerModel(iftFLIMGraph *graph, iftLabeledSet *S,
 #endif
 
     iftDestroyDataSet(&Z);
-    if (T != S)
-        iftDestroyLabeledSet(&T);
-    else
-        T = NULL;
+    /*if (T != S) iftDestroyLabeledSet(&T);
+    else T = NULL;*/
     return kernels;
 }
 

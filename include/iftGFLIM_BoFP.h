@@ -76,7 +76,7 @@ iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
                                                   iftLabeledSet *S, 
                                                   iftGFLIMStrideType stride,
                                                   int img_xsize, int img_ysize);
-iftLabeledSet *iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, 
+void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, 
                                         iftImage *label_img, 
                                         iftImage *label_img0);
 
