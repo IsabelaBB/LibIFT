@@ -37,7 +37,6 @@ typedef struct _iftFLIMLayer {
   int  pool_size[3];        /* pooling sizes align x, y, and z */
   int  pool_stride;         /* pooling stride */
   int  *skip_connection;    /* index of the layers to apply skip connection */
-  bool topology;
 } iftFLIMLayer;
 
 //! swig(destroyer = iftDestroyFLIMArch)
