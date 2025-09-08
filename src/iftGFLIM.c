@@ -633,6 +633,12 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
         iftLabeledSet *S = iftReadSeedsGraph(fs_seeds->files[i]->path);
         int obj_label_map[graph->num_nodes];
         iftGFLIMRelabelConnectedComponentsInPlace(graph, S, obj_label_map);
+        iftLabeledSet *seed = S;
+        while (seed != NULL)
+        {
+            seed->label = seed->marker;
+            seed = seed->next;
+        }
 
         /* Apply marker-based image normalization */
         iftNormalizeFLIMGraphByZScore(graph, mean, stdev);
