@@ -90,7 +90,8 @@ typedef enum {
     IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB,       // concatenate the mean color with (superpixel size / neighborhood size)
     IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK,     // concatenate the mean color with (superpixel size / neighborhood size) and with haralick features
     IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK, // sum of color multiplied by 1 + (superpixel size / image size) and concatenated with haralick features
-    IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK               // concatenated sum of color with haralick features
+    IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK,              // concatenated sum of color with haralick features
+    IFT_FLIMGRAPH_FEATURE_RBD                               // RBD descriptor 
 } iftFLIMGraphFeature;
 
 /**
@@ -126,7 +127,46 @@ void iftDestroyFLIMGraph(iftFLIMGraph **graph);
 void iftInsertFLIMGraphNeighborNode(iftFLIMGraphNode *node, int neighbor);
 bool iftIsValidFLIMGraph(iftFLIMGraph *graph);
 iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool copy_features);
-
+iftFLIMGraph *ComputeGraphFeatureMean(
+                    unsigned long num_superpixels, 
+                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    iftImage *labeled_img);
+iftFLIMGraph *ComputeGraphFeatureSum(
+                    unsigned long num_superpixels,
+                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    iftImage *labeled_img);
+iftFLIMGraph *ComputeGraphFeatureSumMultRelsize(
+                    unsigned long num_superpixels,
+                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    iftImage *labeled_img);
+iftFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
+    unsigned long num_superpixels,
+    iftAdjRel *A, iftMImage *oiginal_img, 
+    iftImage *labeled_img);
+iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
+                unsigned long num_superpixels,
+                iftAdjRel *A,
+                iftMImage *oiginal_img, iftImage *labeled_img);
+iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
+        unsigned long num_superpixels,
+        iftAdjRel *A, iftMImage *oiginal_img, 
+        iftImage *labeled_img);
+iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
+    unsigned long num_superpixels,
+    iftAdjRel *A, iftMImage *oiginal_img, 
+    iftImage *labeled_img,
+    iftImage *gray_img);
+iftFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
+    unsigned long num_superpixels,
+    iftAdjRel *A,
+    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftImage *gray_img);
+iftFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
+    unsigned long num_superpixels,
+    iftAdjRel *A,
+    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftFLIMGraphFeature feat_type,
+    iftImage *gray_img);
 /* --------------------- FLIMGraph convert from string to a type ----------------------------- */
 iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name);
 iftFLIMGraphType iftGFLIMGetGraphType(const char *name);
