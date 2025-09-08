@@ -115,15 +115,13 @@ def run_model_parallel(arch_id, split_id, graphs_path_src):
     model_dir = f'/home/isabela/Codes/LibIFT/Results/{DS_NAME}/split{split_id}/{MARKERS_NAME}/{arch_name}/gflim/{STRIDE_NAME}/{SPX_ALG}/{INIT_SEEDS}-{FINAL_SPX}/{tmp}/{GRAPH_FEATS}-{ATTENTION}'
     markers_dir = f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{split_id}'
 
-    """
     for layer in range(0,nlayers+1):
         shutil.rmtree(f'{model_dir}/labels{layer}', ignore_errors=True)
         shutil.rmtree(f'{model_dir}/layer{layer}', ignore_errors=True)
 
     copyGraphsAndLabels(f'{DATASET_PATH}/interactive_splits/split{split_id}/orig/train', model_dir, graphs_path_src)
     train_model(model_dir, markers_dir, arch_file, nlayers, nfeat_markers, kernel_size)
-    """
-
+    
     for layer in range(0,nlayers+1):
         shutil.rmtree(f'{model_dir}/labels{layer}', ignore_errors=True)
         shutil.rmtree(f'{model_dir}/layer{layer}', ignore_errors=True)

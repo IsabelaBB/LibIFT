@@ -1,7 +1,7 @@
 #bin/bash
 
 function usage {
-	echo "Usage: $0 [-m nkernels_per_label] [-s split] [-i init_seeds] IMGS_DIR MARKERS_NAME GRAPH_FEAT SPX_ALG ARCH NLAYERS STRIDE_TYPE DECODER ATTENTION AGGREGATION BATCH_SIZE"
+	echo "Usage: $0 [-d] [-m nkernels_per_label] [-s split] [-i init_seeds] IMGS_DIR MARKERS_NAME GRAPH_FEAT SPX_ALG ARCH NLAYERS STRIDE_TYPE DECODER ATTENTION AGGREGATION BATCH_SIZE"
 	echo "Mandatory arguments:"
 	echo "  IMGS_DIR:             Images directory. Example: ../Datasets/schisto/image-splits2d "
 	echo "  MARKERS_NAME          Name of the image markers folder. Example: stroke_markers"
@@ -18,6 +18,7 @@ function usage {
 	echo "  -m:                   perform a second kmeans per label"
 	echo "  -s:                   split (1, 2, or 3). Default: 3 splits"
 	echo "  -i:                   initial seeds (needed if SPX_ALG is DISF"
+	echo "  -d:                   dropout"
 	exit 1
 }
 

@@ -110,26 +110,26 @@ function execGFLIM {
 	[ ${DROPOUT} -eq 1 ] && ARGS+="-dropout ";
 	[ ${ACTIVATIONS} -eq 1 ] && ARGS+="-act ";	# write activations
 	
-	python3 ../demo/GFLIM/GFLIM-BoFP/GFLIM-BoFP-train.py ${ARGS};
+	echo python3 ../demo/GFLIM/GFLIM-BoFP/GFLIM-BoFP-train.py ${ARGS};
 }
 
 # Assign superpixels based on the stride type and split
 case ${STRIDE_TYPE} in
 	"none")
 		if [ ${KMEANS} -eq 0 ]; then
-			superpixels=(3000 4000 5000)
+			superpixels=(10000 10000 10000)
 		else
-			superpixels=(10000 4000 5000)
+			superpixels=(10000 10000 10000)
 		fi
 		;;
 	"image-based")
-		superpixels=(4000 4000 5000);
+		superpixels=(10000 10000 10000);
 		;;
 	"graph-based")
 		if [ ${KMEANS} -eq 0 ]; then
-			superpixels=(5000 8000 8000)
+			superpixels=(20000 20000 20000)
 		else
-			superpixels=(6000 7000 7000);
+			superpixels=(20000 20000 20000);
 		fi
 		;;
 	*)
@@ -138,7 +138,7 @@ case ${STRIDE_TYPE} in
 esac
 
 if [ ${SPLIT} == "0" ]; then
-	for s in 1 2 3; do
+	for s in 1 2 3 4 5; do
 		spx=${superpixels[${s}-1]};
 		execGFLIM;
 	done;
