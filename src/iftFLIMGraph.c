@@ -342,7 +342,7 @@ iftFLIMGraph *iftReadFLIMGraph(char *filename)
 {
 
     if (!iftFileExists(filename))
-        iftError("Graph file does not exist", __func__);
+        iftError("Graph file does not exist %s", __func__, filename);
     iftDict *graph_dict = iftReadJson(filename);
 
     unsigned long num_nodes = (unsigned long)iftGetLongValFromDict("num_nodes", graph_dict); 
@@ -1113,6 +1113,1039 @@ void iftNormalizeFLIMGraphByZScore(iftFLIMGraph *graph, float *mean, float *stde
     }
 }
 
+/*
+typedef struct {
+    int num_channels;
+    float *vals;
+} iftColorBucket;
+
+typedef struct {
+    int num_buckets, num_bins; // each bin has num_buckets buckets
+    iftColorBucket *buckets; // buckets[num_bins][num_buckets]
+} iftColorHistogram;
+
+iftColorBucket createColorBucket(int num_channels) {
+    iftColorBucket bucket;
+    bucket.num_channels = num_channels;
+    bucket.vals = iftAllocFloatArray(num_channels);
+    return bucket;
+}
+
+iftColorHistogram createColorHistogram(int num_bins, int num_buckets, int num_channels) {
+    iftColorHistogram histogram;
+    histogram.num_buckets = num_buckets;
+    histogram.num_bins = num_bins;
+    histogram.buckets = (iftColorBucket *)malloc(num_bins * num_buckets * sizeof(iftColorBucket));
+    for (int i = 0; i < num_bins * num_buckets; i++) {
+        histogram.buckets[i] = createColorBucket(num_channels);
+    }
+    return histogram;
+}
+
+void destroyColorbucket(iftColorBucket *bucket) {
+    if (bucket != NULL) 
+        iftFree(bucket->vals);
+}
+
+void destroyColorHistogram(iftColorHistogram *histogram) {
+    if (histogram != NULL) {
+        for (int i = 0; i < histogram->num_bins * histogram->num_buckets; i++)
+            destroyColorbucket(&histogram->buckets[i]);
+        iftFree(histogram->buckets);
+    }
+}
+
+float **RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img, 
+                            int num_superpixels, int nbuckets, int nSelBuckets)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+
+    if (nbuckets < 1)
+        iftError("Number of buckets must be positive", __func__);
+
+    if (nSelBuckets < 1)
+        iftError("Number of selected buckets must be positive", __func__);
+
+    if (original_img_rgb == NULL)
+        iftError("Original image is NULL", __func__);
+    if (labeled_img == NULL)
+        iftError("Labeled image is NULL", __func__);
+    
+    int num_histograms = pow(2, original_img_rgb->m) - 1; // number of color histograms per superpixel
+    
+    if(nSelBuckets > nbuckets*num_histograms)
+        iftError("Number of selected buckets cannot be greater than the number of bins per histogram", __func__);
+
+    iftColorHistogram *ColorHistogram = (iftColorHistogram*)calloc(num_superpixels, sizeof(iftColorHistogram));
+    double **V = (double*)malloc(num_superpixels * sizeof(double*)); // buckets priority : V[image->num_channels][nbuckets]   
+    
+    for(int spx = 0; spx = num_superpixels; spx++){
+        V[spx] = (double *)calloc(num_histograms * nbuckets, sizeof(double));
+        ColorHistogram[spx] = createColorHistogram(num_histograms, nbuckets, original_img_rgb->m);
+    }
+
+    // Compute the color histogram for each superpixel
+    for(int p = 0; p < original_img_rgb->n; p++)
+    {
+        int spx_index = labeled_img->val[p] - 1; // get the superpixel index
+        float *pixel_color = original_img_rgb->val[p]; // get the pixel color
+        
+        // Find the maximum color
+        float max_color = pixel_color[0];
+        for(int c = 1; c < original_img_rgb->m; c++)
+        {
+            if (pixel_color[c] > max_color)
+                max_color = pixel_color[c];
+        }
+        
+        // get histogram index M(p)
+        int hist_id = 0; // set 000
+        int bit = 1;
+        for(int c = 0; c < original_img_rgb->m; c++)
+        {
+            if (pixel_color[c] == max_color){
+                hist_id = hist_id | bit; 
+            }
+            bit = bit << 1;
+        }
+        hist_id = ~hist_id; // invert the bits to get the histogram index
+        
+        // get bucket based on intensity
+        int bin = floor((max_color / 255.0) * nbuckets);
+
+        V[spx_index][hist_id * nbuckets + bin]++;
+
+        for(int c = 0; c < original_img_rgb->m; c++)
+            ColorHistogram[spx_index].buckets[hist_id * nbuckets + bin].vals[c] += pixel_color[c]; 
+    }
+
+    float ***spx_colors = (float***)calloc(num_superpixels, sizeof(float**)); // spx_colors[num_superpixels][nSelBuckets][num_channels]
+
+    // select a small set of colors to represent each superpixel from the histogram
+    for(int spx = 0; spx = num_superpixels; spx++)
+    {
+        spx_colors[spx] = (float **)calloc(nSelBuckets, sizeof(float*));
+        for(int b = 0; b < nSelBuckets; b++)
+        {
+            
+        }
+
+        iftDHeap *heap = iftCreateDHeap(nSelBuckets, V[spx]);
+        iftColorHistogram *ColorHistogramSpx = &ColorHistogram[spx];
+
+        // insert nSelBuckets values in the heap
+        int b = 0;
+        while(!iftFullDHeap(heap) && b < num_histograms * nbuckets)
+        {
+            if(V[b] > 0)
+                iftInsertDHeap(heap, b); 
+            else
+                (*ColorHistogramSpx).buckets[b].vals[0] = -1;
+            b++;
+        }
+        
+        // maintain in the heap the nSelBuckets buckets with the highest values
+        for(; b < num_histograms * nbuckets; b++)
+        {
+            if(V[b] <= 0)
+            {
+                (*ColorHistogramSpx).buckets[b].vals[0] = -1; // mark as empty
+                continue;
+            }
+
+            if(V[heap->node[0]] < V[b]){
+                int removed = iftRemoveDHeap(heap); // remove the bucket with the lowest value
+                (*ColorHistogramSpx).buckets[removed].vals[0] = -1;
+                iftInsertDHeap(heap, b); // insert the bucket with the highest value
+            }
+        }
+
+        // extract the nSelBuckets buckets with the highest values
+        while(!iftEmptyDHeap(heap))
+        {
+            int bucket_index = heap->last;
+            int removed = iftRemoveDHeap(heap); // remove the bucket with the highest value
+            spx_colors[spx][bucket_index] = iftAllocFloatArray(original_img_rgb->m); // allocate memory for the color values
+            for(int c = 0; c < original_img_rgb->m; c++)
+                (*ColorHistogramSpx).buckets[removed].vals[c] /= V[spx][removed]; // compute the mean color for the bucket
+        }
+        iftDestroyDHeap(&heap);
+        ColorHistogramSpx = NULL; // avoid dangling pointer
+    }
+    
+    for(int spx = 0; spx < num_superpixels; spx++)
+        iftFree(V[spx]);
+    iftFree(V);
+
+    int *spx_size = (int *)calloc(num_superpixels, sizeof(int));
+    for(int p = 0; p < original_img_rgb->n; p++)
+    {
+        int spx_index = labeled_img->val[p] - 1; // get the superpixel index
+        float *pixel_color = original_img_rgb->val[p]; // get the pixel color
+        
+        spx_size[spx_index]++; // count the number of pixels in the superpixel
+
+        float *min_desc_color;
+        float min_distance = INFINITY;
+        iftColorHistogram superpixel_descriptor = ColorHistogram[spx_index];
+        for(int b = 0; b < num_histograms * nbuckets; b++)
+        {
+            if(superpixel_descriptor.buckets[b].vals[0] < 0)
+                continue; // skip empty buckets
+
+            float *desc_color = superpixel_descriptor.buckets[b].vals;
+            float distance = 0.0;
+            for(int c = 0; c < original_img->m; c++)
+                distance += (pixel_color[c] - desc_color[c]) / 255.0;
+            
+            if(distance < min_distance)
+            {
+                min_distance = distance;
+                min_desc_color = desc_color; // store the closest color
+            }
+        }
+
+        for(int c = 0; c < original_img_rgb->m; c++)
+            superpixel_colors[spx_index][c] += min_desc_color[c]; // accumulate the color values for the superpixel
+    }
+
+    for(int spx = 0; spx < num_superpixels; spx++)
+    {
+        for(int c = 0; c < original_img_rgb->m; c++)
+            superpixel_colors[spx][c] /= spx_size[spx]; // compute the mean color for the superpixel
+        destroyColorHistogram(&ColorHistogram[spx]);
+    }
+    iftFree(spx_size);
+    iftFree(ColorHistogram);
+
+    iftBMap *neighbors[num_superpixels];
+    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img_rgb->m, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < original_img_rgb->m; band_index++)
+            node->feats[band_index] += original_img_rgb->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img_rgb, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(original_img_rgb, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(original_img_rgb, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        iftDestroyBMap(&neighbors[spx_index]);
+
+    return superpixel_colors;
+}
+
+iftFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img, 
+                            int num_superpixels, int nbuckets, int nSelBuckets,
+                            iftAdjRel *A)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+
+    if (nbuckets < 1)
+        iftError("Number of buckets must be positive", __func__);
+
+    if (nSelBuckets < 1)
+        iftError("Number of selected buckets must be positive", __func__);
+
+    if (original_img_rgb == NULL)
+        iftError("Original image is NULL", __func__);
+    if (labeled_img == NULL)
+        iftError("Labeled image is NULL", __func__);
+    
+    int num_histograms = pow(2, original_img_rgb->m) - 1; // number of color histograms per superpixel
+    
+    if(nSelBuckets > nbuckets*num_histograms)
+        iftError("Number of selected buckets cannot be greater than the number of bins per histogram", __func__);
+
+    iftColorHistogram *ColorHistogram = (iftColorHistogram*)calloc(num_superpixels, sizeof(iftColorHistogram));
+    double **V = (double*)malloc(num_superpixels * sizeof(double*)); // buckets priority : V[image->num_channels][nbuckets]   
+    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(nSelBuckets * original_img_rgb->m, num_superpixels);
+    
+    for(int spx = 0; spx = num_superpixels; spx++){
+        V[spx] = (double *)calloc(num_histograms * nbuckets, sizeof(double));
+        ColorHistogram[spx] = createColorHistogram(num_histograms, nbuckets, original_img_rgb->m);
+    }
+
+    // Compute the color histogram for each superpixel
+    for(int p = 0; p < original_img_rgb->n; p++)
+    {
+        int spx_index = labeled_img->val[p] - 1; // get the superpixel index
+        float *pixel_color = original_img_rgb->val[p]; // get the pixel color
+        
+        // Find the maximum color
+        float max_color = pixel_color[0];
+        for(int c = 1; c < original_img_rgb->m; c++)
+        {
+            if (pixel_color[c] > max_color)
+                max_color = pixel_color[c];
+        }
+        
+        // get histogram index M(p)
+        int hist_id = 0; // set 000
+        int bit = 1;
+        for(int c = 0; c < original_img_rgb->m; c++)
+        {
+            if (pixel_color[c] == max_color){
+                hist_id = hist_id | bit; 
+            }
+            bit = bit << 1;
+        }
+        hist_id = ~hist_id; // invert the bits to get the histogram index
+        
+        // get bucket based on intensity
+        int bin = floor((max_color / 255.0) * nbuckets);
+
+        V[spx_index][hist_id * nbuckets + bin]++;
+
+        for(int c = 0; c < original_img_rgb->m; c++)
+            ColorHistogram[spx_index].buckets[hist_id * nbuckets + bin].vals[c] += pixel_color[c]; 
+    }
+
+    // select a small set of colors to represent each superpixel from the histogram
+    for(int spx = 0; spx = num_superpixels; spx++)
+    {
+        iftDHeap *heap = iftCreateDHeap(nSelBuckets, V[spx]);
+        iftColorHistogram *ColorHistogramSpx = &ColorHistogram[spx];
+
+        // insert nSelBuckets values in the heap
+        int b = 0;
+        while(!iftFullDHeap(heap) && b < num_histograms * nbuckets)
+        {
+            if(V[b] > 0)
+                iftInsertDHeap(heap, b); 
+            else
+                (*ColorHistogramSpx).buckets[b].vals[0] = -1;
+            b++;
+        }
+        
+        // maintain in the heap the nSelBuckets buckets with the highest values
+        for(; b < num_histograms * nbuckets; b++)
+        {
+            if(V[b] <= 0)
+            {
+                (*ColorHistogramSpx).buckets[b].vals[0] = -1; // mark as empty
+                continue;
+            }
+
+            if(V[heap->node[0]] < V[b]){
+                int removed = iftRemoveDHeap(heap); // remove the bucket with the lowest value
+                (*ColorHistogramSpx).buckets[removed].vals[0] = -1;
+                iftInsertDHeap(heap, b); // insert the bucket with the highest value
+            }
+        }
+
+        while(!iftEmptyDHeap(heap))
+        {
+            int removed = iftRemoveDHeap(heap); // remove the bucket with the highest value
+            
+            for(int c = 0; c < original_img_rgb->m; c++)
+                (*ColorHistogramSpx).buckets[removed].vals[c] /= V[spx][removed]; // compute the mean color for the bucket
+        }
+        iftDestroyDHeap(&heap);
+        ColorHistogramSpx = NULL; // avoid dangling pointer
+    }
+    
+    for(int spx = 0; spx < num_superpixels; spx++)
+        iftFree(V[spx]);
+    iftFree(V);
+
+    int *spx_size = (int *)calloc(num_superpixels, sizeof(int));
+    for(int p = 0; p < original_img_rgb->n; p++)
+    {
+        int spx_index = labeled_img->val[p] - 1; // get the superpixel index
+        float *pixel_color = original_img_rgb->val[p]; // get the pixel color
+        
+        spx_size[spx_index]++; // count the number of pixels in the superpixel
+
+        float *min_desc_color;
+        float min_distance = INFINITY;
+        iftColorHistogram superpixel_descriptor = ColorHistogram[spx_index];
+        for(int b = 0; b < num_histograms * nbuckets; b++)
+        {
+            if(superpixel_descriptor.buckets[b].vals[0] < 0)
+                continue; // skip empty buckets
+
+            float *desc_color = superpixel_descriptor.buckets[b].vals;
+            float distance = 0.0;
+            for(int c = 0; c < original_img->m; c++)
+                distance += (pixel_color[c] - desc_color[c]) / 255.0;
+            
+            if(distance < min_distance)
+            {
+                min_distance = distance;
+                min_desc_color = desc_color; // store the closest color
+            }
+        }
+
+        for(int c = 0; c < original_img_rgb->m; c++)
+            superpixel_colors[spx_index][c] += min_desc_color[c]; // accumulate the color values for the superpixel
+    }
+
+    for(int spx = 0; spx < num_superpixels; spx++)
+    {
+        for(int c = 0; c < original_img_rgb->m; c++)
+            superpixel_colors[spx][c] /= spx_size[spx]; // compute the mean color for the superpixel
+        destroyColorHistogram(&ColorHistogram[spx]);
+    }
+    iftFree(spx_size);
+    iftFree(ColorHistogram);
+
+    iftBMap *neighbors[num_superpixels];
+    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img_rgb->m, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < original_img_rgb->m; band_index++)
+            node->feats[band_index] += original_img_rgb->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img_rgb, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(original_img_rgb, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(original_img_rgb, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        iftDestroyBMap(&neighbors[spx_index]);
+
+    return superpixel_colors;
+}
+*/
+
+iftFLIMGraph *ComputeGraphFeatureMean(
+                    unsigned long num_superpixels, 
+                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    iftImage *labeled_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+    iftBMap *neighbors[num_superpixels];
+
+    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {
+        for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+            node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    node = NULL;
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureSum(
+                    unsigned long num_superpixels,
+                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    iftImage *labeled_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+    iftBMap *neighbors[num_superpixels];
+
+    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        iftDestroyBMap(&neighbors[spx_index]);
+    
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureSumMultRelsize(
+                    unsigned long num_superpixels,
+                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    iftImage *labeled_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+
+    iftFLIMGraph *graph;
+    iftBMap *neighbors[num_superpixels];
+
+    graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {
+        double rel_size = (double)node->numPixels / (double)oiginal_img->n;
+        for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+            node->feats[band_index] *= (1.0 + rel_size);
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    node = NULL;
+
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
+    unsigned long num_superpixels,
+    iftAdjRel *A, iftMImage *oiginal_img, 
+    iftImage *labeled_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+
+    iftFLIMGraph *graph;
+    iftBMap *neighbors[num_superpixels];
+
+    graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    node = graph->nodes;
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {
+        double rel_size = (double)node->numPixels / (double)oiginal_img->n;
+        for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+        {
+            node->feats[band_index] /= (double)node->numPixels;
+            node->feats[band_index] *= (1.0 + rel_size);
+        }
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    node = NULL;
+
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
+                unsigned long num_superpixels,
+                iftAdjRel *A,
+                iftMImage *oiginal_img, iftImage *labeled_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+
+    iftBMap *neighbors[num_superpixels];
+    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 1, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {
+        for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+            node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+        node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)oiginal_img->n;
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    node = NULL;
+
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
+        unsigned long num_superpixels,
+        iftAdjRel *A, iftMImage *oiginal_img, 
+        iftImage *labeled_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+
+    iftBMap *neighbors[num_superpixels];
+    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 1, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {
+        for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+            node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+
+        int sum_size = 0;
+        iftSet *neigh = node->adj;
+        while (neigh != NULL)
+        {
+            sum_size += graph->nodes[neigh->elem].numPixels;
+            neigh = neigh->next;
+        }
+        sum_size += node->numPixels;
+        node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)sum_size;
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    node = NULL;
+
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
+    unsigned long num_superpixels,
+    iftAdjRel *A, iftMImage *oiginal_img, 
+    iftImage *labeled_img,
+    iftImage *gray_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+    if (gray_img == NULL)
+        iftError("Gray image is NULL", __func__);
+
+    iftFLIMGraph *graph;
+    iftBMap *neighbors[num_superpixels];
+
+    graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 6, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
+        node->feats[oiginal_img->m] = (double)node->numPixels / (double)oiginal_img->n;
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
+    node = NULL;
+
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
+    unsigned long num_superpixels,
+    iftAdjRel *A,
+    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftImage *gray_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+    if (gray_img == NULL)
+        iftError("Gray image is NULL", __func__);
+
+    iftFLIMGraph *graph;
+    iftBMap *neighbors[num_superpixels];
+
+    graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 5, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    iftFLIMGraphNode *node = graph->nodes;
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {
+        double rel_size = (double)node->numPixels / (double)oiginal_img->n;
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] *= (1.0 + rel_size);
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+    }
+    iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+        
+    node = NULL;
+
+    return graph;
+}
+
+iftFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
+    unsigned long num_superpixels,
+    iftAdjRel *A,
+    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftFLIMGraphFeature feat_type,
+    iftImage *gray_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+    if (gray_img == NULL)
+        iftError("Gray image is NULL", __func__);
+
+    iftFLIMGraph *graph;
+    iftBMap *neighbors[num_superpixels];
+
+    graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 5, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++)
+        neighbors[i] = iftCreateBMap(num_superpixels);
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        node->numPixels++;
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(oiginal_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftInsertFLIMGraphNeighborNode(node, q_label);
+                    iftInsertFLIMGraphNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        iftDestroyBMap(&neighbors[spx_index]);
+    iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+
+    return graph;
+}
+
+
 /**
  * @fn iftSuperpixelImageToFLIMGraph
  * @brief Create a graph from the original image and its segmentation map.
@@ -1128,6 +2161,7 @@ void iftNormalizeFLIMGraphByZScore(iftFLIMGraph *graph, float *mean, float *stde
  * @note The values in the segmentation map must be in the range [1, num_superpixels]
  * @author Isabela Borlido.
  */
+/*
 iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
     unsigned long num_superpixels,
     iftAdjRel *A,
@@ -1239,13 +2273,6 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
         break;
 
     case IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE:
-        /*int max_size = node->numPixels;
-        node++;
-        for (unsigned long spx_index = 1; spx_index < num_superpixels; spx_index++)
-        {
-            max_size = iftMax(max_size, node->numPixels);
-            node++;
-        }*/
         node = graph->nodes;
         for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
@@ -1329,6 +2356,9 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
 
     return graph;
 }
+*/
+
+
 
 /**
  * @fn iftImageToFLIMGraph
@@ -1375,17 +2405,70 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
     }
 
     iftImage *gray_img = NULL;
-    if (graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK ||
-        graph_feat == IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK ||
-        graph_feat == IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK)
+
+    switch (graph_feat)
     {
+    case IFT_FLIMGRAPH_FEATURE_MEAN:
+        graph = ComputeGraphFeatureMean(
+                    num_superpixels, A, mimg, 
+                    label_img_tmp);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_SUM:
+        graph = ComputeGraphFeatureSum(
+                    num_superpixels, A, mimg,
+                    label_img_tmp);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE:
+        graph = ComputeGraphFeatureSumMultRelsize(
+                    num_superpixels, A, mimg,
+                    label_img_tmp); 
+        break;
+    case IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE:
+        graph = ComputeGraphFeatureMeanMultRelsize(
+                    num_superpixels, A, mimg,
+                    label_img_tmp);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE:
+        graph = ComputeGraphFeatureMeanConcatRelsize(
+                    num_superpixels, A, mimg,
+                    label_img_tmp);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB:
+        graph = ComputeGraphFeatureMeanConcatRelsizeNeighb(
+                    num_superpixels, A, mimg,
+                    label_img_tmp);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK:
         iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
 #pragma omp parallel for
         for (int i = 0; i < mimg->n; i++)
-            gray_img->val[i] = mimg->val[i][0]; //*255;
+            gray_img->val[i] = mimg->val[i][0];
+        graph = ComputeGraphFeatureMeanConcatRelsizeHaralick(
+                    num_superpixels, A, mimg,
+                    label_img_tmp, NULL);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
+        iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+#pragma omp parallel for
+        for (int i = 0; i < mimg->n; i++)
+            gray_img->val[i] = mimg->val[i][0];
+        graph = ComputeGraphFeatureSumMultRelsizeConcatHaralick(
+                    num_superpixels, A, mimg,
+                    label_img_tmp, NULL);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
+        iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+#pragma omp parallel for
+        for (int i = 0; i < mimg->n; i++)
+            gray_img->val[i] = mimg->val[i][0];
+        graph = ComputeGraphFeatureSumConcatHaralick(
+                    num_superpixels, A, mimg,
+                    label_img_tmp, graph_feat, NULL);
+        break;
+    default:
+        iftError("Invalid graph feature type %d", __func__, graph_feat);
     }
 
-    graph = iftSuperpixelImageToFLIMGraph(num_superpixels, A, mimg, label_img_tmp, graph_feat, gray_img);
     if (gray_img != NULL)
         iftDestroyImage(&gray_img);
 
