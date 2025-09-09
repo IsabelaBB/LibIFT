@@ -2,5 +2,5 @@
 %include "iftMatrix.i"
 %include "iftDataSet.i"
 %include "iftMImage.i"
-%include "iftFLIMGraph.i"
+%include "iftGFLIMGraph.i"
 

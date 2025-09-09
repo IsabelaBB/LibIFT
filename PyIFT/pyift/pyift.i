@@ -164,7 +164,7 @@
 
 %include "src/iftRepresentation.i"
 
-%include "src/iftFLIMGraph.i"
+%include "src/iftGFLIMGraph.i"
 
 %include "src/iftRegistration.i"
 

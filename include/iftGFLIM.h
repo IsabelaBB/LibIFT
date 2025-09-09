@@ -28,18 +28,19 @@ extern "C" {
 #include "iftMatrix.h"
 #include "iftDataSet.h"
 #include "iftMImage.h"
-#include "iftFLIMGraph.h"
+#include "iftGFLIMGraph.h"
+
 
 /* --------------------- GFLIM seeds (user drawn markers) ----------------------------- */
 
-void iftGFLIMRelabelConnectedComponentsInPlace(iftFLIMGraph *graph, 
+void iftGFLIMRelabelConnectedComponentsInPlace(iftGFLIMGraph *graph, 
     iftLabeledSet *S, 
     int *obj_label_map);
 
-iftDataSet *iftGFLIMExtractLabelDataSet(iftFLIMGraph *graph,
+iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
         iftLabeledSet *S,
         int kernel_size,
-        iftFLIMGraphAttention attention_opt,
+        iftGFLIMGraphAttention attention_opt,
         iftGFLIMAggregationType aggregation_opt);
 
 /* --------------------- GFLIM training ----------------------------- */
@@ -50,13 +51,13 @@ void iftGFLIMTrainLayer(char *activ_dir, char *markers_dir, char *param_dir, int
 
 /* --------------------- GFLIM extract features ----------------------------- */
 
-void iftFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list, 
+void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list, 
                                         iftFLIMArch *arch, char *param_dir, int layer_index,
                                         char *feat_dir, int batchsize);
 
 /* --------------------- GFLIM pooling ----------------------------- */
 
-void iftGFLIMPoolingLayer(iftFLIMGraph *graph,
+void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
                         char *pool_type, 
                         int pool_size, 
                         int pool_stride);

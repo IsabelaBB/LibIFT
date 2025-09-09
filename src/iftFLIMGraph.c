@@ -1,8 +1,8 @@
-#include "iftFLIMGraph.h"
+#include "iftGFLIMGraph.h"
 
 /* --------------------- GraphArray functions ----------------------------- */
 /** @defgroup GraphArrayFunc GraphArray functions
- *  Functions to create and destroy iftFLIMGraphArray.
+ *  Functions to create and destroy iftGFLIMGraphArray.
  *  @{
  */
 
@@ -13,10 +13,10 @@
  * @return An array with n empty graphs.
  * @note The graphs are allocated but not initialized.
  */
-iftFLIMGraphArray *iftCreateEmptyFLIMGraphArray(int n)
+iftGFLIMGraphArray *iftCreateEmptyFLIMGraphArray(int n)
 {
-    iftFLIMGraphArray *array = (iftFLIMGraphArray *)calloc(1, sizeof(iftFLIMGraphArray));
-    array->val = (iftFLIMGraph **)calloc(n, sizeof(iftFLIMGraph *));
+    iftGFLIMGraphArray *array = (iftGFLIMGraphArray *)calloc(1, sizeof(iftGFLIMGraphArray));
+    array->val = (iftGFLIMGraph **)calloc(n, sizeof(iftGFLIMGraph *));
     array->n = n;
     return array;
 }
@@ -26,9 +26,9 @@ iftFLIMGraphArray *iftCreateEmptyFLIMGraphArray(int n)
  * @brief Destroy an array of graphs.
  * @param arr The array of graphs to be destroyed.
  */
-void iftDestroyFLIMGraphArray(iftFLIMGraphArray **arr)
+void iftDestroyFLIMGraphArray(iftGFLIMGraphArray **arr)
 {
-    iftFLIMGraphArray *aux = *arr;
+    iftGFLIMGraphArray *aux = *arr;
 
     if (aux != NULL)
     {
@@ -47,7 +47,7 @@ void iftDestroyFLIMGraphArray(iftFLIMGraphArray **arr)
 
 /* --------------------- FLIMGraph construction ----------------------------- */
 /** @defgroup FLIMGraphConstr FLIMGraph construction
- *  Functions to create and destroy iftFLIMGraph.
+ *  Functions to create and destroy iftGFLIMGraph.
  *  @{
  */
 
@@ -66,18 +66,18 @@ void iftDestroyFLIMGraphArray(iftFLIMGraphArray **arr)
  * @author Isabela B. Barcelos
  * @date fev, 2024
  */
-iftFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes)
+iftGFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes)
 {
     if (num_feats < 0)
         iftError("Number of features in graph must be positive", "iftCreateEmptyFLIMGraph");
     if (num_nodes < 0)
         iftError("Number of nodes in graph must be positive", "iftCreateEmptyFLIMGraph");
 
-    iftFLIMGraph *graph = (iftFLIMGraph *)calloc(1, sizeof(iftFLIMGraph));
+    iftGFLIMGraph *graph = (iftGFLIMGraph *)calloc(1, sizeof(iftGFLIMGraph));
     graph->num_nodes = num_nodes;
     graph->num_feats = num_feats;
     graph->num_edges = 0;
-    graph->nodes = (iftFLIMGraphNode *)calloc(graph->num_nodes, sizeof(iftFLIMGraphNode));
+    graph->nodes = (iftGFLIMGraphNode *)calloc(graph->num_nodes, sizeof(iftGFLIMGraphNode));
 
 #pragma omp parallel for
     for (unsigned long spx_index = 0; spx_index < graph->num_nodes; spx_index++)
@@ -96,11 +96,11 @@ iftFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes)
 
 /**
  * @fn iftDestroyFLIMGraph
- * @brief Destroy an iftFLIMGraph
+ * @brief Destroy an iftGFLIMGraph
  */
-void iftDestroyFLIMGraph(iftFLIMGraph **graph)
+void iftDestroyFLIMGraph(iftGFLIMGraph **graph)
 {
-    iftFLIMGraph *aux = *graph;
+    iftGFLIMGraph *aux = *graph;
 
     if (aux != NULL)
     {
@@ -131,7 +131,7 @@ void iftDestroyFLIMGraph(iftFLIMGraph **graph)
  * @author Isabela B. Barcelos
  * @date fev, 2024
  */
-void iftInsertFLIMGraphNeighborNode(iftFLIMGraphNode *node, int neighbor)
+void iftInsertFLIMGraphNeighborNode(iftGFLIMGraphNode *node, int neighbor)
 {
     if (node == NULL)
         iftError("Node is NULL", __func__);
@@ -160,9 +160,9 @@ void iftInsertFLIMGraphNeighborNode(iftFLIMGraphNode *node, int neighbor)
  * @author Isabela B. Barcelos
  * @date abr, 2023
  */
-iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool copy_features)
+iftGFLIMGraph *iftCopyFLIMGraph(int num_feats, iftGFLIMGraph *graph_orig, bool copy_features)
 {
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
 
     if (num_feats <= 0)
         iftError("Number of features must be positive", __func__);
@@ -172,8 +172,8 @@ iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool cop
 
     int min_feats = iftMin(graph->num_feats, graph_orig->num_feats);
 
-    iftFLIMGraphNode *node = graph->nodes;
-    iftFLIMGraphNode *node_orig = graph_orig->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node_orig = graph_orig->nodes;
     for (unsigned long node_index = 0; node_index < graph->num_nodes; node_index++)
     {
         if (copy_features)
@@ -204,7 +204,7 @@ iftFLIMGraph *iftCopyFLIMGraph(int num_feats, iftFLIMGraph *graph_orig, bool cop
  * @param graph Graph
  * @return True if the graph is valid, false otherwise
  */
-bool iftIsValidFLIMGraph(iftFLIMGraph *graph)
+bool iftIsValidFLIMGraph(iftGFLIMGraph *graph)
 {
     if (graph == NULL)
         iftError("Graph is NULL", __func__);
@@ -227,9 +227,9 @@ bool iftIsValidFLIMGraph(iftFLIMGraph *graph)
  * @fn iftGLIMGraphGetAggregationType
  * @brief Get the graph aggregation type from a string
  * @param arg aggregation type as string
- * @return iftFLIMGraphAggregation
+ * @return iftGFLIMGraphAggregation
  */
-iftFLIMGraphAttention iftGLIMGraphGetAggregationType(char *arg)
+iftGFLIMGraphAttention iftGLIMGraphGetAggregationType(char *arg)
 {
     if (strcmp(arg, "CONCAT") == 0)
         return IFT_GFLIM_AGGREGATION_CONCAT;
@@ -246,9 +246,9 @@ iftFLIMGraphAttention iftGLIMGraphGetAggregationType(char *arg)
  * @fn iftGLIMGraphGetAttentionType
  * @brief Get the graph attention from a string
  * @param arg attention type as string
- * @return iftFLIMGraphAttention
+ * @return iftGFLIMGraphAttention
  */
-iftFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg)
+iftGFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg)
 {
     if (strcmp(arg, "NONE") == 0)
         return IFT_FLIMGRAPH_ATTENTION_NONE;
@@ -279,9 +279,9 @@ iftFLIMGraphAttention iftGLIMGraphGetAttentionType(char *arg)
  * @fn iftGFLIMGetGraphFeature
  * @brief Get the graph feature from a string
  * @param name Name of the graph feature
- * @return iftFLIMGraphFeature Graph feature
+ * @return iftGFLIMGraphFeature Graph feature
  */
-iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name)
+iftGFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name)
 {
     if (strcmp(name, "MEAN") == 0)
         return IFT_FLIMGRAPH_FEATURE_MEAN;
@@ -301,7 +301,7 @@ iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name)
         return IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK;
     if (strcmp(name, "SUM_CONCAT_HARALICK") == 0)
         return IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK;
-    iftError("Invalid iftFLIMGraphFeature name %s", __func__, name);
+    iftError("Invalid iftGFLIMGraphFeature name %s", __func__, name);
     return IFT_FLIMGRAPH_FEATURE_MEAN;
 }
 
@@ -309,15 +309,15 @@ iftFLIMGraphFeature iftGFLIMGetGraphFeature(const char *name)
  * @fn iftGFLIMGetGraphType
  * @brief Get the graph type from a string
  * @param name Name of the graph type
- * @return iftFLIMGraphType Graph type
+ * @return iftGFLIMGraphType Graph type
  */
-iftFLIMGraphType iftGFLIMGetGraphType(const char *name)
+iftGFLIMGraphType iftGFLIMGetGraphType(const char *name)
 {
     if (strcmp(name, "DISF") == 0)
         return IFT_FLIMGRAPH_TYPE_DISF;
     if (strcmp(name, "ERGC") == 0)
         return IFT_FLIMGRAPH_TYPE_ERGC;
-    iftError("Invalid iftFLIMGraphType name %s", __func__, name);
+    iftError("Invalid iftGFLIMGraphType name %s", __func__, name);
     return IFT_FLIMGRAPH_TYPE_DISF;
 }
 
@@ -338,7 +338,7 @@ iftFLIMGraphType iftGFLIMGetGraphType(const char *name)
  * @author Isabela B. Barcelos
  * @date abr, 2023
  */
-iftFLIMGraph *iftReadFLIMGraph(char *filename)
+iftGFLIMGraph *iftReadFLIMGraph(char *filename)
 {
 
     if (!iftFileExists(filename))
@@ -357,11 +357,11 @@ iftFLIMGraph *iftReadFLIMGraph(char *filename)
     if (num_feats < 0)
         iftError("Number of features must be greater than 0", __func__);
 
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(num_feats, num_nodes);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(num_feats, num_nodes);
     graph->num_edges = (unsigned long)iftGetLongValFromDict("num_edges", graph_dict); 
 
     char name[50];
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long l = 0; l < graph->num_nodes; l++)
     {
         sprintf(name, "node%lu", l);
@@ -400,7 +400,7 @@ iftFLIMGraph *iftReadFLIMGraph(char *filename)
  * @param graph Graph
  * @param filename File path
  */
-void iftWriteFLIMGraph(iftFLIMGraph *graph, char *filename)
+void iftWriteFLIMGraph(iftGFLIMGraph *graph, char *filename)
 {
     iftIsValidFLIMGraph(graph);
 
@@ -417,7 +417,7 @@ void iftWriteFLIMGraph(iftFLIMGraph *graph, char *filename)
     iftDblArray *feats[graph->num_nodes];
     iftIntArray *neighbors[graph->num_nodes];
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long i = 0; i < graph->num_nodes; i++)
     {
         char node_name[100];
@@ -692,7 +692,7 @@ float getEntropyHaralick(iftMatrix *glcm)
 }
 
 /**
- * @fn iftFLIMGraphHaralickFeatures
+ * @fn iftGFLIMGraphHaralickFeatures
  * @brief Compute Haralick features for a superpixel image.
  * @param graph The FLIMGraph
  * @param original_img The original image
@@ -703,8 +703,8 @@ float getEntropyHaralick(iftMatrix *glcm)
  * @note It averages the features for the angles 0, 45, 90, and 135 degrees.
  * @note The features are contrast, correlation, energy, homogeneity, and entropy.
  */
-void iftFLIMGraphHaralickFeatures(
-    iftFLIMGraph *graph,
+void iftGFLIMGraphHaralickFeatures(
+    iftGFLIMGraph *graph,
     iftImage *original_img,
     iftImage *label_img,
     int feat_start)
@@ -720,7 +720,7 @@ void iftFLIMGraphHaralickFeatures(
     double angles[] = {0, IFT_PI / 4, IFT_PI / 2, 3 * IFT_PI / 4}; // 0, 45, 90, 135
     int nangles = 4;
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (int i = 0; i < graph->num_nodes; i++)
     {
         // https://scikit-image.org/docs/stable/api/skimage.feature.html#skimage.feature.graycomatrix
@@ -976,11 +976,11 @@ iftImage *iftERGC(iftMImage *mimg, iftAdjRel *A, int *num_superpixels, int m)
  * @return The FLIMGraph
  * @note `label_img` is allocated inside the function and must be destroyed by the caller.
  */
-iftFLIMGraph *iftGetFLIMGraphFromGrid(iftImage *img, iftImage **label_img)
+iftGFLIMGraph *iftGetFLIMGraphFromGrid(iftImage *img, iftImage **label_img)
 {
     iftMImage *mimg = NULL;
     iftAdjRel *A = NULL;
-    iftFLIMGraph *graph = NULL;
+    iftGFLIMGraph *graph = NULL;
 
     if (img == NULL)
         iftError("Image is null.", __func__);
@@ -1004,7 +1004,7 @@ iftFLIMGraph *iftGetFLIMGraphFromGrid(iftImage *img, iftImage **label_img)
     for (int i = 0; i < mimg->n; i++)
     {
         iftVoxel p_voxel;
-        iftFLIMGraphNode *node;
+        iftGFLIMGraphNode *node;
 
         p_voxel = iftMGetVoxelCoord(mimg, i);
         (*label_img)->val[i] = i + 1;
@@ -1072,7 +1072,7 @@ void iftImageToGridFLIMGraphs(char *image_dir,
 
         iftImage *img = iftReadImageByExt(fs_imgs->files[i]->path);
         iftImage *label_img;
-        iftFLIMGraph *graph = iftGetFLIMGraphFromGrid(img, &label_img);
+        iftGFLIMGraph *graph = iftGetFLIMGraphFromGrid(img, &label_img);
         iftDestroyImage(&img);
 
         sprintf(filename, "%s/%s.pgm", labels_dir, basename);
@@ -1103,7 +1103,7 @@ void iftImageToGridFLIMGraphs(char *image_dir,
  * @param mean Mean values
  * @param stdev Standard deviation values
  */
-void iftNormalizeFLIMGraphByZScore(iftFLIMGraph *graph, float *mean, float *stdev)
+void iftNormalizeFLIMGraphByZScore(iftGFLIMGraph *graph, float *mean, float *stdev)
 {
 #pragma omp parallel for
     for (int p = 0; p < graph->num_nodes; p++)
@@ -1320,7 +1320,7 @@ float **RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img,
     iftFree(ColorHistogram);
 
     iftBMap *neighbors[num_superpixels];
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img_rgb->m, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img_rgb->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1329,7 +1329,7 @@ float **RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img,
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1365,7 +1365,7 @@ float **RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img,
     return superpixel_colors;
 }
 
-iftFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img, 
+iftGFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img, 
                             int num_superpixels, int nbuckets, int nSelBuckets,
                             iftAdjRel *A)
 {
@@ -1390,7 +1390,7 @@ iftFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled
 
     iftColorHistogram *ColorHistogram = (iftColorHistogram*)calloc(num_superpixels, sizeof(iftColorHistogram));
     double **V = (double*)malloc(num_superpixels * sizeof(double*)); // buckets priority : V[image->num_channels][nbuckets]   
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(nSelBuckets * original_img_rgb->m, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(nSelBuckets * original_img_rgb->m, num_superpixels);
     
     for(int spx = 0; spx = num_superpixels; spx++){
         V[spx] = (double *)calloc(num_histograms * nbuckets, sizeof(double));
@@ -1522,7 +1522,7 @@ iftFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled
     iftFree(ColorHistogram);
 
     iftBMap *neighbors[num_superpixels];
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img_rgb->m, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(original_img_rgb->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1531,7 +1531,7 @@ iftFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1568,7 +1568,7 @@ iftFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled
 }
 */
 
-iftFLIMGraph *ComputeGraphFeatureMean(
+iftGFLIMGraph *ComputeGraphFeatureMean(
                     unsigned long num_superpixels, 
                     iftAdjRel *A, iftMImage *oiginal_img, 
                     iftImage *labeled_img)
@@ -1577,7 +1577,7 @@ iftFLIMGraph *ComputeGraphFeatureMean(
         iftError("Number of superpixels must be positive", __func__);
     iftBMap *neighbors[num_superpixels];
 
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1586,7 +1586,7 @@ iftFLIMGraph *ComputeGraphFeatureMean(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1616,7 +1616,7 @@ iftFLIMGraph *ComputeGraphFeatureMean(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
         for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
@@ -1628,7 +1628,7 @@ iftFLIMGraph *ComputeGraphFeatureMean(
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureSum(
+iftGFLIMGraph *ComputeGraphFeatureSum(
                     unsigned long num_superpixels,
                     iftAdjRel *A, iftMImage *oiginal_img, 
                     iftImage *labeled_img)
@@ -1637,7 +1637,7 @@ iftFLIMGraph *ComputeGraphFeatureSum(
         iftError("Number of superpixels must be positive", __func__);
     iftBMap *neighbors[num_superpixels];
 
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1646,7 +1646,7 @@ iftFLIMGraph *ComputeGraphFeatureSum(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1682,7 +1682,7 @@ iftFLIMGraph *ComputeGraphFeatureSum(
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureSumMultRelsize(
+iftGFLIMGraph *ComputeGraphFeatureSumMultRelsize(
                     unsigned long num_superpixels,
                     iftAdjRel *A, iftMImage *oiginal_img, 
                     iftImage *labeled_img)
@@ -1690,7 +1690,7 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsize(
     if (num_superpixels < 1)
         iftError("Number of superpixels must be positive", __func__);
 
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
     graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
@@ -1702,7 +1702,7 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsize(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1732,7 +1732,7 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsize(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
         double rel_size = (double)node->numPixels / (double)oiginal_img->n;
@@ -1746,7 +1746,7 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsize(
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
+iftGFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
     unsigned long num_superpixels,
     iftAdjRel *A, iftMImage *oiginal_img, 
     iftImage *labeled_img)
@@ -1754,7 +1754,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
     if (num_superpixels < 1)
         iftError("Number of superpixels must be positive", __func__);
 
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
     graph = iftCreateEmptyFLIMGraph(oiginal_img->m, num_superpixels);
@@ -1766,7 +1766,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1796,7 +1796,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     node = graph->nodes;
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
@@ -1814,7 +1814,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanMultRelsize(
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
+iftGFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
                 unsigned long num_superpixels,
                 iftAdjRel *A,
                 iftMImage *oiginal_img, iftImage *labeled_img)
@@ -1823,7 +1823,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
         iftError("Number of superpixels must be positive", __func__);
 
     iftBMap *neighbors[num_superpixels];
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 1, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 1, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1832,7 +1832,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1862,7 +1862,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
         for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
@@ -1876,7 +1876,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsize(
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
+iftGFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
         unsigned long num_superpixels,
         iftAdjRel *A, iftMImage *oiginal_img, 
         iftImage *labeled_img)
@@ -1885,7 +1885,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
         iftError("Number of superpixels must be positive", __func__);
 
     iftBMap *neighbors[num_superpixels];
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 1, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 1, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1894,7 +1894,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -1924,7 +1924,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
         for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
@@ -1947,7 +1947,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeNeighb(
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
+iftGFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
     unsigned long num_superpixels,
     iftAdjRel *A, iftMImage *oiginal_img, 
     iftImage *labeled_img,
@@ -1958,7 +1958,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
     if (gray_img == NULL)
         iftError("Gray image is NULL", __func__);
 
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
     graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 6, num_superpixels);
@@ -1970,7 +1970,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -2000,7 +2000,7 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
         for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
@@ -2009,13 +2009,13 @@ iftFLIMGraph *ComputeGraphFeatureMeanConcatRelsizeHaralick(
         node++;
         iftDestroyBMap(&neighbors[spx_index]);
     }
-    iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
+    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
     node = NULL;
 
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
+iftGFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
     unsigned long num_superpixels,
     iftAdjRel *A,
     iftMImage *oiginal_img, iftImage *labeled_img,
@@ -2026,7 +2026,7 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
     if (gray_img == NULL)
         iftError("Gray image is NULL", __func__);
 
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
     graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 5, num_superpixels);
@@ -2038,7 +2038,7 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -2068,7 +2068,7 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
         double rel_size = (double)node->numPixels / (double)oiginal_img->n;
@@ -2077,18 +2077,18 @@ iftFLIMGraph *ComputeGraphFeatureSumMultRelsizeConcatHaralick(
         node++;
         iftDestroyBMap(&neighbors[spx_index]);
     }
-    iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
         
     node = NULL;
 
     return graph;
 }
 
-iftFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
+iftGFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
     unsigned long num_superpixels,
     iftAdjRel *A,
     iftMImage *oiginal_img, iftImage *labeled_img,
-    iftFLIMGraphFeature feat_type,
+    iftGFLIMGraphFeature feat_type,
     iftImage *gray_img)
 {
     if (num_superpixels < 1)
@@ -2096,7 +2096,7 @@ iftFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
     if (gray_img == NULL)
         iftError("Gray image is NULL", __func__);
 
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
     graph = iftCreateEmptyFLIMGraph(oiginal_img->m + 5, num_superpixels);
@@ -2108,7 +2108,7 @@ iftFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -2140,7 +2140,7 @@ iftFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
 
     for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
         iftDestroyBMap(&neighbors[spx_index]);
-    iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
 
     return graph;
 }
@@ -2162,11 +2162,11 @@ iftFLIMGraph *ComputeGraphFeatureSumConcatHaralick(
  * @author Isabela Borlido.
  */
 /*
-iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
+iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
     unsigned long num_superpixels,
     iftAdjRel *A,
     iftMImage *oiginal_img, iftImage *labeled_img,
-    iftFLIMGraphFeature feat_type,
+    iftGFLIMGraphFeature feat_type,
     iftImage *gray_img)
 {
     if (num_superpixels < 1)
@@ -2177,7 +2177,7 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
         gray_img == NULL)
         iftError("Gray image is NULL", __func__);
 
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
     int feat_num = 0;
@@ -2211,7 +2211,7 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
         unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
-        iftFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
+        iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
@@ -2241,7 +2241,7 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
         }
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     switch (feat_type)
     {
     case IFT_FLIMGRAPH_FEATURE_MEAN:
@@ -2327,7 +2327,7 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
             node++;
             iftDestroyBMap(&neighbors[spx_index]);
         }
-        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
+        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
         break;
 
     case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
@@ -2339,14 +2339,14 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
             node++;
             iftDestroyBMap(&neighbors[spx_index]);
         }
-        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
         break;
     case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
         for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
             iftDestroyBMap(&neighbors[spx_index]);
         }
-        iftFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
         break;
     default:
         iftError("Invalid feature type %d ", __func__, feat_type);
@@ -2372,16 +2372,16 @@ iftFLIMGraph *iftSuperpixelImageToFLIMGraph(
  * @param label_img A pointer to a superpixel segmentation
  * @param graph_feat Feature type to be used in the graph
  */
-iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
+iftGFLIMGraph *iftImageToFLIMGraph(iftImage *img,
                                   int num_superpixels, int param,
                                   iftImage **label_img,
-                                  iftFLIMGraphFeature graph_feat,
-                                  iftFLIMGraphType graph_type)
+                                  iftGFLIMGraphFeature graph_feat,
+                                  iftGFLIMGraphType graph_type)
 {
     iftImage *label_img_tmp = NULL;
     iftMImage *mimg;
     iftAdjRel *A = NULL;
-    iftFLIMGraph *graph;
+    iftGFLIMGraph *graph;
 
     if (iftIsColorImage(img))
         mimg = iftImageToMImage(img, LABNorm_CSPACE);
@@ -2481,7 +2481,7 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
 }
 
 /**
- * @fn iftFLIMGraphToImage
+ * @fn iftGFLIMGraphToImage
  * @brief Convert a band of the node features in a graph to an `iftImage`
  * @note It performs a min-max normalization on the features and scale it to `Imax`
  * @param graph Graph
@@ -2489,7 +2489,7 @@ iftFLIMGraph *iftImageToFLIMGraph(iftImage *img,
  * @param Imax Maximum intensity value
  * @param band node feature to be converted to image
  */
-iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, int band)
+iftImage *iftGFLIMGraphToImage(iftGFLIMGraph *graph, iftImage *labels, int Imax, int band)
 {
     int p, b = band;
 
@@ -2500,7 +2500,7 @@ iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, i
     iftImage *img = iftCreateImage(labels->xsize, labels->ysize, labels->zsize);
     double min = IFT_INFINITY_FLT, max = IFT_INFINITY_FLT_NEG;
 
-    iftFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
     for (p = 0; p < graph->num_nodes; p++)
     {
         if (node->feats[b] < min)
@@ -2529,14 +2529,14 @@ iftImage *iftFLIMGraphToImage(iftFLIMGraph *graph, iftImage *labels, int Imax, i
 }
 
 /**
- * @fn iftFLIMGraphToMImage
+ * @fn iftGFLIMGraphToMImage
  * @brief Convert a graph to a multi-band image
  * @param graph Graph
  * @param labels Superpixel image
  * @return iftMImage*
  * @note The number of bands in the `*iftImage` is equal to the number of features in the graph
  */
-iftMImage *iftFLIMGraphToMImage(iftFLIMGraph *graph, iftImage *labels)
+iftMImage *iftGFLIMGraphToMImage(iftGFLIMGraph *graph, iftImage *labels)
 {
     int p, b;
 
@@ -2564,29 +2564,29 @@ iftMImage *iftFLIMGraphToMImage(iftFLIMGraph *graph, iftImage *labels)
 
 /**
  * @fn iftMImageToFLIMGraph
- * @brief Convert an iftMImage to an iftFLIMGraph
+ * @brief Convert an iftMImage to an iftGFLIMGraph
  * @param mimg MImage
  * @param graph_ref Graph reference
- * @return iftFLIMGraph*
+ * @return iftGFLIMGraph*
  * @note The number of nodes in `graph_ref` must be equal to the number of pixels in `mimg`
  * @note The `graph_ref` is used to copy the adjacency relations
  * @note The features in `mimg` are copied to the output graph
  */
-iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
-                                   iftFLIMGraph *graph_ref)
+iftGFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
+                                   iftGFLIMGraph *graph_ref)
 {
     if (mimg->n != graph_ref->num_nodes)
         iftError("Number of nodes in the graph is different from the number of pixels in the image", __func__);
     iftIsValidFLIMGraph(graph_ref);
 
-    iftFLIMGraph *graph = iftCreateEmptyFLIMGraph(mimg->m, graph_ref->num_nodes);
+    iftGFLIMGraph *graph = iftCreateEmptyFLIMGraph(mimg->m, graph_ref->num_nodes);
     graph->num_edges = graph_ref->num_edges;
     
 #pragma omp parallel for 
     for (int i = 0; i < mimg->n; i++)
     {
-        iftFLIMGraphNode *node = &(graph->nodes[i]);
-        iftFLIMGraphNode *node_ref = &(graph_ref->nodes[i]);
+        iftGFLIMGraphNode *node = &(graph->nodes[i]);
+        iftGFLIMGraphNode *node_ref = &(graph_ref->nodes[i]);
         float *mimg_feat = mimg->val[i];
         for (int j = 0; j < mimg->m; j++)
             node->feats[j] = mimg_feat[j];
@@ -2594,8 +2594,8 @@ iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
         node->numNeighbors = node_ref->numNeighbors;
     }
 
-    iftFLIMGraphNode *node = graph->nodes;
-    iftFLIMGraphNode *node_ref = graph_ref->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node_ref = graph_ref->nodes;
     for (int i = 0; i < mimg->n; i++){
         node->adj = iftSetCopy(node_ref->adj);
         node++;
@@ -2616,13 +2616,13 @@ iftFLIMGraph *iftMImageToFLIMGraph(iftMImage *mimg,
  * @note The number of nodes in `graph_ref` must be equal to the number of pixels in `mimg`
  */
 void iftMImageToFLIMGraphInplace(iftMImage *mimg,
-                                 iftFLIMGraph *graph_ref)
+                                 iftGFLIMGraph *graph_ref)
 {
     if (mimg->n != graph_ref->num_nodes)
         iftError("Number of nodes in the graph is different from the number of pixels in the image", __func__);
     iftIsValidFLIMGraph(graph_ref);
 
-    iftFLIMGraphNode *node = graph_ref->nodes;
+    iftGFLIMGraphNode *node = graph_ref->nodes;
     for (int i = 0; i < mimg->n; i++)
     {
         iftFree(node->feats);
@@ -2633,7 +2633,7 @@ void iftMImageToFLIMGraphInplace(iftMImage *mimg,
 #pragma omp parallel for 
     for (int i = 0; i < mimg->n; i++)
     {
-        iftFLIMGraphNode *node = &(graph_ref->nodes[i]);
+        iftGFLIMGraphNode *node = &(graph_ref->nodes[i]);
         for (int j = 0; j < mimg->m; j++)
             node->feats[j] = mimg->val[i][j];
     }
@@ -2642,20 +2642,20 @@ void iftMImageToFLIMGraphInplace(iftMImage *mimg,
 }
 
 /**
- * @fn iftFLIMGraphToActivations
+ * @fn iftGFLIMGraphToActivations
  * @brief Convert a graph to a vector of iftImage
  * @param graph Graph
  * @param labels Superpixel image
  * @return iftImage**
  * @note The number of images is equal to the number of features in the graph
  */
-iftImage **iftFLIMGraphToActivations(iftFLIMGraph *graph, iftImage *labels)
+iftImage **iftGFLIMGraphToActivations(iftGFLIMGraph *graph, iftImage *labels)
 {
     iftImage **activations = (iftImage **)malloc(graph->num_feats * sizeof(iftImage *));
 
     for (int i = 0; i < (int)(graph->num_feats); i++)
     {
-        iftImage *band = iftFLIMGraphToImage(graph, labels, 255, i);
+        iftImage *band = iftGFLIMGraphToImage(graph, labels, 255, i);
         if (iftIs3DImage(band))
             activations[i] = iftGetXYSlice(band, band->zsize / 2);
         else
@@ -2675,7 +2675,7 @@ iftImage **iftFLIMGraphToActivations(iftFLIMGraph *graph, iftImage *labels)
  */
 
 /**
- * @fn iftFLIMGraphAttentionRelNodeSize
+ * @fn iftGFLIMGraphAttentionRelNodeSize
  * @brief Compute the attention values for the nodes in `neighbors` based on the
  * ration between the number of pixels in each node and the total number of
  * pixels in the neighbors
@@ -2683,7 +2683,7 @@ iftImage **iftFLIMGraphToActivations(iftFLIMGraph *graph, iftImage *labels)
  * @param neighbors indexes of the neighbors
  * @return double* attention values for the neighbors
  */
-double *iftFLIMGraphAttentionRelNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors)
+double *iftGFLIMGraphAttentionRelNodeSize(iftGFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
 
@@ -2698,14 +2698,14 @@ double *iftFLIMGraphAttentionRelNodeSize(iftFLIMGraph *graph, iftIntArray *neigh
 }
 
 /**
- * @fn iftFLIMGraphAttentionNodeSize
+ * @fn iftGFLIMGraphAttentionNodeSize
  * @brief Compute the attention values for the nodes in `neighbors` with a softmax function
  * based on the number of pixels in each node and the total number of pixels in the neighborhood.
  * @param graph graph with node relations and features
  * @param neighbors indexes of the neighbors
  * @return double* attention values for the neighbors
  */
-double *iftFLIMGraphAttentionNodeSize(iftFLIMGraph *graph, iftIntArray *neighbors)
+double *iftGFLIMGraphAttentionNodeSize(iftGFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
     double softmax_norm = IFT_EPSILON;
@@ -2726,13 +2726,13 @@ double *iftFLIMGraphAttentionNodeSize(iftFLIMGraph *graph, iftIntArray *neighbor
 }
 
 /**
- * @fn iftFLIMGraphAttentionNeighborSimilarity
+ * @fn iftGFLIMGraphAttentionNeighborSimilarity
  * @brief Compute the attention values for the nodes in `neighbors` based on the similarity of the features
  * @param graph graph with node relations and features
  * @param neighbors indexes of the neighbors
  * @return double* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntArray *neighbors,
+iftMatrix *iftGFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntArray *neighbors,
                                                    int *kernel_labels, int label)
 {
     int nkernels = 0;
@@ -2790,13 +2790,13 @@ iftMatrix *iftFLIMGraphAttentionNeighborSimilarity(iftMatrix *features, iftIntAr
 }
 
 /**
- * @fn iftFLIMGraphAttentionCosineSimilarity
+ * @fn iftGFLIMGraphAttentionCosineSimilarity
  * @brief Compute the attention values for the nodes in `neighbors` based on the cosine similarity of the features
  * @param graph graph with node relations and features
  * @param neighbors indexes of the neighbors
  * @return double* attention values for the neighbors
  */
-double *iftFLIMGraphAttentionCosineSimilarity(iftFLIMGraph *graph, iftIntArray *neighbors)
+double *iftGFLIMGraphAttentionCosineSimilarity(iftGFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
 
@@ -2841,13 +2841,13 @@ double *iftFLIMGraphAttentionCosineSimilarity(iftFLIMGraph *graph, iftIntArray *
 }
 
 /**
- * @fn iftFLIMGraphAttentionCosineSimilarity
+ * @fn iftGFLIMGraphAttentionCosineSimilarity
  * @brief Compute the attention values for the nodes in `neighbors` based on the cosine similarity of the features
  * @param graph graph with node relations and features
  * @param neighbors indexes of the neighbors
  * @return double* attention values for the neighbors
  */
-double *iftFLIMGraphAttentionCosineSimilarity_v1(iftFLIMGraph *graph, iftIntArray *neighbors)
+double *iftGFLIMGraphAttentionCosineSimilarity_v1(iftGFLIMGraph *graph, iftIntArray *neighbors)
 {
     double *attention_vals = iftAllocDoubleArray(neighbors->n);
 
@@ -2893,7 +2893,7 @@ double *iftFLIMGraphAttentionCosineSimilarity_v1(iftFLIMGraph *graph, iftIntArra
 }
 
 // function in construction
-iftMatrix *iftFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3054,7 +3054,7 @@ iftMatrix *iftFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftFLIMGraph *
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominanceCosine
+ * @fn iftGFLIMGraphAttentionClassDominanceCosine
  * @brief Compute attention values using cosine similarity and class dominance,
  * normalizing the input data and applying softmax to the cosine similarity among graph neighbors.
  * @param H: matrix with the features
@@ -3062,7 +3062,7 @@ iftMatrix *iftFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftFLIMGraph *
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3198,14 +3198,14 @@ iftMatrix *iftFLIMGraphAttentionClassDominanceCosine(iftMatrix *H, iftFLIMGraph 
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominance_winnerPower2
+ * @fn iftGFLIMGraphAttentionClassDominance_winnerPower2
  * @brief Compute attention values using class dominance
  * @param H: matrix with the features
  * @param graph: graph with node relations and features
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominancePower2_bkp(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominancePower2_bkp(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3302,14 +3302,14 @@ iftMatrix *iftFLIMGraphAttentionClassDominancePower2_bkp(iftMatrix *H, iftFLIMGr
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominance_size
+ * @fn iftGFLIMGraphAttentionClassDominance_size
  * @brief Compute attention values using class dominance and weighting the neighbors contribution by their size
  * @param H: matrix with the features
  * @param graph: graph with node relations and features
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3434,14 +3434,14 @@ iftMatrix *iftFLIMGraphAttentionClassDominance_size(iftMatrix *H, iftFLIMGraph *
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominance_softmaxNeigh
+ * @fn iftGFLIMGraphAttentionClassDominance_softmaxNeigh
  * @brief Compute attention values using class dominance and softmax normalization
  * @param H: matrix with the features
  * @param graph: graph with node relations and features
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3600,14 +3600,14 @@ iftMatrix *iftFLIMGraphAttentionClassDominance_softmaxNeigh(iftMatrix *H, iftFLI
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominance_v2
+ * @fn iftGFLIMGraphAttentionClassDominance_v2
  * @brief Compute attention values using class dominance
  * @param H: matrix with the features
  * @param graph: graph with node relations and features
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3704,14 +3704,14 @@ iftMatrix *iftFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftFLIMGraph *gr
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominance
+ * @fn iftGFLIMGraphAttentionClassDominance
  * @brief Compute attention values using class dominance
  * @param H: matrix with the features
  * @param graph: graph with node relations and features
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominance(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3806,14 +3806,14 @@ iftMatrix *iftFLIMGraphAttentionClassDominance(iftMatrix *H, iftFLIMGraph *graph
 }
 
 /**
- * @fn iftFLIMGraphAttentionClassDominance
+ * @fn iftGFLIMGraphAttentionClassDominance
  * @brief Compute attention values using class dominance
  * @param H: matrix with the features
  * @param graph: graph with node relations and features
  * @param kernel_labels: labels of the kernels
  * @return iftMatrix* attention values for the neighbors
  */
-iftMatrix *iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph *graph, int *kernel_labels)
+iftMatrix *iftGFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels)
 {
     // get the number of labels and the minimum label
     int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
@@ -3908,14 +3908,14 @@ iftMatrix *iftFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftFLIMGraph 
 }
 
 /**
- * @fn iftFLIMGraphGetAttentionValues
+ * @fn iftGFLIMGraphGetAttentionValues
  * @brief Compute the attention values for the nodes in `neighbors`
  * @param neighbors: indexes of the neighbors
  * @param graph: graph with node relations and features
  * @param attention_opt: attention option
  * @return double*: attention values for the neighbors
  */
-double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *graph, iftFLIMGraphAttention *attention_opt)
+double *iftGFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftGFLIMGraph *graph, iftGFLIMGraphAttention *attention_opt)
 {
     double *attention_vals = NULL;
 
@@ -3925,11 +3925,11 @@ double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *gra
         break;
 
     case IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE:
-        attention_vals = iftFLIMGraphAttentionRelNodeSize(graph, neighbors);
+        attention_vals = iftGFLIMGraphAttentionRelNodeSize(graph, neighbors);
         break;
 
     case IFT_FLIMGRAPH_ATTENTION_NODE_SIZE:
-        attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
+        attention_vals = iftGFLIMGraphAttentionNodeSize(graph, neighbors);
         break;
 
     /*case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
@@ -3937,8 +3937,8 @@ double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *gra
         break;*/
 
     case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE:
-        attention_vals = iftFLIMGraphAttentionNodeSize(graph, neighbors);
-        // double *attention_vals_simil = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
+        attention_vals = iftGFLIMGraphAttentionNodeSize(graph, neighbors);
+        // double *attention_vals_simil = iftGFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
         /*for(int j = 0; j < neighbors->n; j++)
             attention_vals[j] += attention_vals_simil[j];
         iftFree(attention_vals_simil);*/
@@ -3947,7 +3947,7 @@ double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *gra
 
     case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST:
         /*attention_opt = IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;
-        attention_vals = iftFLIMGraphAttentionNeighborSimilarity(graph, neighbors);*/
+        attention_vals = iftGFLIMGraphAttentionNeighborSimilarity(graph, neighbors);*/
         *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
         break;
 
@@ -3964,7 +3964,7 @@ double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *gra
         break;
 
     case IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY:
-        attention_vals = iftFLIMGraphAttentionCosineSimilarity(graph, neighbors);
+        attention_vals = iftGFLIMGraphAttentionCosineSimilarity(graph, neighbors);
         break;
 
     default:
@@ -4004,7 +4004,7 @@ double *iftFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftFLIMGraph *gra
  * @author Isabela
  * @date abr, 2023
  */
-void iftGetNeighborsFLIMGraph(iftFLIMGraph *graph, int *roots, int num_roots,
+void iftGetNeighborsFLIMGraph(iftGFLIMGraph *graph, int *roots, int num_roots,
                               int k, double *dissimilarity,
                               double *feature_reference,
                               iftDHeap *heap,
@@ -4068,8 +4068,8 @@ void iftGetNeighborsFLIMGraph(iftFLIMGraph *graph, int *roots, int num_roots,
  * @date abr, 2023
  */
 iftIntArray *iftGetKNeighborsFLIMGraph(int node_index,
-                                       iftFLIMGraph *graph, int k,
-                                       int dilation, bool most_similar, iftFLIMGraphAttention attention_opt)
+                                       iftGFLIMGraph *graph, int k,
+                                       int dilation, bool most_similar, iftGFLIMGraphAttention attention_opt)
 {
     if(graph == NULL)
         iftError("Graph is NULL", __func__);
@@ -4152,7 +4152,7 @@ iftIntArray *iftGetKNeighborsFLIMGraph(int node_index,
     iftDestroyDHeap(&auxiliaryHeap);
     iftDestroyDHeap(&heap);
 
-    double *attention_vals = iftFLIMGraphGetAttentionValues(neighbors, graph, &attention_opt);
+    double *attention_vals = iftGFLIMGraphGetAttentionValues(neighbors, graph, &attention_opt);
     if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE)
     {
         for (int i = 0; i < neighbors->n; i++)
@@ -4166,7 +4166,7 @@ iftIntArray *iftGetKNeighborsFLIMGraph(int node_index,
 }
 
 /**
- * @fn iftFLIMgraphAggregateFeatures
+ * @fn iftGFLIMGraphAggregateFeatures
  * @brief Aggregate features of the nodes in `neighbors`
  * @param p Node index
  * @param neighbors Array of neighbors
@@ -4175,9 +4175,9 @@ iftIntArray *iftGetKNeighborsFLIMGraph(int node_index,
  * @param aggregation_opt Aggregation option
  * @return double* Aggregated features
  */
-double *iftFLIMgraphAggregateFeatures(int p,
+double *iftGFLIMGraphAggregateFeatures(int p,
                                       iftIntArray *neighbors,
-                                      iftFLIMGraph *graph,
+                                      iftGFLIMGraph *graph,
                                       int num_adj,
                                       iftGFLIMAggregationType aggregation_opt)
 {
@@ -4268,7 +4268,7 @@ double *iftFLIMgraphAggregateFeatures(int p,
 }
 
 /**
- * @fn iftFLIMGraphToFeatureMatrix
+ * @fn iftGFLIMGraphToFeatureMatrix
  * @brief Create a matrix from a graph
  * @param graph Graph
  * @param num_adj Number of neighbors to be included in the matrix
@@ -4282,9 +4282,9 @@ double *iftFLIMgraphAggregateFeatures(int p,
  * - IFT_GFLIM_AGGREGATION_WMEAN: 2 * graph->num_feats
  * @note `neighbors_al` is used to store the neighbors of each node when the attention option is IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL.
  */
-iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
+iftMatrix *iftGFLIMGraphToFeatureMatrix(iftGFLIMGraph *graph,
                                        int num_adj,
-                                       iftFLIMGraphAttention attention_opt,
+                                       iftGFLIMGraphAttention attention_opt,
                                        iftGFLIMAggregationType aggregation_opt/*,
                                        iftIntArray **neighbors_all*/)
 {
@@ -4306,7 +4306,7 @@ iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
             neighbors_all[p]->n = neighbors->n;
         }*/
 
-        double *feature_vector = iftFLIMgraphAggregateFeatures(p, neighbors, graph, num_adj, aggregation_opt);
+        double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors, graph, num_adj, aggregation_opt);
 
         for (int b = 0; b < out_num_feats; b++)
             iftMatrixElem(matrix, b, p) = (float)feature_vector[b];
@@ -4322,21 +4322,21 @@ iftMatrix *iftFLIMGraphToFeatureMatrix(iftFLIMGraph *graph,
  * @brief Create a graph from a matrix
  * @param matrix Matrix with the features
  * @param graph_ref Reference graph
- * @return iftFLIMGraph* Graph with the features
+ * @return iftGFLIMGraph* Graph with the features
  */
-iftFLIMGraph *iftFeatureMatrixToFLIMGraph(iftMatrix *matrix, iftFLIMGraph *graph_ref)
+iftGFLIMGraph *iftFeatureMatrixToFLIMGraph(iftMatrix *matrix, iftGFLIMGraph *graph_ref)
 {
     if (matrix->nrows != graph_ref->num_nodes)
         iftError("Number of nodes in the graph is different from the number of rows in the matrix", __func__);
     iftIsValidFLIMGraph(graph_ref);
 
-    iftFLIMGraph *graph = (iftFLIMGraph *)malloc(sizeof(iftFLIMGraph));
+    iftGFLIMGraph *graph = (iftGFLIMGraph *)malloc(sizeof(iftGFLIMGraph));
     graph->num_feats = matrix->ncols;
     graph->num_nodes = graph_ref->num_nodes;
-    graph->nodes = (iftFLIMGraphNode *)calloc(graph->num_nodes, sizeof(iftFLIMGraphNode));
+    graph->nodes = (iftGFLIMGraphNode *)calloc(graph->num_nodes, sizeof(iftGFLIMGraphNode));
 
-    iftFLIMGraphNode *node = graph->nodes;
-    iftFLIMGraphNode *node_ref = graph_ref->nodes;
+    iftGFLIMGraphNode *node = graph->nodes;
+    iftGFLIMGraphNode *node_ref = graph_ref->nodes;
     for (int node_index = 0; node_index < graph->num_nodes; node_index++)
     {
         node->numNeighbors = node_ref->numNeighbors;

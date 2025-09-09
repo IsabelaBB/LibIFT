@@ -128,7 +128,7 @@
 #include "iftBrainAffineRegistration.h"
 #include "iftRISF.h"
 #include "iftSupervoxelAtlas.h"
-#include "iftFLIMGraph.h"
+#include "iftGFLIMGraph.h"
 #include "iftGFLIM.h"
 #include "iftGFLIM_BoFP.h"
 #include "iftDecode.h"
