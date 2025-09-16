@@ -1,6 +1,148 @@
 
 #include "iftGFLIM.h"
 
+/* --------------------- GFLIMArch ----------------------------- */
+
+iftGFLIMArch *iftReadGFLIMArch(char *filename) {
+    printf("Reading GFLIM architecture from %s\n", filename);
+    iftDict *arch_dict = iftReadJson(filename);
+    int nlayers = iftGetLongValFromDict("nlayers", arch_dict);
+    float stdev_factor = iftGetDblValFromDict("stdev_factor", arch_dict);
+    bool intrinsic_atrous = FALSE;
+    if (iftDictContainKey("apply_intrinsic_atrous", arch_dict, NULL)) {
+        intrinsic_atrous = iftGetBoolValFromDict("apply_intrinsic_atrous", arch_dict);
+    }
+    iftGFLIMArch *arch = (iftGFLIMArch *) calloc(1, sizeof(iftGFLIMArch));
+
+    arch->nlayers = nlayers;
+    arch->stdev_factor = stdev_factor;
+    arch->layer = (iftGFLIMLayer *) calloc(arch->nlayers, sizeof(iftGFLIMLayer));
+    arch->apply_intrinsic_atrous = intrinsic_atrous;
+
+    for (int l = 0; l < arch->nlayers; l++) {
+
+        char name[50];
+        sprintf(name, "layer%d", l + 1);
+        iftDict *layer_dict = iftGetDictFromDict(name, arch_dict);
+        iftDict *conv_dict = iftGetDictFromDict("conv", layer_dict);
+        arch->layer[l].kernel_size = iftGetLongValFromDict("kernel_size", conv_dict);
+        arch->layer[l].dilation_rate = iftGetLongValFromDict("dilation_rate", conv_dict);
+
+        arch->layer[l].nkernels_per_image = iftGetLongValFromDict("nkernels_per_image", conv_dict);
+        arch->layer[l].nkernels_per_marker = iftGetLongValFromDict("nkernels_per_marker", conv_dict);
+        arch->layer[l].noutput_channels = iftGetLongValFromDict("noutput_channels", conv_dict);
+        arch->layer[l].relu = iftGetBoolValFromDict("relu", layer_dict);
+        
+        arch->layer[l].skip_connection = (int *)calloc(arch->nlayers, sizeof(int));
+        printf("Default skip_connection for layer %d: ", l+1);
+        if (iftDictContainKey("skip_connection", layer_dict, NULL)){
+            printf("Reading skip_connection for layer %d\n", l+1);
+            iftIntArray *input = iftGetIntArrayFromDict("skip_connection", layer_dict);
+            for (int i = 0; i < arch->nlayers; i++)
+                arch->layer[l].skip_connection[i] = input->val[i];
+            iftFree(input);
+        }
+        
+        iftDict *pool_dict = iftGetDictFromDict("pooling", layer_dict);
+        arch->layer[l].pool_type = iftGetStrValFromDict("type", pool_dict);
+        arch->layer[l].pool_size = iftGetLongValFromDict("size", pool_dict);
+        arch->layer[l].pool_stride = iftGetDblValFromDict("stride", pool_dict);
+
+        iftDestroyDict(&conv_dict);
+        iftDestroyDict(&pool_dict);
+        iftDestroyDict(&layer_dict);
+    }
+
+    iftDestroyDict(&arch_dict);
+
+    return (arch);
+}
+
+void iftWriteGFLIMArch(iftGFLIMArch *arch, char *filename)
+{
+    iftDict *new_arch = iftCreateDict();
+
+    /* Dictionary does not copy nested dicts, and therefore all nested dicts must be allocated first */
+    iftDict *layer[arch->nlayers];
+    iftDict *conv[arch->nlayers];
+    iftDict *pooling[arch->nlayers];
+
+    iftIntArray *skip_connection[arch->nlayers];
+
+    for (int l = 0; l < arch->nlayers; l++) {
+        layer[l] = iftCreateDict();
+        conv[l] = iftCreateDict();
+        pooling[l] = iftCreateDict();
+    }
+
+    iftInsertIntoDict("stdev_factor",arch->stdev_factor, new_arch);
+    iftInsertIntoDict("nlayers",arch->nlayers, new_arch);
+    iftInsertIntoDict("apply_intrinsic_atrous",arch->apply_intrinsic_atrous, new_arch);
+
+    for (int l = 0; l < arch->nlayers; l++){
+
+        char layername[100];
+        sprintf(layername,"layer%d",l+1);
+
+        long kernel_size = arch->layer[l].kernel_size;
+        iftInsertIntoDict("kernel_size",kernel_size,conv[l]);
+        long nkernels_per_marker = arch->layer[l].nkernels_per_marker;
+        iftInsertIntoDict("nkernels_per_marker",nkernels_per_marker,conv[l]);
+        long dilation_rate = arch->layer[l].dilation_rate;
+        iftInsertIntoDict("dilation_rate",dilation_rate,conv[l]);
+        long nkernels_per_image = arch->layer[l].nkernels_per_image;
+        iftInsertIntoDict("nkernels_per_image",nkernels_per_image,conv[l]);
+        long noutput_channels = arch->layer[l].noutput_channels;
+        iftInsertIntoDict("noutput_channels",noutput_channels,conv[l]);
+        iftInsertIntoDict("conv",conv[l],layer[l]);
+
+        bool relu = TRUE;
+        iftInsertIntoDict("relu",relu,layer[l]);
+
+        skip_connection[l] = iftCreateIntArray(arch->nlayers);
+        for (int i = 0; i < arch->nlayers; i++) skip_connection[l]->val[i] = arch->layer[l].skip_connection[i];
+        iftInsertIntoDict("skip_connection",skip_connection[l],conv[l]);
+
+        char *pool_type = arch->layer[l].pool_type;
+        iftInsertIntoDict("type",pool_type,pooling[l]);
+        long pool_size = arch->layer[l].pool_size;
+        iftInsertIntoDict("size",pool_size,pooling[l]);
+        float pool_stride = arch->layer[l].pool_stride;
+        iftInsertIntoDict("stride",pool_stride,pooling[l]);
+        iftInsertIntoDict("pooling",pooling[l],layer[l]);
+
+        iftInsertIntoDict(layername,layer[l],new_arch);
+    }
+
+    iftWriteJson(new_arch,filename);
+    for (int l = 0; l < arch->nlayers; l++) {
+        iftDestroyDict(&layer[l]);
+        iftDestroyDict(&conv[l]);
+        iftDestroyDict(&pooling[l]);
+    }
+    iftDestroyDict(&new_arch);
+
+    for (int l = 0; l < arch->nlayers; l++) {
+        if (skip_connection[l] != NULL)
+            iftFree(skip_connection[l]);
+    }
+}
+
+void iftDestroyGFLIMArch(iftGFLIMArch **arch) {
+    iftGFLIMArch *aux = *arch;
+
+    if (aux != NULL) {
+        for (int l = 0; l < aux->nlayers; l++) {
+            iftFree(aux->layer[l].pool_type);
+        }
+        iftFree(aux->layer);
+        iftFree(aux);
+        *arch = NULL;
+    }
+}
+
+
+
 /* --------------------- GFLIM seeds (user drawn markers) ----------------------------- */
 
 /**
@@ -327,7 +469,7 @@ iftMatrix *LearnKernelBankGraph(iftGFLIMGraph *graph, iftLabeledSet *M,
     }
 
     // kernelbank une os kernels de todos os marcadores
-    // Seu tamanho é [nkernels][graph->num_feats * kernel_size[0] * kernel_size[1]],
+    // Seu tamanho é [nkernels][graph->num_feats * kernel_size],
     // em que nkernels é
     iftMatrix *kernelbank = iftCreateMatrix(total_nkernels, graph->num_feats * kernel_size);
 
@@ -363,7 +505,7 @@ iftMatrix *LearnKernelBankGraph(iftGFLIMGraph *graph, iftLabeledSet *M,
  * @brief Apply a convolutional layer to a set of graphs.
  * @param graph Array of graphs.
  * @param arch Architecture of the network.
- * @param layer Layer index in iftFLIMArch* (>= 0).
+ * @param layer Layer index in iftGFLIMArch* (>= 0).
  * @param layer_index Layer value (> 0).
  * @param atrous_factor Atrous factor for the convolution.
  * @param param_dir Directory with the parameters of the layer.
@@ -371,7 +513,7 @@ iftMatrix *LearnKernelBankGraph(iftGFLIMGraph *graph, iftLabeledSet *M,
  */
 iftGFLIMGraphArray *
 FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
-                            iftFLIMArch *arch,
+                            iftGFLIMArch *arch,
                             int layer, int layer_index,
                             int atrous_factor, char *param_dir)
 {
@@ -423,7 +565,7 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
 
         // normalize the graph
         if (use_bias == NULL) iftNormalizeFLIMGraphByZScore(graph->val[i], mean, stdev);
-        imgM = iftGFLIMGraphToFeatureMatrix(graph->val[i], arch->layer[layer].kernel_size[0] * arch->layer[layer].kernel_size[1], IFT_FLIMGRAPH_ATTENTION_NONE, IFT_GFLIM_AGGREGATION_CONCAT/*, NULL*/);
+        imgM = iftGFLIMGraphToFeatureMatrix(graph->val[i], arch->layer[layer].kernel_size, IFT_FLIMGRAPH_ATTENTION_NONE, IFT_GFLIM_AGGREGATION_CONCAT/*, NULL*/);
 
         // convolution
         iftMatrix *conv = iftMultMatrices(imgM, kernelbank); // (n, m*k) x (m*k, k*k) = (n, k*k)
@@ -445,8 +587,7 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
         output_graph->val[i] = iftMImageToFLIMGraph(activ, graph->val[i]);
         iftGFLIMPoolingLayer(output_graph->val[i],
                              arch->layer[layer].pool_type,
-                             arch->layer[layer].pool_size[0] *
-                             arch->layer[layer].pool_size[1],
+                             arch->layer[layer].pool_size,
                              arch->layer[layer].pool_stride);
 
         iftDestroyMImage(&activ);
@@ -554,7 +695,7 @@ iftMatrix *ConsensusKernelbankGraph(iftFileSet *fs_seeds,
  */
 void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
                             char *param_dir, int layer_index,
-                            iftFLIMArch *arch, char *output_dir)
+                            iftGFLIMArch *arch, char *output_dir)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -580,7 +721,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
     iftGFLIMGraphArray *output = NULL;
     int ninput_channels = 0;
     int ngraphs = fs_seeds->n;
-    int atrous_factor = 1;
+    float atrous_factor = 1;
     char *basename = NULL;
     char filename[512], ext[10], tmp_dir[255];
 
@@ -648,7 +789,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
         /* Learn and save kernel bank */
 
         iftMatrix *kernelbank = LearnKernelBankGraph(graph, S,
-                                                     arch->layer[0].kernel_size[0] * arch->layer[0].kernel_size[1],
+                                                     arch->layer[0].kernel_size,
                                                      arch->layer[0].nkernels_per_image,
                                                      arch->layer[0].nkernels_per_marker);
 
@@ -700,7 +841,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
     iftFree(mean);
     iftFree(stdev);
 
-    int pool_stride;
+    float pool_stride;
 
     /* Apply convolutional layer using the consensus kernel bank and the statistics from all markers */
     pool_stride = arch->layer[0].pool_stride;
@@ -729,7 +870,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
     // writing atrous factor on file
     sprintf(filename, "%s/intrinsic_atrous.txt", param_dir);
     FILE *fp = fopen(filename, "w");
-    fprintf(fp, "%d", atrous_factor);
+    fprintf(fp, "%f", atrous_factor);
     fclose(fp);
     iftRemoveDir(tmp_dir);
     iftDestroyFileSet(&fs_seeds);
@@ -754,7 +895,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
  * @note The feat_dir must be an existing directory
  */
 void FLIMGraphExtractFeaturesFromLayerPerBatch(iftFileSet *fs_graphs, int first, int last,
-                                               char *orig_dir, iftFLIMArch *arch,
+                                               char *orig_dir, iftGFLIMArch *arch,
                                                char *param_dir, int layer_index, char *feat_dir)
 {
 #ifdef IFT_DEBUG
@@ -834,7 +975,7 @@ void FLIMGraphExtractFeaturesFromLayerPerBatch(iftFileSet *fs_graphs, int first,
  * @note The out_dir must be an existing directory
  * @note The graph_list must be a valid file or directory
  */
-void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list, iftFLIMArch *arch,
+void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list, iftGFLIMArch *arch,
                                           char *param_dir, int layer_index,
                                           char *out_dir, int batchsize)
 {
@@ -900,7 +1041,7 @@ void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list, ift
 iftMImage *iftGFLIMGraphAtrousAveragePooling(iftGFLIMGraph *graph,
                                             int pool_size, 
                                             int atrous_factor, 
-                                            int stride)
+                                            float stride)
 {
     iftMImage *pool = iftCreateMImage(graph->num_nodes, 1, 1, graph->num_feats);
 
@@ -946,7 +1087,7 @@ iftMImage *iftGFLIMGraphAtrousAveragePooling(iftGFLIMGraph *graph,
 iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
                                         int pool_size,
                                         int atrous_factor,
-                                        int stride)
+                                        float stride)
 {
     iftMImage *pool = iftCreateMImage(graph->num_nodes,1, 1, graph->num_feats);
     iftSetMImage(pool, IFT_INFINITY_FLT_NEG);
@@ -988,7 +1129,7 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
 void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
                           char *pool_type, 
                           int pool_size, 
-                          int pool_stride)
+                          float pool_stride)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -997,8 +1138,8 @@ void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
     else
         printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
     printf("\t pool_type: %s\n", pool_type);
-    printf("\t pool_size: %d %d %d\n", pool_size[0], pool_size[1], pool_size[2]);
-    printf("\t pool_stride: %d\n", pool_stride);
+    printf("\t pool_size: %d \n", pool_size);
+    printf("\t pool_stride: %f\n", pool_stride);
 #endif
 
     iftMImage *pool = NULL;

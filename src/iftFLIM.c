@@ -1225,7 +1225,6 @@ void iftFLIMTrain(int layer, char *param_dir, char *orig_dir, char *seeds_dir)
    save_arch->layer[0].nkernels_per_marker = arch->layer[layer - 1].nkernels_per_marker;
    save_arch->layer[0].noutput_channels = arch->layer[layer - 1].noutput_channels;
    save_arch->layer[0].relu = arch->layer[layer - 1].relu;
-   save_arch->layer[0].topology = arch->layer[layer - 1].topology;
    strcpy(save_arch->layer[0].pool_type, arch->layer[layer - 1].pool_type);
    save_arch->layer[0].pool_stride = arch->layer[layer - 1].pool_stride;
 

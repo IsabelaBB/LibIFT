@@ -520,7 +520,7 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage 
 
         if(iftBMapValue(visited, node) == 0)
         {
-            iftBMapSetValue(visited, node, 1); // mark node as visited
+            iftBMapSet1(visited, node); // mark node as visited
 
             int max_class = 0;
             int max_count = class_count[node][0];
@@ -848,7 +848,7 @@ float *iftGFLIMComputeBias(iftMatrix *kernels, iftDataSet *Z)
  */
 iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
                                     iftImage *label_img0, iftImage *label_img,
-                                    iftFLIMLayer layer, float stdev_factor,
+                                    iftGFLIMLayer layer, float stdev_factor,
                                     iftGFLIMStrideType stride,
                                     float **bias, int **truelabel,
                                     iftGFLIMGraphAttention attention_opt,
@@ -872,7 +872,7 @@ iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
         printf("\t label_img: NULL \n");
     else
         printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
-    printf("\t layer: kernel_size: %d, nclusters_per_bkg_marker: %d, nclusters_per_obj_marker: %d \n", layer.kernel_size[0] * layer.kernel_size[1], layer.nkernels_per_marker, layer.nkernels_per_marker);
+    printf("\t layer: kernel_size: %d, nclusters_per_bkg_marker: %d, nclusters_per_obj_marker: %d \n", layer.kernel_size, layer.nkernels_per_marker, layer.nkernels_per_marker);
     printf("\t stdev_factor: %f\n", stdev_factor);
     switch (stride)
     {
@@ -914,7 +914,7 @@ iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
         break;
     }
 
-    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, S, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, aggregation_opt);
+    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, S, layer.kernel_size, attention_opt, aggregation_opt);
 
 #ifdef PRINT_VALS
     printf("Dataset %s\n", basename);
@@ -1202,7 +1202,7 @@ iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
  * @note nodes_map must be allocated with graph->num_nodes elements.
  * @note The function will fill nodes_map with the mapping from the input graph to the output graph.
  */
-iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, int stride, int *nodes_map)
+iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *nodes_map)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1210,11 +1210,11 @@ iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, int stride, int *nodes_
         printf("\t graph: NULL \n");
     else
         printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
-    printf("\t stride: %d\n", stride);
+    printf("\t stride: %f\n", stride);
     printf("\t nodes_map: %s\n", nodes_map == NULL ? "NULL" : "not NULL");
 #endif
 
-    int num_nodes_out = graph->num_nodes / stride;
+    int num_nodes_out = floorf((float)graph->num_nodes / stride);
     double *distance = iftAllocDoubleArray(graph->num_nodes);
     int closest_neigh[graph->num_nodes];
     iftDHeap *heap = iftCreateDHeap(graph->num_nodes, distance);
@@ -1332,7 +1332,7 @@ iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, int stride, int *nodes_
  * @param[in] nbasenames The number of names in basename.
  * @param[in] stride The stride type. @see iftGFLIMStrideType.
  */
-void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftFLIMLayer layer,
+void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftGFLIMLayer layer,
                          char *in_labels_dir, char *out_labels_dir,
                          char **basename, int nbasenames,
                          iftGFLIMStrideType stride)
@@ -1348,14 +1348,14 @@ void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftFLIMLayer layer,
         sprintf(filename, "%s/%s.pgm", in_labels_dir, basename[i]);
         iftImage *input_labels = iftReadImageByExt(filename);
 
-        if (stride == IFT_GFLIM_IMAGESTRIDE)
+        if (stride == IFT_GFLIM_IMAGESTRIDE && layer.pool_stride >= 2)
         {
             iftImage *output_labels = NULL;
-            int new_x = ceilf(input_labels->xsize / (float)layer.pool_stride);
-            int new_y = ceilf(input_labels->ysize / (float)layer.pool_stride);
-            int new_z = iftMax(ceilf(input_labels->zsize / (float)layer.pool_stride), 1);
+            int new_x = ceilf((float)input_labels->xsize / layer.pool_stride);
+            int new_y = ceilf((float)input_labels->ysize / layer.pool_stride);
+            int new_z = iftMax(ceilf((float)input_labels->zsize / layer.pool_stride), 1);
             output_labels = iftCreateImage(new_x, new_y, new_z);
-            output_graph = iftGFLIMImageStride(graph->val[i], input_labels, output_labels, layer.pool_stride);
+            output_graph = iftGFLIMImageStride(graph->val[i], input_labels, output_labels, floorf(layer.pool_stride));
             iftDestroyFLIMGraph(&(graph->val[i]));
             graph->val[i] = output_graph;
             output_graph = NULL;
@@ -1381,21 +1381,21 @@ void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftFLIMLayer layer,
     }
 }
 
-void iftGFLIMStrideBatch_v2(iftGFLIMGraphArray *graph, iftFLIMLayer layer,
+void iftGFLIMStrideBatch_v2(iftGFLIMGraphArray *graph, iftGFLIMLayer layer,
                             iftImageArray *labels_img, iftGFLIMStrideType stride)
 {
-    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride < 2)
+    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride <= 1)
         return;
 
-    if (stride == IFT_GFLIM_IMAGESTRIDE)
+    if (stride == IFT_GFLIM_IMAGESTRIDE && layer.pool_stride >= 2)
     {
         for (int i = 0; i < graph->n; i++)
         {
-            int new_x = ceilf(labels_img->val[i]->xsize / (float)layer.pool_stride);
-            int new_y = ceilf(labels_img->val[i]->ysize / (float)layer.pool_stride);
-            int new_z = iftMax(ceilf(labels_img->val[i]->zsize / (float)layer.pool_stride), 1);
+            int new_x = ceilf(labels_img->val[i]->xsize / layer.pool_stride);
+            int new_y = ceilf(labels_img->val[i]->ysize / layer.pool_stride);
+            int new_z = iftMax(ceilf(labels_img->val[i]->zsize / layer.pool_stride), 1);
             iftImage *output_labels = iftCreateImage(new_x, new_y, new_z);
-            iftGFLIMGraph *output_graph = iftGFLIMImageStride(graph->val[i], labels_img->val[i], output_labels, layer.pool_stride);
+            iftGFLIMGraph *output_graph = iftGFLIMImageStride(graph->val[i], labels_img->val[i], output_labels, floorf(layer.pool_stride));
             iftDestroyImage(&(labels_img->val[i]));
             labels_img->val[i] = output_labels;
             output_labels = NULL;
@@ -1755,7 +1755,7 @@ iftMImageArray *iftGFLIMConvLayerBatch(iftGFLIMGraphArray *graph, iftMatrix *ker
  * @note The pooling is applied to the graph nodes.
  */
 void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph,
-                          char *pool_type, int pool_size, int pool_stride)
+                          char *pool_type, int pool_size, float pool_stride)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1768,8 +1768,8 @@ void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph
     else
         printf("\t graph size: %d \n", graph->n);
     printf("\t pool_type: %s\n", pool_type);
-    printf("\t pool_size: %d %d %d\n", pool_size[0], pool_size[1], pool_size[2]);
-    printf("\t pool_stride: %d\n", pool_stride);
+    printf("\t pool_size: %d \n", pool_size);
+    printf("\t pool_stride: %f\n", pool_stride);
 #endif
 
     for (int i = 0; i < activ_array->n; i++)
@@ -1798,7 +1798,7 @@ void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph
  */
 iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
                                   iftMatrix *Kernels, float *bias,
-                                  iftFLIMLayer layer, iftGFLIMStrideType stride,
+                                  iftGFLIMLayer layer, iftGFLIMStrideType stride,
                                   iftImage *input_labels, iftImage **output_labels,
                                   iftGFLIMGraphAttention attention_opt, int *kernel_labels,
                                   iftGFLIMAggregationType aggregation_opt,
@@ -1831,7 +1831,7 @@ iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
     if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE && reduce)
         channels_maintain = iftAllocBoolArray(Kernels->ncols);*/
 
-    iftMImage *activ = iftGFLIMConvLayer(graph, Kernels, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, /*channels_maintain,*/ reduce);
+    iftMImage *activ = iftGFLIMConvLayer(graph, Kernels, layer.kernel_size, attention_opt, kernel_labels, aggregation_opt, /*channels_maintain,*/ reduce);
 
     iftMImage *activ_relu = NULL;
     /*if (channels_maintain != NULL)
@@ -1890,17 +1890,17 @@ iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
     /* pooling */
     iftGFLIMGraph *pooling_graph = iftMImageToFLIMGraph(activ_relu, graph);
     iftDestroyMImage(&activ_relu);
-    iftGFLIMPoolingLayer(pooling_graph, layer.pool_type, layer.pool_size[0] * layer.pool_size[1], 1);
+    iftGFLIMPoolingLayer(pooling_graph, layer.pool_type, layer.pool_size, 1);
 
     /* stride model */
     iftGFLIMGraph *output_graph = NULL;
-    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride == 1)
+    if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride == 1 || (stride == IFT_GFLIM_IMAGESTRIDE && layer.pool_stride >= 2))
     {
         output_graph = pooling_graph;
         pooling_graph = NULL;
     }
 
-    if (stride == IFT_GFLIM_IMAGESTRIDE && layer.pool_stride > 1)
+    if (stride == IFT_GFLIM_IMAGESTRIDE && layer.pool_stride >= 2)
     {
         int new_x = ceilf(input_labels->xsize / (float)layer.pool_stride);
         int new_y = ceilf(input_labels->ysize / (float)layer.pool_stride);
@@ -1948,7 +1948,7 @@ iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
  * @note The stride is applied only if the pool_stride in layer config. is greater than 1.
  */
 void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
-                              iftMatrix *Kmerged, iftFLIMLayer layer,
+                              iftMatrix *Kmerged, iftGFLIMLayer layer,
                               char *in_labels_dir, char *out_labels_dir,
                               float *bias_merged,
                               char **basename, int nbasenames,
@@ -1987,7 +1987,7 @@ void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
     }*/
 
     /* convolution */
-    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels,*/ reduce);
+    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size, attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels,*/ reduce);
 
     /* activation and bias */
     iftMImageArray *activ_relu = activ;
@@ -2031,7 +2031,7 @@ void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
     activ = NULL;
 
     /* pooling */
-    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0] * layer.pool_size[1], 1);
+    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size, 1);
     iftDestroyMImageArray(&activ_relu);
 
     /* stride */
@@ -2039,7 +2039,7 @@ void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
 }
 
 void iftGFLIMEncodeLayerBatch_v2(iftGFLIMGraphArray *input,
-                                 iftMatrix *Kmerged, iftFLIMLayer layer,
+                                 iftMatrix *Kmerged, iftGFLIMLayer layer,
                                  iftImageArray *labels_img,
                                  float *bias_merged,
                                  iftGFLIMStrideType stride,
@@ -2077,7 +2077,7 @@ void iftGFLIMEncodeLayerBatch_v2(iftGFLIMGraphArray *input,
     }*/
 
     /* convolution */
-    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size[0] * layer.kernel_size[1], attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels,*/ reduce);
+    iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size, attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels,*/ reduce);
 
     /* activation and bias */
     iftMImageArray *activ_relu = activ;
@@ -2121,7 +2121,7 @@ void iftGFLIMEncodeLayerBatch_v2(iftGFLIMGraphArray *input,
     activ = NULL;
 
     /* pooling */
-    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size[0] * layer.pool_size[1], 1);
+    iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size, 1);
     iftDestroyMImageArray(&activ_relu);
 
     /* stride */

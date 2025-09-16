@@ -10,11 +10,13 @@ int *LoadKernelLabels(char *filename)
   int *truelabels;
 
   fp = fopen(filename, "r");
-  fscanf(fp, "%d", &number_of_kernels);
+  if(fscanf(fp, "%d", &number_of_kernels) != 1)
+    iftError("Error reading number of kernels from file %s", __func__, filename);
   truelabels = iftAllocIntArray(number_of_kernels);
   for (int k = 0; k < number_of_kernels; k++)
   {
-    fscanf(fp, "%d ", &truelabels[k]);
+    if(fscanf(fp, "%d ", &truelabels[k]) != 1)
+      iftError("Error reading label of kernel %d from file %s", __func__, k, filename);
   }
   fclose(fp);
 

@@ -58,7 +58,7 @@ def train_model(model_dir, markers_dir, arch_file, nlayers, nfeat_markers, kerne
 def read_architecture(arch_file):
     with open(arch_file) as f:
         data = json.load(f)
-        kernel_size = data['layer1']['conv']['kernel_size'][0]*data['layer1']['conv']['kernel_size'][1]
+        kernel_size = data['layer1']['conv']['kernel_size']
         nfeat_markers = data['layer1']['conv']["nkernels_per_marker"]
         nlayers = data['nlayers']
     return kernel_size, nfeat_markers, nlayers
@@ -107,7 +107,8 @@ def run_model_parallel(arch_id, split_id, graphs_path_src):
     
     arch_name = f'arch_schisto{arch_id}'
     arch_file = f'{DATASET_PATH}/archs/{arch_name}.json'
-    kernel_size, nfeat_markers, nlayers = read_architecture(arch_file)
+    arch = read_architecture(arch_file)
+    kernel_size, nfeat_markers, nlayers = arch['layer1']['conv']['kernel_size'], arch['layer1']['conv']["nkernels_per_marker"], arch['nlayers']
 
     tmp = 'kmeans'
     if DROPOUT:

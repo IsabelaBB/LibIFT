@@ -828,7 +828,7 @@ if __name__ == "__main__":
         label_path=os.path.join(DATASET_PATH, 'imgs', 'label', f'{img_name}.png'),
         graph_path=os.path.join(DATASET_PATH, 'superpixels', SPX_ALG, f'{INIT_SEEDS}-{FINAL_SPX}', GRAPH_FEATS, 'graphs', f'{img_name}.json'),
         superpixel_path=os.path.join(DATASET_PATH, 'superpixels', SPX_ALG, f'{INIT_SEEDS}-{FINAL_SPX}', GRAPH_FEATS, 'labels', f'{img_name}.pgm'),
-        num_neighbors=model.kernel_size[0]
+        num_neighbors=model.kernel_size
     )
     
     print('GFLIM data loaded.')

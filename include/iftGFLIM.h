@@ -31,6 +31,32 @@ extern "C" {
 #include "iftGFLIMGraph.h"
 
 
+
+typedef struct iftGFLIMLayer {
+  int  kernel_size;      /* kernel sizes along x, y, and z */
+  int  dilation_rate;    /* dilation rates sx, sy, sz */
+  int  nkernels_per_image;  /* number of filters (kernels, output channels) per image */
+  int  nkernels_per_marker; /* number of filters (kernels) per marker */
+  int  noutput_channels;    /* final number of filters (kernels, output channels) in a consensus layer from several training images */
+  bool relu;                /* with (true) or without (false) relu */
+  char *pool_type;          /* "no_pool, avg_pool, max_pool" */
+  int  pool_size;        /* pooling sizes align x, y, and z */
+  float  pool_stride;         /* pooling stride */
+  int *skip_connection;    /* index of the layers to apply skip connection */
+} iftGFLIMLayer;
+
+//! swig(destroyer = iftDestroyGFLIMArch)
+typedef struct iftGFLIMArch {
+  int nlayers;                  /* number of layers */
+  iftGFLIMLayer *layer;          /* convolutional layer */
+  float stdev_factor;           /* an adjustment parameter for marker-based normalization */
+  bool apply_intrinsic_atrous;  /* intrinsic dilation meant to take the pooling stride into consideration during training*/
+} iftGFLIMArch;
+
+iftGFLIMArch *iftReadGFLIMArch(char *filename);
+void iftWriteGFLIMArch(iftGFLIMArch *arch, char *filename);
+void iftDestroyGFLIMArch(iftGFLIMArch **arch);
+
 /* --------------------- GFLIM seeds (user drawn markers) ----------------------------- */
 
 void iftGFLIMRelabelConnectedComponentsInPlace(iftGFLIMGraph *graph, 
@@ -47,12 +73,12 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
 
 iftMImage *iftGFLIMSumMImgToFloatArray(iftMImage *mimg, float *bias, bool inplace);
 
-void iftGFLIMTrainLayer(char *activ_dir, char *markers_dir, char *param_dir, int layer_index, iftFLIMArch *arch, char *output_dir);
+void iftGFLIMTrainLayer(char *activ_dir, char *markers_dir, char *param_dir, int layer_index, iftGFLIMArch *arch, char *output_dir);
 
 /* --------------------- GFLIM extract features ----------------------------- */
 
 void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list, 
-                                        iftFLIMArch *arch, char *param_dir, int layer_index,
+                                        iftGFLIMArch *arch, char *param_dir, int layer_index,
                                         char *feat_dir, int batchsize);
 
 /* --------------------- GFLIM pooling ----------------------------- */
@@ -60,7 +86,7 @@ void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list,
 void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
                         char *pool_type, 
                         int pool_size, 
-                        int pool_stride);
+                        float pool_stride);
 
 /* --------------------- GFLIM decoder ----------------------------- */
 

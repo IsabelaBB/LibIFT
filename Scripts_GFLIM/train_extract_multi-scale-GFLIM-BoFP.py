@@ -65,7 +65,7 @@ def train_model(model_dir, markers_dir, arch_file, nlayers, nfeat_markers, kerne
 def read_architecture(arch_file):
     with open(arch_file) as f:
         data = json.load(f)
-        kernel_size = data['layer1']['conv']['kernel_size'][0]*data['layer1']['conv']['kernel_size'][1]
+        kernel_size = data['layer1']['conv']['kernel_size']
         nfeat_markers = data['layer1']['conv']["nkernels_per_marker"]
         nlayers = data['nlayers']
     return kernel_size, nfeat_markers, nlayers
@@ -79,10 +79,8 @@ def extract(model_dir, img_dir, graphs_path_src, arch_file, nlayers, batch_size,
     os.system(line)
     #print("Running command: ", line)
 
-def run_model_parallel(arch_id, split_id, graphs_dir, stride, attention, dropout):
+def run_model_parallel(arch_file, split_id, graphs_dir, stride, attention, dropout):
     
-    arch_name = f'arch_cells{arch_id}'
-    arch_file = f'{DATASET_PATH}/archs/{arch_name}.json'
     kernel_size, nfeat_markers, nlayers = read_architecture(arch_file)
 
     if stride == 'graph-based':
@@ -152,6 +150,7 @@ SPX_ALG = 'SH'
 FINAL_SPX_LIST = [20000, 40000, 80000]
 GRAPH_FEATS = 'SUM'
 AGGREGATION = 'CONCAT'
+arch_file = f'{DATASET_PATH}/archs/arch_schisto_test.json'
 
 for spx in FINAL_SPX_LIST:
     graphs_path_src = os.path.join(DATASET_PATH, 'superpixels', SPX_ALG, f'{spx}', GRAPH_FEATS)
@@ -169,12 +168,3 @@ graphs_path_src = os.path.join(DATASET_PATH, 'superpixels', SPX_ALG)
 run_model_parallel(2, 1, graphs_path_src, STRIDE, ATTENTION, DROPOUT)
 
 
-"""
-STRIDE = 'none'
-ATTENTION = 'CLASS_DOMINANCE'
-DROPOUT = False
-inputs += [(arch_id,split_id, STRIDE, ATTENTION, DROPOUT) for arch_id in [1] for split_id in range(1,6)]
-"""
-
-#with multiprocessing.Pool() as pool:
-#    pool.starmap(run_model_parallel, ((arch_id, split_id, graphs_path_src, STRIDE, ATTENTION, DROPOUT) for (arch_id,split_id, STRIDE, ATTENTION, DROPOUT) in tqdm(inputs)))

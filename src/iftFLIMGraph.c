@@ -2381,7 +2381,7 @@ iftGFLIMGraph *iftImageToFLIMGraph(iftImage *img,
     iftImage *label_img_tmp = NULL;
     iftMImage *mimg;
     iftAdjRel *A = NULL;
-    iftGFLIMGraph *graph;
+    iftGFLIMGraph *graph = NULL;
 
     if (iftIsColorImage(img))
         mimg = iftImageToMImage(img, LABNorm_CSPACE);
