@@ -12,7 +12,7 @@ import numpy as np
 from skimage.filters import threshold_otsu
 import copy
 
-def compute_kernels_maps(model_dir, rows_to_keep = None):
+def compute_kernels_maps_bkp(model_dir, rows_to_keep = None):
         """
         Read a file at model_dir/model/kernels_map.txt containing a mapping from the kernels of scale 0 to the kernels at others scales. 
 
@@ -26,27 +26,177 @@ def compute_kernels_maps(model_dir, rows_to_keep = None):
             list: A list of kernel maps, where each kernel map is a list of integers representing the mapping of kernels from scale 0 to scale i+1.
         """
 
+        def get_kernel_linei(k, l, kernels_maps):
+            # find which kernel is k in line (or scale) l
+            i = 0
+            while(i < l):
+                k = kernels_maps[i][k]
+                i+=1
+            return k
+
         # contruct a kernels map from a scale 0 to i+1
-        kernels_maps = []
+        lines = []
         with open(os.path.join(model_dir, 'model', 'kernels_map.txt'), 'r') as f:
-            for i,line in enumerate(f.readlines()):
+            lines = f.readlines()
 
-                if rows_to_keep is not None and i not in rows_to_keep:
-                    continue
+        # para linha 0
+        ki = 0
+        kernels_map = []
+        for i,k0 in enumerate(lines[0].strip().split(' ')):
+            k0 = int(k0) - 1
+            if(k0 == i):
+                kernels_map.append(ki)
+                ki += 1
+            else:
+                kernels_map.append(kernels_map[k0])
 
-                kernels = line.strip().split(' ')
-                kernels_map = [i for i in range(len(kernels))] # store a mapping of kernels from scale 0 (finer) to i+1 (coarser)
-                counter = 0 # count the kernel indexes of scale i+1 (coarser scale)
-                for i,k in enumerate(kernels):
-                    k = int(k)-1
-                    if k != i:
-                        k2 = kernels_map[k]
-                        kernels_map[i] = k2           
-                    else:
-                        kernels_map[i] = counter
-                        counter += 1
-                kernels_maps.append(kernels_map)
+        kernels_maps = [kernels_map]
+
+        # para linha i
+        line_prev = lines[0].strip().split(' ')
+        kernels_prev = kernels_map.copy()
+        for l, line in enumerate(lines[1:]):
+            line = line.strip().split(' ')
+            kernels_map = []
+            for i,k0 in enumerate(line):
+                k0 = int(k0) - 1
+                k0_prev = int(line_prev[k0]) - 1
+                if(k0_prev == i):
+                    k = get_kernel_linei(k0, l+1, kernels_maps)
+                    if(k != k0_prev):
+                        k = kernels_map[k]
+                    kernels_map.append(k)
+                    
+            line_prev = line.copy()
+            kernels_prev = kernels_map.copy()
+            kernels_maps.append(kernels_map)
         return kernels_maps
+
+def compute_kernels_maps(model_dir, rows_to_keep = None):
+    def get_kernel_linei(k, l, kernels_maps):
+        # find which kernel is k in line (or scale) l
+        i = 0
+        while(i < l):
+            k = kernels_maps[i][k]
+            i+=1
+        return k
+    
+    # contruct a kernels map from a scale 0 to i+1
+    lines = []
+    with open(os.path.join(model_dir, 'model', 'kernels_map.txt'), 'r') as f:
+        lines = f.readlines()
+
+    if rows_to_keep is None:
+        rows_to_keep = list(range(len(lines)))
+
+    # process line 0
+    ki = 0
+    kernels_map = []
+    for i,k0 in enumerate(lines[0].strip().split(' ')):
+        k0 = int(k0) - 1
+        if(k0 == i):
+            kernels_map.append(ki) # new kernel
+            ki += 1
+        else:
+            kernels_map.append(kernels_map[k0]) # repeated kernel
+
+    kernels_maps = [kernels_map]
+
+    # process each line i
+    line_prev = lines[0].strip().split(' ')
+    for l, line in enumerate(lines[1:]):
+        line = line.strip().split(' ')
+        kernels_map = []
+        ki = 0
+        for i,k0 in enumerate(line):
+            k0 = int(k0) - 1 # i-th kernel in scale i indexed as scale 0
+            # (e.g., i=5 k0=3 means kernels 3 and 5 in scale 0 are the same in scale i)
+
+            k0_prev = int(line_prev[i]) - 1 # i-th kernel in scale i-1 indexed as scale 0
+            # (e.g., i=5 k0_prev=4 means kernels 4 and 5 in scale 0 are the same in scale i-1. 
+            # Considering the previous example, kernels 3, 4, and 5 in scale 0 are the same in scale i)
+
+            if(k0_prev == i):
+                if(k0 == k0_prev):
+                    kernels_map.append(ki)
+                    ki+=1
+                else: # repeated (merged) kernel. Map from scale i-1 to scale i
+                    k = get_kernel_linei(k0, l+1, kernels_maps) # map k0 from scale 0 to scale i-1
+                    k = kernels_map[k]
+                    kernels_map.append(k)
+
+        line_prev = line.copy()
+        kernels_maps.append(kernels_map)
+
+    """
+    # erase scales
+    kernels_map_final = [kernels_maps[rows_to_keep[0]].copy()]
+    for id,r in enumerate(rows_to_keep[:-1]):
+        s = rows_to_keep[id+1]
+        r+=1
+        mapped_kernels = kernels_maps[r]
+        r+=1
+        while(r <= s):
+            mapped_kernels = [kernels_maps[r][k] for k in mapped_kernels]
+            r+=1
+        kernels_map_final.append(mapped_kernels)
+    """
+    return kernels_maps    
+
+def erase_scales_from_kernels_map(kernels_maps, rows_to_keep):
+    """
+    Erase the scales from the kernels map by keeping only the specified rows.
+    """
+    kernels_map_final = [kernels_maps[rows_to_keep[0]].copy()]
+    for id,r in enumerate(rows_to_keep[:-1]):
+        s = rows_to_keep[id+1]
+        r+=1
+        mapped_kernels = kernels_maps[r]
+        r+=1
+        while(r <= s):
+            mapped_kernels = [kernels_maps[r][k] for k in mapped_kernels]
+            r+=1
+        kernels_map_final.append(mapped_kernels)
+
+    return kernels_map_final
+
+def get_merged_scales_from_kernels_map(kernels_maps, init, end):
+    """
+    Merge scales in range(init, end). 
+    If init == end, return a range of values.
+    If init == end+1, return kernels_maps[init]
+
+    Example: kernels_map contains [(0->1), (1->2), (2->3), (3->4)]
+    if init = 1, end = 2, return kernels_map[1]
+    if init = 1, end = 3, 
+            kernels_map_final = kernels_map[1]
+            map from kernels_map_final to kernels_map[2]
+            return kernels_map_final
+
+    if  init = 2, end = 5,
+        kernels_map_final = kernels_map[1]
+        map from kernels_map_final to kernels_map[2]
+        map from kernels_map_final to kernels_map[3]
+        return kernels_map_final
+    """
+
+    if end < init:
+        raise ValueError("end must be greater than init")
+
+    if end > len(kernels_maps):
+        raise ValueError("end must be less than or equal to the number of scales")
+
+    if init == end:
+        if init < len(kernels_maps):
+            return [i for i in range(len(kernels_maps[init]))]
+        else:
+            raise ValueError("end must be less than the number of scales")
+
+    kernels_map_final = kernels_maps[init].copy()
+    for i in range(init+1, end):
+        kernels_map_final = [kernels_maps[i][k] for k in kernels_map_final]
+        
+    return kernels_map_final
 
 class MergeLayers():
     """
@@ -150,10 +300,6 @@ class MergeLayers():
         feat_matrix = self.graph_to_featMatrix(graph)
         self.feature_matrices.append(feat_matrix)
 
-        # compute node map
-        if len(self.spx_imgs) > 1:
-            self.add_node_map(spx_img)
-
     def upsample_featMatrix(self, feat_matrix_target, feat_matrix_increased, node_map, kernel_map):
         """
         Upsample the feat_matrix_target to the size of feat_matrix_increased using the node_map and kernel_map
@@ -170,6 +316,9 @@ class MergeLayers():
         for node in range(feat_matrix_increased.shape[0]):
             feats_target = feat_matrix_target[node_map[node], :]
             feat_matrix[node, :] = np.array([feats_target[kernel_map[k]] for k in range(feat_matrix_increased.shape[1])])
+            #for k in range(feat_matrix_increased.shape[1]):
+            #    feat_matrix[node, k] = feats_target[kernel_map[k]]
+            #feat_matrix[node, :] = np.array(feat_matrix[node, :])
         return feat_matrix
 
     def compute_otsu_threshold(self, feat_matrix):
@@ -192,14 +341,19 @@ class MergeLayers():
             tuple: A tuple containing the means and standard deviations, each with size (num_nodes, num_feats).
         """
         # compute the mean and std per node and channel across multiple feature matrices
-        num_nodes0, num_feats0 = self.feature_matrices[0].shape
+        finer_scale_id = self.get_finer_scale()
+
+        num_nodes0, num_feats0 = self.feature_matrices[finer_scale_id].shape
         means = np.zeros((num_nodes0, num_feats0))
         stds = np.zeros((num_nodes0, num_feats0))
         for node in range(num_nodes0):
             for channel in range(num_feats0):
-                values = [self.feature_matrices[0][node, channel]]
-                for scale, fm in enumerate(self.feature_matrices[1::]):
-                    values.append(fm[self.node_maps[scale][node], self.kernels_maps[scale][channel]])
+                values = []
+                for scale, fm in enumerate(self.feature_matrices):
+                    if scale == finer_scale_id:
+                        values.append([self.feature_matrices[scale][node, channel]])
+                    else:
+                        values.append(fm[self.node_maps[scale][node], self.kernels_maps[scale][channel]])
                 means[node, channel] = np.mean(values)
                 stds[node, channel] = np.std(values)
         return means, stds
@@ -217,6 +371,9 @@ class MergeLayers():
             sum_matrix[:,i] = np.array([val if func_condition(f, val) else 0 for f in feature_matrix[:,i]])
         return feature_matrix+sum_matrix
 
+    def get_finer_scale(self):
+        return np.argmax([self.feature_matrices[i].shape[0] for i in range(len(self.feature_matrices))])        
+
     def merge_scales_dotProd(self, thresh=False, std=False):
         """ merge scales with a dot product
 
@@ -226,14 +383,20 @@ class MergeLayers():
         while objects with lower intensities may be lost.
         """
 
-        merged_features = copy.deepcopy(self.feature_matrices[0]) # start with the graph of the first scale (largest number of nodes)
+        # get the largest number of nodes
+        scale_largest_nnodes = self.get_finer_scale()
+        merged_features = copy.deepcopy(self.feature_matrices[scale_largest_nnodes]) # start with the graph of the scale with largest number of nodes)
+        feat_matrix_increased = self.feature_matrices[scale_largest_nnodes]
 
         if thresh:
             thresholds = self.compute_otsu_threshold(merged_features)
             merged_features = self.sum_value(merged_features, thresholds)
 
-        for i, fm in enumerate(self.feature_matrices[1::]):
-            fm = self.upsample_featMatrix(fm, self.feature_matrices[0], self.node_maps[i], self.kernels_maps[i])
+        for i, fm in enumerate(self.feature_matrices):
+            if i == scale_largest_nnodes:
+                continue
+
+            fm = self.upsample_featMatrix(fm, feat_matrix_increased, self.node_maps[i], self.kernels_maps[i])
             if thresh:
                 thresholds = self.compute_otsu_threshold(fm)
                 fm = self.sum_value(fm, thresholds)
@@ -246,6 +409,75 @@ class MergeLayers():
 
         return merged_features
 
+    def merge_scales_dotProd_sum_scale0(self, thresh=False, std=False):
+        """ merge scales with a dot product and sum with the first scale
+        """
+
+        # get the largest number of nodes
+        scale_largest_nnodes = self.get_finer_scale()
+        merged_features = copy.deepcopy(self.feature_matrices[scale_largest_nnodes]) # start with the graph of the scale with largest number of nodes)
+        feat_matrix_increased = self.feature_matrices[scale_largest_nnodes]
+
+        if thresh:
+            thresholds = self.compute_otsu_threshold(merged_features)
+            merged_features = self.sum_value(merged_features, thresholds)
+
+        for i, fm in enumerate(self.feature_matrices):
+            if i == scale_largest_nnodes:
+                continue
+
+            fm = self.upsample_featMatrix(fm, feat_matrix_increased, self.node_maps[i], self.kernels_maps[i])
+            if thresh:
+                thresholds = self.compute_otsu_threshold(fm)
+                fm = self.sum_value(fm, thresholds)
+            merged_features *= fm
+        
+        if std:
+            __, stds = self.compute_mean_std()
+            for i in range(merged_features.shape[0]):
+                merged_features[i, :] *= (1 - stds[i, :])
+
+        merged_features += feat_matrix_increased
+
+        return merged_features
+
+    def merge_scales_dotProd_sum_scalei(self, thresh=False, std=False):
+        """ merge scales with a dot product and sum with the first scale
+        """
+
+        # get the largest number of nodes
+        scale_largest_nnodes = self.get_finer_scale()
+        merged_features = copy.deepcopy(self.feature_matrices[scale_largest_nnodes]) # start with the graph of the scale with largest number of nodes)
+        feat_matrix_increased = self.feature_matrices[scale_largest_nnodes]
+
+        if thresh:
+            thresholds = self.compute_otsu_threshold(merged_features)
+            merged_features = self.sum_value(merged_features, thresholds)
+
+        for i, fm in enumerate(self.feature_matrices):
+            if i == scale_largest_nnodes:
+                continue
+
+            fm = self.upsample_featMatrix(fm, feat_matrix_increased, self.node_maps[i], self.kernels_maps[i])
+            if thresh:
+                thresholds = self.compute_otsu_threshold(fm)
+                fm = self.sum_value(fm, thresholds)
+            merged_features *= fm
+        
+        if std:
+            __, stds = self.compute_mean_std()
+            for i in range(merged_features.shape[0]):
+                merged_features[i, :] *= (1 - stds[i, :])
+
+        if(scale_largest_nnodes < len(self.feature_matrices)-1):
+            fm = self.upsample_featMatrix(self.feature_matrices[-1], feat_matrix_increased, self.node_maps[-1], self.kernels_maps[-1])
+        else:
+            fm = feat_matrix_increased
+        merged_features += fm
+
+        return merged_features
+
+
     def merge_scales_sum(self, thresh=False, std=False):
         """ merge scales with a sum
 
@@ -255,15 +487,20 @@ class MergeLayers():
         while objects with lower intensities may be lost.
         """
 
-        merged_features = copy.deepcopy(self.feature_matrices[0]) # start with the graph of the first scale (largest number of nodes)
+        # get the largest number of nodes
+        scale_largest_nnodes = self.get_finer_scale()
+        merged_features = copy.deepcopy(self.feature_matrices[scale_largest_nnodes]) # start with the graph of the scale with largest number of nodes)
+        feat_matrix_increased = self.feature_matrices[scale_largest_nnodes]
 
         if thresh:
             thresholds = self.compute_otsu_threshold(merged_features)
             merged_features = self.sum_value(merged_features, thresholds)
 
+        for i, fm in enumerate(self.feature_matrices):
+            if i == scale_largest_nnodes:
+                continue
 
-        for i, fm in enumerate(self.feature_matrices[1::]):
-            fm = self.upsample_featMatrix(fm, self.feature_matrices[0], self.node_maps[i], self.kernels_maps[i])
+            fm = self.upsample_featMatrix(fm, feat_matrix_increased, self.node_maps[i], self.kernels_maps[i])
             if thresh:
                 thresholds = self.compute_otsu_threshold(fm)
                 fm = self.sum_value(fm, thresholds)
@@ -276,23 +513,37 @@ class MergeLayers():
 
         return merged_features
 
-
-    def add_node_map(self, spx_img_i : np.ndarray):
+    def add_node_map(self, spx_img_i : np.ndarray, spx_img_0 : np.ndarray):
         """
         Add a node map from the first scale (scale 0) to the current scale (scale i).
         Args:
             spx_img_i (np.ndarray): The superpixel image of the current scale (scale i).
+            spx_img_0 (np.ndarray): The superpixel image of the finer scale (with more nodes).
         """
         # add a node maps from a scale 0 to scale i
         self.spx_imgs.append(spx_img_i)
-        spx_img0 = self.spx_imgs[0].flatten()
+        spx_img0 = spx_img_0.flatten()
         spx_img_i = spx_img_i.flatten()
         node_map = np.zeros(spx_img0.max(), dtype=int)
         for j,p in enumerate(spx_img0):
             node_map[p - 1] = int(spx_img_i[j] - 1)
-        self.node_maps.append(node_map)
+        return node_map
         
-
+    def compute_node_maps(self):
+        if len(self.spx_imgs) < 2:
+            raise ValueError("compute_node_maps: invalid number of superpixel maps :", len(self.spx_imgs))
+        
+        finer_scale_id = self.get_finer_scale()
+        self.node_maps = []
+        sp_img0 = self.spx_imgs[finer_scale_id].flatten()
+        for i in range(len(self.spx_imgs)):
+            sp_img = self.spx_imgs[i]
+            if i == finer_scale_id:
+                node_map = [j for j in range(sp_img0.max())]
+            else:
+                sp_img = sp_img.flatten()
+                node_map = self.add_node_map(sp_img, sp_img0)
+            self.node_maps.append(node_map)
 
 class GFLIMFunctions():
     """
@@ -467,6 +718,7 @@ class GFLIMFunctions():
         else:
             self.__callFunction__(self.functions['WriteKernelsCorrespondence'], [markers_dir_scale0, spx_dir_scale0, spx_dir_scalei, save_file, save_markers_folder], 'Writing kernels correspondence:\t')
 
+
 class GFLIMModel():
     """
     A class to hold the GFLIM model and its parameters.
@@ -517,7 +769,6 @@ class GFLIMModel():
             self.functions.create_graphs(self.dataset_path, self.final_spx, self.graphs_path_src, self.graph_feats, self.spx_alg, self.init_seeds)
 
         self.arch = self.read_architecture(self.arch_file)
-
 
     def __train_layer__(self, layer, write_activation, decoders=[]):
         """
@@ -599,7 +850,7 @@ class GFLIMModel():
                     break
         return scale
 
-    def skip_connection(self, layer, first_scale, write_activation):
+    def skip_connection(self, layer, first_scale, merge_function, write_activation):
         """
         Merge the layers with skip connections.
         Args:
@@ -622,11 +873,40 @@ class GFLIMModel():
         Note: the current layer is always the last scale to be merged
         """
 
+        """
+        Suponha layer = 9, first scale 2 e len(kernel maps) = 12
+        Skips on layer 4 : 2
+        Skips on layer 7 : 5 e 6
+        Skips on layer 9 : 4 e 7
+
+        kernel_maps = [(1->2), (2->3), (3->4), (4->5), (5->6), (6->7), (7->8), (8->9), (9->10), (10->11), (11->12), (12->13)]
+
+        Merge kernel maps according to skips:
+            Layer 4: calcular kernel_maps[0] = (range(kernel_maps[3])) 
+                                                i.e, if first_scale == first_scalei or first_scalei == 1, range(kernel_maps[first_scalei-1])
+            Layer 7: calcular kernel_maps[1] = (2->5) i.e, (first_scale-1, first_scalei-2)
+            Layer 9: calcular kernel_maps[2] = (2->9) i.e, (first_scale-1, layer-2)
+        
+        """
+        
         # Copy the graphs and labels of the layer to a new directory.
         shutil.copytree(os.path.join(self.model_dir, f'layer{layer}'), os.path.join(self.model_dir, f'layer{layer}_noSkip'), dirs_exist_ok=True)
 
+        skip_layers = [i for i, skip in enumerate(self.arch[f'layer{layer}']['skip_connection']) if skip > 0]
+
         # Compute the kernels maps for the current layer.
-        kernel_maps = compute_kernels_maps(self.model_dir, rows_to_keep=self.arch[f'layer{layer}']['skip_connection'])
+        kernel_maps_all = compute_kernels_maps(self.model_dir)
+        kernel_maps = []
+        for i in skip_layers: # i is layer - 1
+
+            # Since these data (to be merged) was already processed and they may have their own skip connections,
+            # we need to ensure that the kernels maps are correctly set to map to the first scale.
+            # Note that since these scales are already merged (if they have skip connections), there is NO need to update the nodes map too.
+            first_scale_i = self.get_first_scale(i+1)
+            
+            kernel_maps.append(get_merged_scales_from_kernels_map(kernel_maps_all, first_scale-1, first_scale_i-1))
+
+        kernel_maps.append(get_merged_scales_from_kernels_map(kernel_maps_all, first_scale-1, layer-1))
 
         # Add data from scales 0 to i-1. Process each image in the layer
         for fileName in os.listdir(os.path.join(self.model_dir, f'layer{layer}')):
@@ -635,30 +915,29 @@ class GFLIMModel():
             mergeFunction.kernels_maps = kernel_maps
             
             # add data from scales specified in skip connections
-            for i, skip in enumerate(self.arch[f'layer{layer}']['skip_connection']):
-                if skip < 1:
-                    continue
-
+            for i in skip_layers:
                 graph_path = os.path.join(self.model_dir, f'layer{i+1}', fileName)
                 spx_path = os.path.join(self.model_dir, f'labels{i+1}', f'{basename}.pgm')
-                mergeFunction.add_scale(spx_path, graph_path)
-
-                # Since these data (to be merged) was already processed and they may have their own skip connections,
-                # we need to ensure that the kernels maps are correctly set to map to the first scale.
-                # Note that since these scales are already merged (if they have skip connections), there is NO need to update the nodes map too.
-                first_scale_i = self.get_first_scale(i+1)
-                if first_scale_i != i+1:
-                    if first_scale_i != 1:
-                        mergeFunction.kernels_maps[i] = mergeFunction.kernels_maps[first_scale_i-1]
-                    else:
-                        mergeFunction.kernels_maps[i] = [j for j in range(len(mergeFunction.kernels_maps[0]))]
+                mergeFunction.add_scale(spx_path, graph_path)                
 
             # Add the data from the current layer and merge them all
-             # (current layer is always the last scale to be merged)
+            # (current layer is always the last scale to be merged)
             graph_path = os.path.join(self.model_dir, f'layer{layer}', fileName)
             spx_path = os.path.join(self.model_dir, f'labels{layer}', f'{basename}.pgm')
             mergeFunction.add_scale(spx_path, graph_path)
-            merged_features = mergeFunction.merge_scales_dotProd(thresh=False, std=False) # 'merged_features' is a feature matrix
+
+            mergeFunction.compute_node_maps()
+
+            if merge_function == 'dotProd':
+                merged_features = mergeFunction.merge_scales_dotProd(thresh=False, std=False) # 'merged_features' is a feature matrix
+            elif merge_function == 'sum':
+                merged_features = mergeFunction.merge_scales_sum(thresh=False, std=False) # 'merged_features' is a feature matrix
+            elif merge_function == 'dotProd_sum_scale0':
+                merged_features = mergeFunction.merge_scales_dotProd_sum_scale0(thresh=False, std=False) # 'merged_features' is a feature matrix
+            elif merge_function == 'dotProd_sum_scalei':
+                merged_features = mergeFunction.merge_scales_dotProd_sum_scalei(thresh=False, std=False) # 'merged_features' is a feature matrix
+            else:
+                raise ValueError(f"Unknown merge function: {merge_function}")
 
             # convert the merged feature matrix back to graph and save it
             graph_path = os.path.join(self.model_dir, f'layer{first_scale}', fileName)
@@ -678,7 +957,7 @@ class GFLIMModel():
             shutil.rmtree(os.path.join(self.model_dir, f'activation{layer}'))
             self.functions.write_activations(self.model_dir, layer, first_scale)
 
-    def train_model(self, img_splits_names, decoders, write_activation):
+    def train_model(self, img_splits_names, decoders, merge_function, write_activation):
         """
         Train the GFLIM model.
         Args:
@@ -709,7 +988,7 @@ class GFLIMModel():
             if layer > 1:
                 self.functions.write_kernels_correspondence(os.path.join(self.model_dir, f'markers'),
                                                                 os.path.join(self.model_dir, 'labels0'),
-                                                                os.path.join(self.model_dir, f'labels{layer}'),
+                                                                os.path.join(self.model_dir, f'labels{layer-1}'),
                                                                 os.path.join(self.model_dir, 'model', 'kernels_map.txt'))
 
             # Get the first scale of the layer, which will dictate the number of nodes and features in the merged graph.
@@ -717,7 +996,7 @@ class GFLIMModel():
 
             # merge layers output
             if first_scale != layer: # if there are skip connections
-                self.skip_connection(layer, first_scale, write_activation)
+                self.skip_connection(layer, first_scale, merge_function, write_activation)
 
 
     def read_architecture(self, arch_file):
@@ -734,7 +1013,8 @@ class GFLIMModel():
 
     def run_model(self, img_splits_names, train=True, decode_train=True, activation_train=True,
                            extract=True, decode_extract=True, activation_extract=True,
-                           decoders=["hybrid", "graph-adaptive"]):
+                           decoders=["hybrid", "graph-adaptive"],
+                           merge_function='dotProd_sum_scalei'):
         """
         Run (train and/or extract) a GFLIM model.
         Args:
@@ -774,7 +1054,7 @@ class GFLIMModel():
             # copy the train graphs and superpixel labels from the dataset directory to the model directory
             self.__copyGraphsAndLabels__(f'{self.dataset_path}/{img_splits_names}/split{self.split_id}/orig/train')
 
-            self.train_model(img_splits_names, decoders if decode_train else [], write_activation=activation_train)
+            self.train_model(img_splits_names, decoders if decode_train else [], merge_function=merge_function, write_activation=activation_train)
 
             # remove the layer and label directories to free up space and allow the extraction to be done from scratch
             #for layer in range(0,self.arch['nlayers']+1):
@@ -1064,7 +1344,7 @@ class GFLIMultiScaleUModel(GFLIMModel):
         for d in decoders: #["hybrid", "graph-adaptive"]:#, "test", "tristate"]:
             self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride)
 
-    def train_model(self, img_splits_names, decoders, write_activation):
+    def train_model(self, img_splits_names, decoders, merge_function, write_activation):
         # copy arch file
         file = os.path.join(self.model_dir, self.arch_file.split('/')[-1])
         if os.path.isfile(file): # if it exists, remove it
@@ -1113,7 +1393,7 @@ class GFLIMultiScaleUModel(GFLIMModel):
 
     def run_model(self, img_splits_names, train=True, decode_train=True, activation_train=True,
                            extract=True, decode_extract=True, activation_extract=True,
-                           decoders=["hybrid", "graph-adaptive"]):
+                           decoders=["hybrid", "graph-adaptive"], merge_function='dotProd_sum'):
         
         if not train and not extract:
             print("Nothing to do. Please set train and/or extract to True.")
@@ -1185,33 +1465,51 @@ def getModelPath(ds_name, split_id, markers_name, arch_name,
 
 
 def GFLIMModelExample():
-    DATASET_PATH = '/home/isabela/Codes/LibIFT/Datasets/schisto'
+    DATASET_PATH = '/home/isabela/Codes/LibIFT/Datasets/cells_dataset'
     DS_NAME = DATASET_PATH.split('/')[-1]
     SPX_ALG = 'DISF'
-    INIT_SEEDS = 20000
-    FINAL_SPX = 10000
+    INIT_SEEDS = 50000
+    FINAL_SPX = 20000
     GRAPH_FEATS = 'SUM'
-    ARCH_NAME = 'arch_schisto_test'# 'arch_schisto_test'
+    ARCH_NAME = 'arch_cells_test'
     AGGREGATION = 'CONCAT'
     MARKERS_NAME = 'interactive_markers'
     STRIDE = 'graph-based'
     ATTENTION = 'NONE'
     DROPOUT = False
 
-    for SPLIT_ID in range(1, 6):
-        model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
-                                STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
-                                ATTENTION, DROPOUT, INIT_SEEDS)
+    for merge_function in ['dotProd', 'sum', 'dotProd_sum_scale0', 'dotProd_sum_scalei']:
+        for SPLIT_ID in range(1, 6):
+            model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
+                                    STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
+                                    ATTENTION, DROPOUT, INIT_SEEDS)
+            model_dir += f'_merge-{merge_function}'
 
-        model = GFLIMModel(DATASET_PATH, model_dir, 
-                                        f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
-                                        f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{SPLIT_ID}', 
-                                        SPLIT_ID,
-                                        SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
-                                        STRIDE, ATTENTION, AGGREGATION, DROPOUT)
+            model = GFLIMModel(DATASET_PATH, model_dir, 
+                                            f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
+                                            f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{SPLIT_ID}', 
+                                            SPLIT_ID,
+                                            SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
+                                            STRIDE, ATTENTION, AGGREGATION, DROPOUT)
 
-        model.run_model('interactive_splits', extract=False)
+            model.run_model('interactive_splits', extract=False, merge_function=merge_function)
 
+    ARCH_NAME = 'arch_cells_test2'
+    for merge_function in ['dotProd', 'sum', 'dotProd_sum_scale0', 'dotProd_sum_scalei']:
+        for SPLIT_ID in range(1, 6):
+            model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
+                                    STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
+                                    ATTENTION, DROPOUT, INIT_SEEDS)
+            model_dir += f'_merge-{merge_function}'
+
+            model = GFLIMModel(DATASET_PATH, model_dir, 
+                                            f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
+                                            f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{SPLIT_ID}', 
+                                            SPLIT_ID,
+                                            SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
+                                            STRIDE, ATTENTION, AGGREGATION, DROPOUT)
+
+            model.run_model('interactive_splits', extract=False, merge_function=merge_function)
 
 
 def GFLIMMultiScaleUModelExample():
@@ -1258,5 +1556,76 @@ def GFLIMMultiScaleUModelExample():
         model.run_model('interactive_splits', activation_extract=False, activation_train=True, extract=False, decoders=[])
 
 
+def test():
+    def get_kernel_linei(k, l, kernels_maps):
+        # find which kernel is k in line (or scale) l
+        i = 0
+        while(i < l):
+            k = kernels_maps[i][k]
+            i+=1
+        return k
+
+    rows_to_keep = [0, 2, 4]
+
+    # contains the mapping from kernels in scale 0 to kernels in each scale i
+    lines = ["1 2 3 2 1 6 7 3 9 10\n", "1 2 3 2 1 6 7 3 3 7\n", "1 1 3 1 1 6 1 3 3 7\n", "1 1 1 1 1 6 1 1 1 1\n", "1 1 1 1 1 1 1 1 1 1\n"]
+
+    # process line 0
+    ki = 0
+    kernels_map = []
+    for i,k0 in enumerate(lines[0].strip().split(' ')):
+        k0 = int(k0) - 1
+        if(k0 == i):
+            kernels_map.append(ki) # new kernel
+            ki += 1
+        else:
+            kernels_map.append(kernels_map[k0]) # repeated kernel
+
+    kernels_maps = [kernels_map]
+    print(kernels_maps)
+
+    # process each line i
+    line_prev = lines[0].strip().split(' ')
+    for l, line in enumerate(lines[1:]):
+        line = line.strip().split(' ')
+        kernels_map = []
+        ki = 0
+        for i,k0 in enumerate(line):
+            k0 = int(k0) - 1 # i-th kernel in scale i indexed as scale 0
+            # (e.g., i=5 k0=3 means kernels 3 and 5 in scale 0 are the same in scale i)
+
+            k0_prev = int(line_prev[i]) - 1 # i-th kernel in scale i-1 indexed as scale 0
+            # (e.g., i=5 k0_prev=4 means kernels 4 and 5 in scale 0 are the same in scale i-1. 
+            # Considering the previous example, kernels 3, 4, and 5 in scale 0 are the same in scale i)
+
+            if(k0_prev == i):
+                if(k0 == k0_prev):
+                    kernels_map.append(ki)
+                    ki+=1
+                else: # repeated (merged) kernel. Map from scale i-1 to scale i
+                    k = get_kernel_linei(k0, l+1, kernels_maps) # map k0 from scale 0 to scale i-1
+                    k = kernels_map[k]
+                    kernels_map.append(k)
+
+        line_prev = line.copy()
+        kernels_maps.append(kernels_map)
+
+    print('kernels_maps:', kernels_maps)
+
+    # erase scales
+    kernels_map_final = [kernels_maps[rows_to_keep[0]].copy()]
+    for id,r in enumerate(rows_to_keep[:-1]):
+        s = rows_to_keep[id+1]
+        r+=1
+        mapped_kernels = kernels_maps[r]
+        r+=1
+        while(r <= s):
+            mapped_kernels = [kernels_maps[r][k] for k in mapped_kernels]
+            r+=1
+        kernels_map_final.append(mapped_kernels)
+    print('kernels_map_final:', kernels_map_final)
+    
+
 if __name__ == "__main__":
+    #test()
     GFLIMModelExample()
