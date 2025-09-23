@@ -1253,8 +1253,7 @@ iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *node
         parent[i] = i;
         nodes_map[i] = -1;
     }
-    iftFree(distance);
-
+    
     // merge nodes until achieve the required number of nodes
     int removed_nodes = 0;
     while (!iftEmptyDHeap(heap) && removed_nodes != graph->num_nodes - num_nodes_out)
@@ -1267,7 +1266,9 @@ iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *node
             continue;
         removed_nodes++;
     }
+    iftFree(distance);
     iftDestroyDHeap(&heap);
+
 
     if (removed_nodes != graph->num_nodes - num_nodes_out)
     {
