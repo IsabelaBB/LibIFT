@@ -127,7 +127,7 @@ void iftGFLIMSaveBias(char *basepath, float *bias, int number_of_kernels)
     sprintf(filename, "%s-bias.txt", basepath);
     fp = fopen(filename, "w");
     if (fp == NULL)
-        iftError("Error opening file %s", filename);
+        iftError("Error opening file %s", __func__, filename);
     fprintf(fp, "%d\n", number_of_kernels);
     for (int k = 0; k < number_of_kernels; k++)
         fprintf(fp, "%f ", bias[k]);
@@ -158,7 +158,7 @@ void iftGFLIMSaveKernelLabels(char *basepath, int *truelabel, int number_of_kern
     sprintf(filename, "%s-labels.txt", basepath);
     fp = fopen(filename, "w");
     if (fp == NULL)
-        iftError("Error opening file %s", filename);
+        iftError("Error opening file %s", __func__, filename);
     fprintf(fp, "%d\n", number_of_kernels);
     for (int k = 0; k < number_of_kernels; k++)
         fprintf(fp, "%d ", truelabel[k]);
@@ -191,14 +191,14 @@ float *iftGFLIMLoadBias(char *basepath)
         return NULL;
     fp = fopen(filename, "r");
     if (fp == NULL)
-        iftError("Error opening file %s", filename);
+        iftError("Error opening file %s",  __func__, filename);
     if (fscanf(fp, "%d", &number_of_kernels) != 1)
-        iftError("Error reading number of kernels from file %s", filename);
+        iftError("Error reading number of kernels from file %s", __func__, filename);
     bias = iftAllocFloatArray(number_of_kernels);
     for (int k = 0; k < number_of_kernels; k++)
     {
         if (fscanf(fp, "%f ", &bias[k]) != 1)
-            iftError("Error reading bias values from file %s", filename);
+            iftError("Error reading bias values from file %s",  __func__, filename);
     }
     fclose(fp);
     return bias;
@@ -228,14 +228,14 @@ int *iftGFLIMLoadKernelLabels(char *filename, int *nkernels)
 
     fp = fopen(filename, "r");
     if (fp == NULL)
-        iftError("Error opening file %s", filename);
+        iftError("Error opening file %s",  __func__, filename);
     if (fscanf(fp, "%d", &number_of_kernels) != 1)
-        iftError("Error reading number of kernels from file %s", filename);
+        iftError("Error reading number of kernels from file %s", __func__, filename);
     truelabels = iftAllocIntArray(number_of_kernels);
     for (int k = 0; k < number_of_kernels; k++)
     {
         if (fscanf(fp, "%d ", &truelabels[k]) != 1)
-            iftError("Error reading kernel labels from file %s", filename);
+            iftError("Error reading kernel labels from file %s", __func__, filename);
     }
     fclose(fp);
     (*nkernels) = number_of_kernels;

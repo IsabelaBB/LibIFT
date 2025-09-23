@@ -69,9 +69,9 @@ void iftDestroyFLIMGraphArray(iftGFLIMGraphArray **arr)
 iftGFLIMGraph *iftCreateEmptyFLIMGraph(int num_feats, int num_nodes)
 {
     if (num_feats < 0)
-        iftError("Number of features in graph must be positive", "iftCreateEmptyFLIMGraph");
+        iftError("Number of features in graph must be positive",  __func__);
     if (num_nodes < 0)
-        iftError("Number of nodes in graph must be positive", "iftCreateEmptyFLIMGraph");
+        iftError("Number of nodes in graph must be positive",  __func__);
 
     iftGFLIMGraph *graph = (iftGFLIMGraph *)calloc(1, sizeof(iftGFLIMGraph));
     graph->num_nodes = num_nodes;

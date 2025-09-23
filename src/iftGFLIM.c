@@ -4,7 +4,6 @@
 /* --------------------- GFLIMArch ----------------------------- */
 
 iftGFLIMArch *iftReadGFLIMArch(char *filename) {
-    printf("Reading GFLIM architecture from %s\n", filename);
     iftDict *arch_dict = iftReadJson(filename);
     int nlayers = iftGetLongValFromDict("nlayers", arch_dict);
     float stdev_factor = iftGetDblValFromDict("stdev_factor", arch_dict);
@@ -34,9 +33,7 @@ iftGFLIMArch *iftReadGFLIMArch(char *filename) {
         arch->layer[l].relu = iftGetBoolValFromDict("relu", layer_dict);
         
         arch->layer[l].skip_connection = (int *)calloc(arch->nlayers, sizeof(int));
-        printf("Default skip_connection for layer %d: ", l+1);
         if (iftDictContainKey("skip_connection", layer_dict, NULL)){
-            printf("Reading skip_connection for layer %d\n", l+1);
             iftIntArray *input = iftGetIntArrayFromDict("skip_connection", layer_dict);
             for (int i = 0; i < arch->nlayers; i++)
                 arch->layer[l].skip_connection[i] = input->val[i];
