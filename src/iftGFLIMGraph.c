@@ -4318,6 +4318,27 @@ iftMatrix *iftGFLIMGraphToFeatureMatrix(iftGFLIMGraph *graph,
 }
 
 /**
+ * @fn iftGFLIMGraphToNodeFeaturesMatrix
+ * @brief Create a matrix from a graph using only the node features
+ * @param graph Graph
+ */
+iftMatrix *iftGFLIMGraphToNodeFeaturesMatrix(iftGFLIMGraph *graph)
+{
+    iftIsValidFLIMGraph(graph);
+
+    // cria a matriz de saída
+    iftMatrix *matrix = iftCreateMatrix(graph->num_feats, graph->num_nodes);
+
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for (int b = 0; b < graph->num_feats; b++)
+            iftMatrixElem(matrix, b, p) = (float)graph->nodes[p].feats[b];
+    }
+    return matrix;
+}
+
+
+/**
  * @fn iftFeatureMatrixToFLIMGraph
  * @brief Create a graph from a matrix
  * @param matrix Matrix with the features
@@ -4353,5 +4374,6 @@ iftGFLIMGraph *iftFeatureMatrixToFLIMGraph(iftMatrix *matrix, iftGFLIMGraph *gra
     iftIsValidFLIMGraph(graph);
     return graph;
 }
+
 
 /** @} */

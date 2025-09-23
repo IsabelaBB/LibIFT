@@ -67,7 +67,7 @@
 %include "iftBrainAffineRegistration.i"
 %include "iftRISF.i"
 %include "iftSupervoxelAtlas.i"
-%include "iftFLIMGraph.i"
+%include "iftGFLIMGraph.i"
 %include "iftGFLIM.i"
 %include "iftDecode.i"
 %include "iftGenericVector.i"
