@@ -374,7 +374,7 @@ class MergeLayers():
     def get_finer_scale(self):
         return np.argmax([self.feature_matrices[i].shape[0] for i in range(len(self.feature_matrices))])        
 
-    def merge_scales_dotProd(self, thresh=False, std=False):
+    def merge_scales_dotprod(self, thresh=False, std=False):
         """ merge scales with a dot product
 
         This solution works well when the object activation is stronger than the background activation.
@@ -409,7 +409,7 @@ class MergeLayers():
 
         return merged_features
 
-    def merge_scales_dotProd_sum_scale0(self, thresh=False, std=False):
+    def merge_scales_dotprod_sum_scale0(self, thresh=False, std=False):
         """ merge scales with a dot product and sum with the first scale
         """
 
@@ -441,7 +441,7 @@ class MergeLayers():
 
         return merged_features
 
-    def merge_scales_dotProd_sum_scalei(self, thresh=False, std=False):
+    def merge_scales_dotprod_sum_scalei(self, thresh=False, std=False):
         """ merge scales with a dot product and sum with the first scale
         """
 
@@ -563,7 +563,8 @@ class GFLIMFunctions():
             'Extract': '{}/iftGFLIMExtract2'.format(path),
             'WriteKernelsCorrespondence': '{}/iftGFLIMWriteKernelsCorrespondence'.format(path),
             'CreateSpxImageSH': 'python3 /home/isabela/Codes/SH/src/boruvkasupix.py',
-            'CreateGraphFromLabels': '{}/iftCreateGFLIMGraphFromLabels'.format(path)
+            'CreateGraphFromLabels': '{}/iftCreateGFLIMGraphFromLabels'.format(path),
+            'MergeScales': '{}/iftGFLIMMergeScales'.format(path)
         }
 
     def __callFunction__(self, function, args, msg=None):
@@ -577,6 +578,7 @@ class GFLIMFunctions():
         if(msg is not None):
             sys.stdout.write(msg)
             sys.stdout.flush()
+        print("Calling function: {} {}".format(function, " ".join([str(i) for i in args])))
         os.system("{} {}".format(function, " ".join([str(i) for i in args])))
 
     def create_graphs(self, dataset_path, final_spx, graphs_path_src, graph_feats, spx_alg, init_seeds=0):
@@ -623,17 +625,18 @@ class GFLIMFunctions():
         """
         self.__callFunction__(self.functions['EncodeLayer'], [model_dir, arch_file, layer, stride, attention, aggregation], "Encoding layer {}:\t\t".format(layer))
 
-    def write_activations(self, model_dir, layer, skip=None):
+    def write_activations(self, model_dir, layer, batchsize, skip=None):
         """
         Write the activations for the given layer.
         Args:
             model_dir (str): Directory where the model is stored.
             layer (int): Layer number.
+            skip (int, optional): If provided, use skip connections with the given layer. Defaults to None.
         """
         if skip == None:
-            self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer], "Writing activations layer {}:\t".format(layer))
+            self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer, batchsize], "Writing activations layer {}:\t".format(layer))
         else:
-            self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer, skip], "Writing activations layer {} with skip connection:\t".format(layer))
+            self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer, batchsize, skip], "Writing activations layer {} with skip connection:\t".format(layer))
 
     def merge_layer_models(self, model_dir, layer):
         """
@@ -658,7 +661,7 @@ class GFLIMFunctions():
         """
         self.__callFunction__(self.functions['EncodeMergedLayer'], [model_dir, arch_file, layer, stride, attention, aggregation, 1 if dropout else 0], "Encoding Merged layer {}:\t\t".format(layer))
 
-    def decode_layer(self, model_dir, arch_file, layer, d, stride):
+    def decode_layer(self, model_dir, arch_file, layer, d, stride, batchsize=1):
         """
         Decode the layer for the given architecture.
         Args:
@@ -668,7 +671,7 @@ class GFLIMFunctions():
             d (str): Decoding type ('hybrid', 'graph-adaptive', 'gaussian', 'test', 'tristate').
             stride (str): Stride type ('graph-based', 'none', or 'image-based').
         """
-        self.__callFunction__(self.functions['DecodeLayer'], [model_dir, layer, arch_file, d, stride], "Decoding layer {}:\t\t".format(layer))
+        self.__callFunction__(self.functions['DecodeLayer'], [model_dir, layer, arch_file, d, stride, batchsize], "Decoding layer {}:\t\t".format(layer))
 
     def convert_seeds(self, model_dir, markers_dir, nfeat_markers, kernel_size, attention, aggregation):
         """
@@ -683,7 +686,7 @@ class GFLIMFunctions():
         """
         self.__callFunction__(self.functions['ConvertSeeds'], [model_dir, markers_dir, nfeat_markers, kernel_size, attention, aggregation], 'Converting seeds:\t\t')
 
-    def extract(self, img_dir, graphs_dir, spx_dir, model_dir, arch_file, nlayers, batch_size, stride, attention, aggregation, dropout):
+    def extract(self, img_dir, graphs_dir, spx_dir, model_dir, arch_file, nlayers, batch_size, stride, attention, aggregation, dropout, save_intermediate, layers_save_act, layers_decode, decoders):
         """
         Extract features for the given architecture.
         Args:
@@ -698,9 +701,12 @@ class GFLIMFunctions():
             attention (str): Attention type ('NONE', 'CLASS_DOMINANCE', etc.).
             aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN)
             dropout (bool): Whether to apply dropout.
-
+            save_intermediate (bool, optional): Whether to save intermediate features and superpixel labels.
+            layers_save_act (list): List of layers to save activations.
+            layers_decode (list): List of layers to decode.
+            decoders (list): List of decoders to use.
         """
-        self.__callFunction__(self.functions['Extract'], [img_dir, graphs_dir, spx_dir, model_dir, arch_file, nlayers, batch_size, stride, attention, aggregation, 1 if dropout else 0], 'Extracting features:\t\t')
+        self.__callFunction__(self.functions['Extract'], [img_dir, graphs_dir, spx_dir, model_dir, arch_file, nlayers, batch_size, stride, attention, aggregation, 1 if dropout else 0, 1 if save_intermediate else 0, ",".join(str(i) for i in layers_save_act), ",".join(str(i) for i in layers_decode), ",".join(str(i) for i in decoders)], 'Extracting features:\t\t')
 
     def write_kernels_correspondence(self, markers_dir_scale0, spx_dir_scale0, spx_dir_scalei, save_file, save_markers_folder=None):
         """
@@ -717,6 +723,17 @@ class GFLIMFunctions():
             self.__callFunction__(self.functions['WriteKernelsCorrespondence'], [markers_dir_scale0, spx_dir_scale0, spx_dir_scalei, save_file], 'Writing kernels correspondence:\t')
         else:
             self.__callFunction__(self.functions['WriteKernelsCorrespondence'], [markers_dir_scale0, spx_dir_scale0, spx_dir_scalei, save_file, save_markers_folder], 'Writing kernels correspondence:\t')
+
+    def merge_scales(self, model_dir, images_dir, arch_file, layer):
+        """
+        Merge scales for the given architecture.
+        Args:
+            model_dir (str): Directory where the model is stored.
+            images_dir (str): Directory where the images are stored.
+            arch_file (str): Path to the architecture file.
+            layer (int): Current layer.
+        """
+        self.__callFunction__(self.functions['MergeScales'], [model_dir, images_dir, arch_file, layer], 'Merging scales:\t\t')
 
 
 class GFLIMModel():
@@ -770,7 +787,7 @@ class GFLIMModel():
 
         self.arch = self.read_architecture(self.arch_file)
 
-    def __train_layer__(self, layer, write_activation, decoders=[]):
+    def __train_layer__(self, layer, write_activation, batchsize, decoders=[]):
         """
         Train a single layer of the model.
         Args:
@@ -780,15 +797,15 @@ class GFLIMModel():
         """
         self.functions.create_layer_model(self.model_dir, self.arch_file, layer, self.stride, self.attention, self.aggregation)
         
-        if write_activation:
-            self.functions.encode_layer(self.model_dir, self.arch_file, layer, self.stride, self.attention, self.aggregation)
-            self.functions.write_activations(self.model_dir, layer)
+        #if write_activation:
+        #    self.functions.encode_layer(self.model_dir, self.arch_file, layer, self.stride, self.attention, self.aggregation)
+        #    self.functions.write_activations(self.model_dir, layer, batchsize)
 
         self.functions.merge_layer_models(self.model_dir, layer)
         self.functions.encode_merged_layer(self.model_dir, self.arch_file, layer, self.stride, self.attention, self.aggregation, self.dropout)
         
         if write_activation:
-            self.functions.write_activations(self.model_dir, layer)
+            self.functions.write_activations(self.model_dir, layer, batchsize)
 
         for d in decoders: #["hybrid", "graph-adaptive"]:#, "test", "tristate"]:
             self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride)
@@ -841,127 +858,40 @@ class GFLIMModel():
         if 'skip_connection' not in self.arch[f'layer{layer}'].keys():
             return layer
         
-        scale, parent_scale = layer, -1
-        while(parent_scale != scale):
-            parent_scale = scale
-            for i, skip in enumerate(self.arch[f'layer{scale}']['skip_connection']):
-                if skip > 0:
-                    scale = i + 1
-                    break
-        return scale
+        finer_layer = [i for i in range(1, layer+1)]
+        for l in range(layer):
+            for r in range(l):
+                if 'skip_connection' in self.arch['layer'+str(l+1)].keys() and self.arch['layer'+str(l+1)]['skip_connection'][r] > 0 and finer_layer[r] < finer_layer[l]:
+                    finer_layer[l] = finer_layer[r]
+        return finer_layer[layer-1]
 
-    def skip_connection(self, layer, first_scale, merge_function, write_activation):
+    def skip_connection(self, layer, images_folder, first_scale, write_activation, batchsize):
         """
         Merge the layers with skip connections.
         Args:
             layer (int): Layer number.
+            images_folder (str): Path to the images folder.
             first_scale (int): The first scale of the layer, which will dictate the number of nodes and features in the merged graph.
             write_activation (bool): Whether to write the activations.
-        Steps:
-            1. Copy the graphs and labels of the layer to a new directory.
-            2. Compute the kernels maps for the current layer.
-            3. For each graph in the layer:
-                a. Create a MergeLayers object.
-                b. For each skip connection in the layer:
-                    i. Add the scale to the MergeLayers object.
-                c. Add the current layer to the MergeLayers object.
-                d. Merge the scales using the dot product or sum.
-                e. Convert the merged features back to a graph.
-                f. Save the merged graph.
-            4. Replace the labels of the layer with the labels of the first scale.
-
-        Note: the current layer is always the last scale to be merged
-        """
-
-        """
-        Suponha layer = 9, first scale 2 e len(kernel maps) = 12
-        Skips on layer 4 : 2
-        Skips on layer 7 : 5 e 6
-        Skips on layer 9 : 4 e 7
-
-        kernel_maps = [(1->2), (2->3), (3->4), (4->5), (5->6), (6->7), (7->8), (8->9), (9->10), (10->11), (11->12), (12->13)]
-
-        Merge kernel maps according to skips:
-            Layer 4: calcular kernel_maps[0] = (range(kernel_maps[3])) 
-                                                i.e, if first_scale == first_scalei or first_scalei == 1, range(kernel_maps[first_scalei-1])
-            Layer 7: calcular kernel_maps[1] = (2->5) i.e, (first_scale-1, first_scalei-2)
-            Layer 9: calcular kernel_maps[2] = (2->9) i.e, (first_scale-1, layer-2)
-        
         """
         
         # Copy the graphs and labels of the layer to a new directory.
-        shutil.copytree(os.path.join(self.model_dir, f'layer{layer}'), os.path.join(self.model_dir, f'layer{layer}_noSkip'), dirs_exist_ok=True)
+        #shutil.copytree(os.path.join(self.model_dir, f'layer{layer}'), os.path.join(self.model_dir, f'layer{layer}_noSkip'), dirs_exist_ok=True)
+        #shutil.copytree(os.path.join(self.model_dir, f'labels{layer}'), os.path.join(self.model_dir, f'labels{layer}_noSkip'), dirs_exist_ok=True)
 
-        skip_layers = [i for i, skip in enumerate(self.arch[f'layer{layer}']['skip_connection']) if skip > 0]
-
-        # Compute the kernels maps for the current layer.
-        kernel_maps_all = compute_kernels_maps(self.model_dir)
-        kernel_maps = []
-        for i in skip_layers: # i is layer - 1
-
-            # Since these data (to be merged) was already processed and they may have their own skip connections,
-            # we need to ensure that the kernels maps are correctly set to map to the first scale.
-            # Note that since these scales are already merged (if they have skip connections), there is NO need to update the nodes map too.
-            first_scale_i = self.get_first_scale(i+1)
-            
-            kernel_maps.append(get_merged_scales_from_kernels_map(kernel_maps_all, first_scale-1, first_scale_i-1))
-
-        kernel_maps.append(get_merged_scales_from_kernels_map(kernel_maps_all, first_scale-1, layer-1))
-
-        # Add data from scales 0 to i-1. Process each image in the layer
-        for fileName in os.listdir(os.path.join(self.model_dir, f'layer{layer}')):
-            basename = fileName.split('.')[0]
-            mergeFunction = MergeLayers(self.model_dir)
-            mergeFunction.kernels_maps = kernel_maps
-            
-            # add data from scales specified in skip connections
-            for i in skip_layers:
-                graph_path = os.path.join(self.model_dir, f'layer{i+1}', fileName)
-                spx_path = os.path.join(self.model_dir, f'labels{i+1}', f'{basename}.pgm')
-                mergeFunction.add_scale(spx_path, graph_path)                
-
-            # Add the data from the current layer and merge them all
-            # (current layer is always the last scale to be merged)
-            graph_path = os.path.join(self.model_dir, f'layer{layer}', fileName)
-            spx_path = os.path.join(self.model_dir, f'labels{layer}', f'{basename}.pgm')
-            mergeFunction.add_scale(spx_path, graph_path)
-
-            mergeFunction.compute_node_maps()
-
-            if merge_function == 'dotProd':
-                merged_features = mergeFunction.merge_scales_dotProd(thresh=False, std=False) # 'merged_features' is a feature matrix
-            elif merge_function == 'sum':
-                merged_features = mergeFunction.merge_scales_sum(thresh=False, std=False) # 'merged_features' is a feature matrix
-            elif merge_function == 'dotProd_sum_scale0':
-                merged_features = mergeFunction.merge_scales_dotProd_sum_scale0(thresh=False, std=False) # 'merged_features' is a feature matrix
-            elif merge_function == 'dotProd_sum_scalei':
-                merged_features = mergeFunction.merge_scales_dotProd_sum_scalei(thresh=False, std=False) # 'merged_features' is a feature matrix
-            else:
-                raise ValueError(f"Unknown merge function: {merge_function}")
-
-            # convert the merged feature matrix back to graph and save it
-            graph_path = os.path.join(self.model_dir, f'layer{first_scale}', fileName)
-            graph = mergeFunction.read_graph(graph_path)
-            for node in range(graph['num_nodes']):
-                graph[f'node{node}']['feats'] = merged_features[node,:].tolist()
-            with open(os.path.join(self.model_dir, f'layer{layer}', fileName), 'w') as f:
-                json.dump(graph, f, indent=4)
-        
-        # replace the labels with the ones from the first scale
-        shutil.copytree(os.path.join(self.model_dir, f'labels{layer}'), os.path.join(self.model_dir, f'labels{layer}_noSkip'), dirs_exist_ok=True)
-        shutil.copytree(os.path.join(self.model_dir, f'labels{first_scale}'), os.path.join(self.model_dir, f'labels{layer}'), dirs_exist_ok=True)
+        self.functions.merge_scales(self.model_dir, images_folder, self.arch_file, layer)
 
         # write activations of the merged data
         if write_activation:
-            shutil.copytree(os.path.join(self.model_dir, f'activation{layer}'), os.path.join(self.model_dir, f'activation{layer}_noSkip'), dirs_exist_ok=True)
-            shutil.rmtree(os.path.join(self.model_dir, f'activation{layer}'))
-            self.functions.write_activations(self.model_dir, layer, first_scale)
+            #shutil.copytree(os.path.join(self.model_dir, f'activation{layer}'), os.path.join(self.model_dir, f'activation{layer}_noSkip'), dirs_exist_ok=True)
+            shutil.rmtree(os.path.join(self.model_dir, f'activation{layer}'), ignore_errors=True)
+            self.functions.write_activations(self.model_dir, layer, batchsize, first_scale)
 
-    def train_model(self, img_splits_names, decoders, merge_function, write_activation):
+    def train_model(self, images_folder, decoders, write_activation, batchsize):
         """
         Train the GFLIM model.
         Args:
-            img_splits_names (str): Name of the image splits directory.
+            images_folder (str): Path to the images folder.
             decoders (list): List of decoders to use.
             write_activation (bool): Whether to write the activations.
         Steps:
@@ -983,7 +913,7 @@ class GFLIMModel():
         self.functions.convert_seeds(self.model_dir, self.markers_dir, self.arch['layer1']['conv']["nkernels_per_marker"], self.arch['layer1']['conv']['kernel_size'], self.attention, self.aggregation)
         
         for layer in range(1, self.arch['nlayers'] + 1):
-            self.__train_layer__(layer, write_activation, decoders)
+            self.__train_layer__(layer, write_activation, batchsize, decoders)
 
             if layer > 1:
                 self.functions.write_kernels_correspondence(os.path.join(self.model_dir, f'markers'),
@@ -996,7 +926,7 @@ class GFLIMModel():
 
             # merge layers output
             if first_scale != layer: # if there are skip connections
-                self.skip_connection(layer, first_scale, merge_function, write_activation)
+                self.skip_connection(layer, images_folder, first_scale, write_activation, batchsize)
 
 
     def read_architecture(self, arch_file):
@@ -1012,9 +942,8 @@ class GFLIMModel():
         return data
 
     def run_model(self, img_splits_names, train=True, decode_train=True, activation_train=True,
-                           extract=True, decode_extract=True, activation_extract=True,
-                           decoders=["hybrid", "graph-adaptive"],
-                           merge_function='dotProd_sum_scalei'):
+                           extract=True, save_intermediate=False, layers_activations = [-1],
+                           layers_decode = [-1], decoders=["hybrid", "graph-adaptive"], batchsize=64):
         """
         Run (train and/or extract) a GFLIM model.
         Args:
@@ -1049,36 +978,47 @@ class GFLIMModel():
         for layer in range(0,self.arch['nlayers']+1):
             shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
             shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
-
+        
         if train:
-            # copy the train graphs and superpixel labels from the dataset directory to the model directory
-            self.__copyGraphsAndLabels__(f'{self.dataset_path}/{img_splits_names}/split{self.split_id}/orig/train')
+            shutil.rmtree(f'{self.model_dir}/model', ignore_errors=True)
+            shutil.rmtree(f'{self.model_dir}/markers', ignore_errors=True)
 
-            self.train_model(img_splits_names, decoders if decode_train else [], merge_function=merge_function, write_activation=activation_train)
+            # copy the train graphs and superpixel labels from the dataset directory to the model directory
+            images_folder = f'{self.dataset_path}/{img_splits_names}/split{self.split_id}/orig/train'
+            self.__copyGraphsAndLabels__(images_folder)
+            self.train_model(images_folder, decoders if decode_train else [], write_activation=activation_train, batchsize=batchsize)
 
             # remove the layer and label directories to free up space and allow the extraction to be done from scratch
-            #for layer in range(0,self.arch['nlayers']+1):
-            #    shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
-            #    shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
+            for layer in range(0,self.arch['nlayers']+1):
+                shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
+                shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
 
         if extract:
             # copy the graphs and superpixel labels from the dataset directory to the model directory
             self.__copyGraphsAndLabels__(f'{self.dataset_path}/imgs/orig')
-
-            self.functions.extract(f'{self.dataset_path}/imgs/orig', f'{self.graphs_path_src}/graphs', f'{self.graphs_path_src}/labels', self.model_dir, self.arch_file, self.arch['nlayers'], 2, self.stride, self.attention, self.aggregation, self.dropout)
+            self.functions.extract(f'{self.dataset_path}/interactive_splits/split{self.split_id}/orig/val', 
+                                   f'{self.graphs_path_src}/graphs', 
+                                   f'{self.graphs_path_src}/labels', 
+                                   self.model_dir, self.arch_file, self.arch['nlayers'], batchsize, 
+                                   self.stride, self.attention, self.aggregation, self.dropout,
+                                   save_intermediate, 
+                                   layers_activations, 
+                                   layers_decode,
+                                   decoders)
 
             # decode the output features, write the activations, and remove the layer and label directories to free up space
-            for layer in range(1,self.arch['nlayers']+1):
-                if decode_extract:
-                    for d in decoders:
-                        self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride)
+            #for layer in range(1,self.arch['nlayers']+1):
+            #    if decode_extract:
+            #        for d in decoders:
+            #            self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride, batchsize)
+            #    if activation_extract:
+            #        self.functions.write_activations(self.model_dir, layer)
 
-                if activation_extract:
-                    self.functions.write_activations(self.model_dir, layer)
+            #    shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
+            #    shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
 
-                shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
-                shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
-
+            #shutil.rmtree(f'{self.model_dir}/labels0', ignore_errors=True)
+            #shutil.rmtree(f'{self.model_dir}/layer0', ignore_errors=True)
 
 class GFLIMultiScaleUModel(GFLIMModel):
     def __init__(self, dataset_path : str, model_dir : str, arch_file : str, markers_dir : str, split_id : int,
@@ -1328,23 +1268,23 @@ class GFLIMultiScaleUModel(GFLIMModel):
             f.write(" ".join([str(i) for i in reversed(kernels_id_map)]) + "\n")
 
 
-    def __train_layer__(self, layer, write_activation, decoders=[]):
+    def __train_layer__(self, layer, write_activation, batchsize, decoders=[]):
         self.functions.create_layer_model(self.model_dir, self.arch_file, layer, self.stride, self.attention, self.aggregation)
         self.functions.encode_layer(self.model_dir, self.arch_file, layer, self.stride, self.attention, self.aggregation)
         
         if write_activation:
-            self.functions.write_activations(self.model_dir, layer)
+            self.functions.write_activations(self.model_dir, layer, batchsize)
 
         self.functions.merge_layer_models(self.model_dir, layer)
         self.functions.encode_merged_layer(self.model_dir, self.arch_file, layer, self.stride, self.attention, self.aggregation, self.dropout)
         
         if write_activation:
-            self.functions.write_activations(self.model_dir, layer)
+            self.functions.write_activations(self.model_dir, layer, batchsize)
 
         for d in decoders: #["hybrid", "graph-adaptive"]:#, "test", "tristate"]:
             self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride)
 
-    def train_model(self, img_splits_names, decoders, merge_function, write_activation):
+    def train_model(self, images_folder, decoders, write_activation, batchsize):
         # copy arch file
         file = os.path.join(self.model_dir, self.arch_file.split('/')[-1])
         if os.path.isfile(file): # if it exists, remove it
@@ -1352,20 +1292,19 @@ class GFLIMultiScaleUModel(GFLIMModel):
         shutil.copy(self.arch_file, self.model_dir)
 
         spx0 = self.final_spx_list[0]
-        self.__copyGraphsAndLabels__(f'{self.dataset_path}/{img_splits_names}/split{self.split_id}/orig/train', 0)
         self.functions.convert_seeds(self.model_dir, self.markers_dir, self.arch[f'layer1']['conv']["nkernels_per_marker"], self.arch[f'layer1']['conv']['kernel_size'], self.attention, self.aggregation)
         for layer in range(1, self.arch['nlayers'] + 1):
-            self.__train_layer__(layer, write_activation, decoders)
+            self.__train_layer__(layer, write_activation, batchsize, decoders)
             self.rename_files_model(layer, spx0)
             for i, spx in enumerate(self.final_spx_list[1:]):
                 if layer == 1:
-                    self.__copyGraphsAndLabels__(f'{self.dataset_path}/{img_splits_names}/split{self.split_id}/orig/train', i+1)
+                    self.__copyGraphsAndLabels__(images_folder, i+1)
                     self.functions.write_kernels_correspondence(os.path.join(self.model_dir, f'markers_spx{spx0}'),
                                                                 os.path.join(self.graphs_path_src[0], 'labels'),
                                                                 os.path.join(self.graphs_path_src[i+1], 'labels'),
                                                                 os.path.join(self.model_dir, 'model', f'kernels_map.txt'),
                                                                 os.path.join(self.model_dir, f'markers'))
-                self.__train_layer__(layer, write_activation, decoders)
+                self.__train_layer__(layer, write_activation, batchsize, decoders)
                 self.rename_files_model(layer, spx)
 
 
@@ -1392,8 +1331,8 @@ class GFLIMultiScaleUModel(GFLIMModel):
 
 
     def run_model(self, img_splits_names, train=True, decode_train=True, activation_train=True,
-                           extract=True, decode_extract=True, activation_extract=True,
-                           decoders=["hybrid", "graph-adaptive"], merge_function='dotProd_sum'):
+                           extract=True, save_intermediate=False, layers_activations = [],
+                           layers_decode = [], decoders=["hybrid", "graph-adaptive"], batchsize=64):
         
         if not train and not extract:
             print("Nothing to do. Please set train and/or extract to True.")
@@ -1416,7 +1355,9 @@ class GFLIMultiScaleUModel(GFLIMModel):
             self.functions.create_graphs(self.dataset_path, self.final_spx_list, graphs_path_src, self.graph_feats, self.spx_alg, self.init_seeds)
 
         if train:
-            self.train_model(img_splits_names, decoders if decode_train else [], write_activation=activation_train)
+            images_folder = f"{self.dataset_path}/{img_splits_names}/split{self.split_id}/orig/trai"
+            self.__copyGraphsAndLabels__(images_folder, 0)
+            self.train_model(images_folder, decoders if decode_train else [], write_activation=activation_train, batchsize=batchsize)
 
             for layer in range(0,self.arch['nlayers']+1):
                 shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
@@ -1424,18 +1365,27 @@ class GFLIMultiScaleUModel(GFLIMModel):
 
         if extract:
             self.__copyGraphsAndLabels__(f'{self.dataset_path}/imgs/orig')
-            self.functions.extract(f'{self.dataset_path}/imgs/orig', f'{self.graphs_path_src}/graphs', f'{self.graphs_path_src}/labels', self.model_dir, self.arch_file, self.arch['nlayers'], 2, self.stride, self.attention, self.aggregation, self.dropout)
+            self.functions.extract(f'{self.dataset_path}/imgs/orig', 
+                                   f'{self.graphs_path_src}/graphs', 
+                                   f'{self.graphs_path_src}/labels', 
+                                   self.model_dir, self.arch_file, self.arch['nlayers'], batchsize, 
+                                   self.stride, self.attention, self.aggregation, self.dropout,
+                                   save_intermediate, 
+                                   layers_activations, 
+                                   layers_decode,
+                                   decoders)
 
-            for layer in range(1,self.arch['nlayers']+1):
-                if decode_extract:
-                    for d in decoders:
-                        self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride)
+            # decode the output features, write the activations, and remove the layer and label directories to free up space
+            #for layer in range(1,self.arch['nlayers']+1):
+            #    if decode_extract:
+            #        for d in decoders:
+            #            self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride, batchsize)
 
-                if activation_extract:
-                    self.functions.write_activations(self.model_dir, layer)
+            #    if activation_extract:
+            #        self.functions.write_activations(self.model_dir, layer, batchsize)
 
-                shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
-                shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
+                #shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
+                #shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
 
 
 def getModelPath(ds_name, split_id, markers_name, arch_name, 
@@ -1471,20 +1421,25 @@ def GFLIMModelExample():
     INIT_SEEDS = 50000
     FINAL_SPX = 20000
     GRAPH_FEATS = 'SUM'
-    ARCH_NAME = 'arch_cells_test'
     AGGREGATION = 'CONCAT'
     MARKERS_NAME = 'interactive_markers'
     STRIDE = 'graph-based'
-    ATTENTION = 'NONE'
+    ATTENTION = 'CLASS_DOMINANCE'
     DROPOUT = False
 
-    for merge_function in ['dotProd', 'sum', 'dotProd_sum_scale0', 'dotProd_sum_scalei']:
-        for SPLIT_ID in range(1, 6):
+    for ARCH_NAME in ['arch_cells_noskip',
+                      'arch_cells_dotprod_1', 'arch_cells_dotprod_2', 
+                      'arch_cells_dotprod_sumscale0_1', 'arch_cells_dotprod_sumscale0_2', 
+                      'arch_cells_dotprod_sumscalei_1', 'arch_cells_dotprod_sumscalei_2',
+                      'arch_cells_sum_1', 'arch_cells_sum_2'
+                      ]:
+
+        for SPLIT_ID in [1]: #range(1, 6):
+            print(f'Running GFLIMModelExample with ARCH_NAME={ARCH_NAME} and SPLIT_ID={SPLIT_ID}')
             model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
                                     STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
                                     ATTENTION, DROPOUT, INIT_SEEDS)
-            model_dir += f'_merge-{merge_function}'
-
+            
             model = GFLIMModel(DATASET_PATH, model_dir, 
                                             f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
                                             f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{SPLIT_ID}', 
@@ -1492,24 +1447,7 @@ def GFLIMModelExample():
                                             SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
                                             STRIDE, ATTENTION, AGGREGATION, DROPOUT)
 
-            model.run_model('interactive_splits', extract=False, merge_function=merge_function)
-
-    ARCH_NAME = 'arch_cells_test2'
-    for merge_function in ['dotProd', 'sum', 'dotProd_sum_scale0', 'dotProd_sum_scalei']:
-        for SPLIT_ID in range(1, 6):
-            model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
-                                    STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
-                                    ATTENTION, DROPOUT, INIT_SEEDS)
-            model_dir += f'_merge-{merge_function}'
-
-            model = GFLIMModel(DATASET_PATH, model_dir, 
-                                            f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
-                                            f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{SPLIT_ID}', 
-                                            SPLIT_ID,
-                                            SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
-                                            STRIDE, ATTENTION, AGGREGATION, DROPOUT)
-
-            model.run_model('interactive_splits', extract=False, merge_function=merge_function)
+            model.run_model('interactive_splits', activation_train=True, train=True, extract=True, save_intermediate=False, layers_activations=[1,2,3], layers_decode=[1,2,3], decoders=['hybrid', 'graph-adaptive'], batchsize=64)
 
 
 def GFLIMMultiScaleUModelExample():

@@ -4,8 +4,8 @@
  * @author Isabela Borlido Barcelos
  */
 
-#ifndef IFT_FLIMGRAPH_H
-#define IFT_FLIMGRAPH_H
+#ifndef IFT_GFLIMGRAPH_H
+#define IFT_GFLIMGRAPH_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -132,6 +132,16 @@ void iftDestroyGFLIMGraph(iftGFLIMGraph **graph);
 void iftGFLIMGraphInsertNeighborNode(iftGFLIMGraphNode *node, int neighbor);
 iftGFLIMGraph *iftCopyGFLIMGraph(int num_feats, iftGFLIMGraph *graph_orig, bool copy_features);
 bool iftIsValidGFLIMGraph(iftGFLIMGraph *graph);
+
+/* --------------------- FLIMGraph convert from string to a type ----------------------------- */
+iftGFLIMGraphNodeFeature iftGFLIMGraphGetNodeFeature(const char *name);
+iftGFLIMGraphSpxMethod iftGFLIMGraphGetSpxMethod(const char *name);
+iftGFLIMGraphAttention iftGLIMGraphGetAttention(char *arg);
+iftGFLIMAggregation iftGLIMGraphGetAggregation(char *arg);
+
+/* --------------------- GFLIMGraph read and write ----------------------------- */
+iftGFLIMGraph *iftReadGFLIMGraph(char *filename);
+void iftWriteGFLIMGraph(iftGFLIMGraph *graph, char *filename);
 
 /* --------------------- GFLIMGraph transform ----------------------------- */
 void iftGFLIMGraphZNormalization(iftGFLIMGraph *graph, float *mean, float *stdev);

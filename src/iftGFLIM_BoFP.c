@@ -1895,6 +1895,19 @@ iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
     iftGFLIMPoolingLayer(pooling_graph, layer.pool_type, layer.pool_size, 1);
 
     /* stride model */
+    /*iftGFLIMGraphArray *input = iftCreateGFLIMGraphArray(1);
+    input->val[0] = pooling_graph;
+    iftImageArray *labels_img = iftCreateImageArray(1);
+    labels_img->val[0] = input_labels;
+    iftGFLIMStrideBatch_v2(input, layer, labels_img, stride);
+    pooling_graph = input->val[0];
+    input->val[0] = NULL;
+    iftDestroyGFLIMGraphArray(&input);
+    (*output_labels) = labels_img->val[0];
+    labels_img->val[0] = NULL;
+    iftDestroyImageArray(&labels_img);*/
+
+
     iftGFLIMGraph *output_graph = NULL;
     if (stride == IFT_GFLIM_NOSTRIDE || layer.pool_stride == 1 || (stride == IFT_GFLIM_IMAGESTRIDE && layer.pool_stride < 2))
     {
@@ -2130,6 +2143,1059 @@ void iftGFLIMEncodeLayerBatch_v2(iftGFLIMGraphArray *input,
     iftGFLIMStrideBatch_v2(input, layer, labels_img, stride);
 }
 
+// ============ FUNCTIONS TO PROCESS RESIDUAL CONNECTIONS ============ //
+
+int* iftGFLIMGetFinerResidualLayer(iftGFLIMArch *arch)
+{
+    /*
+    Given the current layer, find the finest layer that has a skip connection to it.
+    If there is no skip connection to the current layer, return the current layer (from 1).
+    */
+
+    int *finer_layer = iftAllocIntArray(arch->nlayers);
+    for(int l = 0; l < arch->nlayers; l++)
+        finer_layer[l] = l+1;
+
+    for(int curr_layer = 0; curr_layer < arch->nlayers; curr_layer++)
+    {
+        for(int prev_layer = 0; prev_layer < curr_layer; prev_layer++)
+        {
+            if (arch->layer[curr_layer].skip_connection[prev_layer] > 0 && finer_layer[prev_layer] < finer_layer[curr_layer])
+                finer_layer[curr_layer] = finer_layer[prev_layer];
+        }
+    }
+    
+    return finer_layer;
+}
+
+iftMatrix *iftGFLIMUpsampleFeatureMatrix(iftMatrix *X, 
+                                    int *nodes_map, iftIntArray *kernels_map, 
+                                    int nnodes, int nfeats)
+{
+    iftMatrix *X_up = iftCreateMatrix(nfeats, nnodes);
+    for(int i = 0; i < nnodes; i++)
+    {
+        for(int j = 0; j < nfeats; j++)
+        {
+            iftMatrixElem(X_up, j, i) = iftMatrixElem(X, kernels_map->val[j], nodes_map[i]);
+        }
+    }
+    return X_up;
+}
+
+float *iftGFLIMOtsuFromFeatureMatrix(iftMatrix *X)
+{
+    /*
+    Compute the otsu threshold for each feature/channel of the feature matrix X.
+    */
+    float *otsu_thresholds = iftAllocFloatArray(X->ncols);
+    for(int j = 0; j < X->ncols; j++)
+    {
+        // Just so it is easier to compute the otsu
+        iftImage *feat_img = iftCreateImage(X->nrows, 1, 1);
+        float max_feat = 0.0;
+        for(int i = 0; i < X->nrows; i++)
+        {
+            feat_img->val[i] = iftMatrixElem(X, j, i) * 255;
+            if (feat_img->val[i] > max_feat)
+                max_feat = feat_img->val[i];
+        }
+
+        if (max_feat > 0.0)
+        {
+            // Compute otsu threshold as a way to separate foreground bands from background bands
+            otsu_thresholds[j] = (float)iftOtsu(feat_img) / 255.0;
+        }
+        else
+            otsu_thresholds[j] = 0.0;
+
+        iftDestroyImage(&feat_img);
+    }
+    return otsu_thresholds;
+}
+
+void iftGFLIMSumValueConditionToFeatureMatrix(iftMatrix *X, float *values)
+{
+    /*
+    Sum a value to all elements of the feature matrix X that are above a certain threshold.
+    */
+    for(int j = 0; j < X->ncols; j++)
+    {
+        float thresh = values[j];
+        if(thresh != 0)
+        {
+            for(int i = 0; i < X->nrows; i++)
+            {
+                if(iftMatrixElem(X, j, i) > thresh)
+                    iftMatrixElem(X, j, i) += thresh;
+            }
+        }
+    }
+}
+
+float **iftGFLIMStdFromFeatureMatrix(iftMatrix **X, int n, int finer_scale)
+{
+    /*
+    compute the std per node and channel across multiple feature matrices
+    */
+    float **stds = iftAlloc(X[finer_scale]->nrows, sizeof(float *));
+    for(int i = 0; i < X[finer_scale]->nrows; i++)
+        stds[i] = iftAllocFloatArray(X[finer_scale]->ncols);
+
+    for(int i = 0; i < X[finer_scale]->nrows; i++)
+    {
+        for(int j = 0; j < X[finer_scale]->ncols; j++)
+        {
+            float sum = 0.0;
+            float sum_sqr = 0.0;
+
+            for(int s = 0; s < n; s++)
+            {
+                float val = iftMatrixElem(X[s], j, i);
+                sum += val;
+                sum_sqr += val * val;
+            }
+
+            float mean = sum / n;
+            float var = (sum_sqr / n) - (mean * mean);
+            stds[i][j] = sqrtf(var);
+        }
+    }
+    return stds;
+}
+
+iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std)
+{
+    /*
+    Merge two feature matrices by dot product.
+    */
+    iftMatrix *merged = iftCopyMatrix(X[finer_scale]);
+
+    if(use_otsu)
+    {
+        float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(merged);
+        iftGFLIMSumValueConditionToFeatureMatrix(merged, otsu_thresholds);
+        iftFree(otsu_thresholds);
+    }
+    
+    for(int i = 0; i < n; i++)
+    {
+        if(i == finer_scale) continue;
+        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
+
+        if(use_otsu)
+        {
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
+            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            iftFree(otsu_thresholds);
+        }
+
+        // dot product
+        for(int j = 0; j < X[finer_scale]->ncols; j++)
+        {
+            for(int k = 0; k < X[finer_scale]->nrows; k++)
+            {
+                iftMatrixElem(merged, j, k) *= iftMatrixElem(tmp, j, k);
+            }
+        }
+        iftDestroyMatrix(&tmp);
+    }
+
+    if(use_std)
+    {
+        float **stds = iftGFLIMStdFromFeatureMatrix(X, n, finer_scale);
+        for(int i = 0; i < merged->nrows; i++)
+        {
+            float *stds_i = stds[i];
+            for(int j = 0; j < merged->ncols; j++)
+            {
+                iftMatrixElem(merged, j, i) *= (1 - *stds_i);
+                stds_i++;
+            }
+            stds_i = NULL;
+            iftFree(stds[i]);
+        }
+        iftFree(stds);
+    }
+
+    return merged;
+}
+
+iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std)
+{
+    /*
+    Merge two feature matrices by dot product and sum it with the finer scale.
+    */
+    iftMatrix *merged = iftCopyMatrix(X[finer_scale]);
+
+    if(use_otsu)
+    {
+        float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(merged);
+        iftGFLIMSumValueConditionToFeatureMatrix(merged, otsu_thresholds);
+        iftFree(otsu_thresholds);
+    }
+    
+    for(int i = 0; i < n; i++)
+    {
+        if(i == finer_scale) continue;
+        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
+
+        if(use_otsu)
+        {
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
+            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            iftFree(otsu_thresholds);
+        }
+
+        // dot product
+        for(int j = 0; j < X[finer_scale]->ncols; j++)
+        {
+            for(int k = 0; k < X[finer_scale]->nrows; k++)
+            {
+                iftMatrixElem(merged, j, k) *= iftMatrixElem(tmp, j, k);
+            }
+        }
+        iftDestroyMatrix(&tmp);
+    }
+
+    if(use_std)
+    {
+        float **stds = iftGFLIMStdFromFeatureMatrix(X, n, finer_scale);
+        for(int i = 0; i < merged->nrows; i++)
+        {
+            float *stds_i = stds[i];
+            for(int j = 0; j < merged->ncols; j++)
+            {
+                iftMatrixElem(merged, j, i) *= (1 - *stds_i);
+                stds_i++;
+            }
+            stds_i = NULL;
+            iftFree(stds[i]);
+        }
+        iftFree(stds);
+    }
+
+    for(int i = 0; i < X[finer_scale]->nrows; i++)
+    {
+        for(int j = 0; j < X[finer_scale]->ncols; j++)
+        {
+            iftMatrixElem(merged, j, i) += iftMatrixElem(X[finer_scale], j, i);
+        }
+    }
+    return merged;
+}
+
+iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std)
+{
+    /*
+    Merge two feature matrices by dot product and sum it with the last scale.
+    */
+    iftMatrix *merged = iftCopyMatrix(X[finer_scale]);
+
+    if(use_otsu)
+    {
+        float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(merged);
+        iftGFLIMSumValueConditionToFeatureMatrix(merged, otsu_thresholds);
+        iftFree(otsu_thresholds);
+    }
+    
+    for(int i = 0; i < n; i++)
+    {
+        if(i == finer_scale) continue;
+        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
+
+        if(use_otsu)
+        {
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
+            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            iftFree(otsu_thresholds);
+        }
+
+        // dot product
+        for(int j = 0; j < X[finer_scale]->ncols; j++)
+        {
+            for(int k = 0; k < X[finer_scale]->nrows; k++)
+            {
+                iftMatrixElem(merged, j, k) *= iftMatrixElem(tmp, j, k);
+            }
+        }
+        iftDestroyMatrix(&tmp);
+    }
+
+    if(use_std)
+    {
+        float **stds = iftGFLIMStdFromFeatureMatrix(X, n, finer_scale);
+        for(int i = 0; i < merged->nrows; i++)
+        {
+            float *stds_i = stds[i];
+            for(int j = 0; j < merged->ncols; j++)
+            {
+                iftMatrixElem(merged, j, i) *= (1 - *stds_i);
+                stds_i++;
+            }
+            stds_i = NULL;
+            iftFree(stds[i]);
+        }
+        iftFree(stds);
+    }
+
+    iftMatrix *sum_matrix = X[finer_scale];
+    if(X[n-1]->nrows != X[finer_scale]->nrows || X[n-1]->ncols != X[finer_scale]->ncols)
+        sum_matrix = iftGFLIMUpsampleFeatureMatrix(X[n-1], nodes_map[n-1], kernels_map[n-1], X[finer_scale]->nrows, X[finer_scale]->ncols);
+    for(int i = 0; i < sum_matrix->nrows; i++)
+    {
+        for(int j = 0; j < sum_matrix->ncols; j++)
+        {
+            iftMatrixElem(merged, j, i) += iftMatrixElem(sum_matrix, j, i);
+        }
+    }
+    if(X[n-1]->nrows != X[finer_scale]->nrows || X[n-1]->ncols != X[finer_scale]->ncols)
+        iftDestroyMatrix(&sum_matrix);
+    sum_matrix = NULL;
+    return merged;
+}
+
+iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std,
+                                        int reinforce_scale)
+{
+    /*
+    Merge two feature matrices by sum
+    */
+    iftMatrix *merged = iftCopyMatrix(X[finer_scale]);
+
+    if(use_otsu)
+    {
+        float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(merged);
+        iftGFLIMSumValueConditionToFeatureMatrix(merged, otsu_thresholds);
+        iftFree(otsu_thresholds);
+    }
+    
+    for(int i = 0; i < n; i++)
+    {
+        if(i == finer_scale) continue;
+        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
+
+        if(use_otsu)
+        {
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
+            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            iftFree(otsu_thresholds);
+        }
+
+        // sum
+        for(int j = 0; j < X[finer_scale]->ncols; j++)
+        {
+            for(int k = 0; k < X[finer_scale]->nrows; k++)
+            {
+                iftMatrixElem(merged, j, k) += iftMatrixElem(tmp, j, k);
+            }
+        }
+        iftDestroyMatrix(&tmp);
+    }
+
+    if(use_std)
+    {
+        float **stds = iftGFLIMStdFromFeatureMatrix(X, n, finer_scale);
+        for(int i = 0; i < merged->nrows; i++)
+        {
+            float *stds_i = stds[i];
+            for(int j = 0; j < merged->ncols; j++)
+            {
+                iftMatrixElem(merged, j, i) *= (1 - *stds_i);
+                stds_i++;
+            }
+            stds_i = NULL;
+            iftFree(stds[i]);
+        }
+        iftFree(stds);
+    }
+
+    if(reinforce_scale > 0)
+    {
+        iftMatrix *sum_matrix = X[finer_scale];
+        if(X[reinforce_scale]->nrows != X[finer_scale]->nrows || X[reinforce_scale]->ncols != X[finer_scale]->ncols)
+            sum_matrix = iftGFLIMUpsampleFeatureMatrix(X[reinforce_scale], nodes_map[reinforce_scale], kernels_map[reinforce_scale], X[finer_scale]->nrows, X[finer_scale]->ncols);
+        for(int i = 0; i < sum_matrix->nrows; i++)
+        {
+            for(int j = 0; j < sum_matrix->ncols; j++)
+                iftMatrixElem(merged, j, i) += iftMatrixElem(sum_matrix, j, i);
+        }
+        if(X[reinforce_scale]->nrows != X[finer_scale]->nrows || X[reinforce_scale]->ncols != X[finer_scale]->ncols)
+            iftDestroyMatrix(&sum_matrix);
+        sum_matrix = NULL;
+    }
+    
+    return merged;
+}
+
+
+iftIntArray **iftGFLIMCompute_kernel_maps_bkp(char *filename, int *nscales)
+{
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL)
+        iftError("Could not read file: %s",  __func__, filename);
+    
+    int c;
+    int nch = 0;
+    int size = 256;
+    char *buf = malloc(size);
+    int nspaces = 0, nlines = 0;
+    if(buf == NULL)
+        iftError("out of memory", __func__);
+
+    // read the file and reallocate buffer if needed
+    while((c = getchar()) != EOF)
+    {
+        if(nch >= size-1)
+        {
+            size += 256;
+            buf = realloc(buf, size);
+            if(buf == NULL)
+                iftError("out of memory", __func__);
+        }
+        if(c == ' ') nspaces++;
+        if(c == '\n') nlines++;
+        buf[nch++] = c;
+    }
+    buf[nch++] = '\0';
+    fclose(fp);
+
+    // convert the buffer into a matrix of kernels
+    int **kernel_maps_scale0 = iftAlloc(nlines, sizeof(int *));
+    int pos = 0; // character index in the buffer
+    int kernels_count = 0; // kernel index in the current line
+    int lines_count = 0; // current line index
+    int nkernels0 = nspaces/nlines + 1; // number of kernels in the first line
+    kernel_maps_scale0[0] = iftAllocIntArray(nkernels0);
+    while(pos < nch && buf[pos] != '\n')
+    {
+        int end = pos; // end of the current number
+
+        // find the end of the current number
+        while(end < nch && buf[end] != '\n' && buf[end] != ' ') end++;
+        
+        if(buf[end] == ' ') // convert in int
+        {
+            buf[end] = '\0';
+            kernel_maps_scale0[lines_count][kernels_count++] = atoi(&buf[pos]);
+            buf[end] = ' ';
+        }
+        else{ // last element of the line
+            if(lines_count < nlines - 1)
+            {
+                lines_count++;
+                kernel_maps_scale0[lines_count] = iftAllocIntArray(nkernels0);
+                kernels_count = 0;
+            }
+        }
+        pos = end + 1;
+    }
+    free(buf);
+
+    iftIntArray **kernel_maps = iftAlloc(nlines, sizeof(iftIntArray *));
+    *nscales = nlines;
+    // compute the kernel maps for all scales
+    int nkernelsi = 0;
+    kernel_maps[0] = iftCreateIntArray(nkernels0);
+    for(int i=0; i < nkernels0; i++)
+    {
+        int k0 = kernel_maps_scale0[0][i] - 1;
+        if(k0 == i)
+        {
+            kernel_maps[0]->val[nkernelsi] = nkernelsi;
+            nkernelsi++;
+        }else
+            kernel_maps[0]->val[nkernelsi] = kernel_maps[0]->val[k0];
+    }
+
+    for(int l = 1; l < nlines; l++)
+    {
+        nkernelsi = 0;
+        kernel_maps[l] = iftCreateIntArray(nkernels0);
+        for(int i=0; i < nkernels0; i++)
+        {
+            int k0 = kernel_maps_scale0[l][i] - 1;
+            int k0_prev = kernel_maps_scale0[l-1][i] - 1;
+            if(k0_prev == i)
+            {
+                if(k0 == k0_prev)
+                {
+                    kernel_maps[l]->val[nkernelsi] = nkernelsi;
+                    nkernelsi++;
+                }else{
+                    int j = 0, k = k0;
+                    while(j < l)
+                    {
+                        k = kernel_maps[j]->val[k];
+                        j++;
+                    }
+                    k = kernel_maps[l]->val[k];
+                    kernel_maps[l]->val[nkernelsi] = k;
+                    nkernelsi++;
+                }
+            }
+        }
+        iftResizeIntArray(&(kernel_maps[l]), nkernelsi);
+    }
+    for(int l = 0; l < nlines; l++)
+        iftFree(kernel_maps_scale0[l]);
+    iftFree(kernel_maps_scale0);
+
+    return kernel_maps;
+}
+
+char* read_file(const char* filename) { 
+    FILE* file = fopen(filename, "r"); 
+    if (!file) { 
+        perror("Failed to open file"); 
+        return NULL; 
+    } 
+ 
+    // Allocate initial memory for the file content 
+    size_t capacity = 1024; 
+    char* content = malloc(capacity); 
+    if (!content) { 
+        perror("Failed to allocate memory"); 
+        fclose(file); 
+        return NULL; 
+    } 
+ 
+    size_t length = 0; 
+    size_t bytesRead; 
+ 
+    // Read the file in chunks 
+    while ((bytesRead = fread(content + length, sizeof(char), 1024, file)) > 0) { 
+        length += bytesRead; 
+ 
+        // If we reach capacity, resize the buffer 
+        if (length + 1024 > capacity) { 
+            capacity *= 2; // Double the capacity 
+            content = realloc(content, capacity); 
+            if (!content) { 
+                perror("Failed to reallocate memory"); 
+                fclose(file); 
+                return NULL; 
+            } 
+        } 
+    } 
+ 
+    // Null-terminate the string 
+    if (length < capacity) { 
+        content[length] = '\0'; 
+    } else { 
+        content = realloc(content, length + 1); 
+        content[length] = '\0'; 
+    } 
+ 
+    fclose(file); 
+    return content; 
+} 
+
+iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
+{
+    
+    char *buf = read_file(filename);
+
+    int nlines = 100, line_count = 0;
+    const char line_delimiter[] = "\n";
+    const char number_delimiter[] = " ";
+    char *line, *endptr; 
+    int nkernels0 = 100, kernel_count = 0;
+
+    char* line_saveptr = NULL;
+    char* number_saveptr = NULL;
+
+    int **kernel_maps_scale0 = iftAlloc(nlines, sizeof(int *));
+
+    // Get the first line 
+    line = strtok_r(buf, line_delimiter, &line_saveptr); 
+
+    while(line != NULL)
+    {
+        // break into numbers
+        char* inner_token = strtok_r(line, number_delimiter, &number_saveptr);
+
+        // allocate memory for more lines if needed
+        if(line_count >= nlines)
+        {
+            nlines += 100;
+            kernel_maps_scale0 = realloc(kernel_maps_scale0, nlines * sizeof(int *));
+            if(kernel_maps_scale0 == NULL)
+                iftError("out of memory", __func__);
+        }
+
+        kernel_maps_scale0[line_count] = iftAllocIntArray(nkernels0);
+        kernel_count = 0;
+
+        // get each number
+        while (inner_token != NULL) {
+
+            // allocate memory for more kernels if needed
+            if(kernel_count >= nkernels0)
+            {
+                nkernels0 += 100;
+                kernel_maps_scale0[line_count] = realloc(kernel_maps_scale0[line_count], nkernels0 * sizeof(int));
+                if(kernel_maps_scale0[line_count] == NULL)
+                    iftError("out of memory", __func__);
+            }
+            kernel_maps_scale0[line_count][kernel_count] = (int) strtol(inner_token,&endptr,10);
+            kernel_count++;
+            inner_token = strtok_r(NULL, number_delimiter, &number_saveptr);
+        }
+        if(line_count == 0)
+            nkernels0 = kernel_count;
+        line_count++;
+        line = strtok_r(NULL, line_delimiter, &line_saveptr);
+    }
+    nlines = line_count;
+    free(buf);
+
+    iftIntArray **kernel_maps = iftAlloc(nlines, sizeof(iftIntArray *));
+    
+    // compute the kernel maps for all scales
+    int nkernelsi = 0;
+    kernel_maps[0] = iftCreateIntArray(nkernels0);
+    for(int i=0; i < nkernels0; i++)
+    {
+        int k0 = kernel_maps_scale0[0][i] - 1;
+        if(k0 == i)
+        {
+            kernel_maps[0]->val[nkernelsi] = nkernelsi;
+            nkernelsi++;
+        }else
+            kernel_maps[0]->val[nkernelsi] = kernel_maps[0]->val[k0];
+    }
+
+    for(int l = 1; l < nlines; l++)
+    {
+        nkernelsi = 0;
+        kernel_maps[l] = iftCreateIntArray(nkernels0);
+        for(int i=0; i < nkernels0; i++)
+        {
+            int k0 = kernel_maps_scale0[l][i] - 1;
+            int k0_prev = kernel_maps_scale0[l-1][i] - 1;
+            if(k0_prev == i)
+            {
+                if(k0 == k0_prev)
+                {
+                    kernel_maps[l]->val[nkernelsi] = nkernelsi;
+                    nkernelsi++;
+                }else{
+                    int j = 0, k = k0;
+                    while(j < l)
+                    {
+                        k = kernel_maps[j]->val[k];
+                        j++;
+                    }
+                    k = kernel_maps[l]->val[k];
+                    kernel_maps[l]->val[nkernelsi] = k;
+                    nkernelsi++;
+                }
+            }
+        }
+        iftResizeIntArray(&(kernel_maps[l]), nkernelsi);
+    }
+    for(int l = 0; l < nlines; l++)
+        iftFree(kernel_maps_scale0[l]);
+    iftFree(kernel_maps_scale0);
+
+    return kernel_maps;
+}
+
+
+void iftGFLIMMaxNormGraph(iftGFLIMGraph *graph)
+{
+    // Compute max values for normalization
+    float *max_features = iftAllocFloatArray(graph->num_feats);
+    for(int j = 0; j < graph->num_feats; j++)
+        max_features[j] = graph->nodes[0].feats[j];
+    
+    for(int i = 1; i < graph->num_nodes; i++)
+    {
+        for(int j = 0; j < graph->num_feats; j++)
+        {
+            if(graph->nodes[i].feats[j] > max_features[j])
+                max_features[j] = graph->nodes[i].feats[j];
+        }
+    }
+
+    // Normalize each feature to [0,1] with a max normalization
+    for(int i = 0; i < graph->num_nodes; i++)
+    {
+        for(int j = 0; j < graph->num_feats; j++)
+        {
+            if(max_features[j] > 0)
+                graph->nodes[i].feats[j] /= max_features[j];
+            else
+                graph->nodes[i].feats[j] = 0;
+        }
+    }
+    iftFree(max_features);
+}
+
+iftIntArray *iftGFLIMMergeKernelScales(iftIntArray **kernel_maps, int nscales, 
+                                    int init, int end)
+{
+    if(end < init) iftError("end must be greater than or equal to init", __func__);
+    if(end > nscales) iftError("end must be less than nscales", __func__);
+    
+    iftIntArray *merged_map = NULL;
+
+    if(init == end)
+    {
+        if(init < nscales)
+        {
+            merged_map = iftCreateIntArray(kernel_maps[init]->n);
+            for(int k = 0; k < kernel_maps[init]->n; k++)
+                merged_map->val[k] = k; //kernel_maps[init]->val[k];
+            return merged_map;
+        }
+        else
+            iftError("init must be less than nscales", __func__);
+    }
+
+    merged_map = iftCreateIntArray(kernel_maps[init]->n);
+    for(int k = 0; k < kernel_maps[init]->n; k++)
+        merged_map->val[k] = kernel_maps[init]->val[k];
+
+    for(int i = init+1; i < end; i++)
+    {
+        for(int j = 0; j < merged_map->n; j++)
+        {
+            int k = merged_map->val[j];
+            merged_map->val[j] = kernel_maps[i]->val[k];
+        }   
+    }
+    return merged_map;
+}
+
+
+int *iftGFLIMComputeNodeMap(iftImage *spx_imgi, iftImage *spx_img0){
+    /*
+    Compute a mapping from the nodes of spx_img0 to the nodes of spx_imgi.
+    */
+    int max_spx = iftMaximumValue(spx_img0);
+    int *node_map = iftAllocIntArray(max_spx);
+
+    for(int p = 0; p < spx_img0->n; p++)
+    {
+        int label = spx_img0->val[p] - 1;
+        if(label < 0)
+            iftError("spx_img0 has a label %d at voxel %d", __func__, spx_img0->val[p], p);
+        node_map[label] = spx_imgi->val[p] - 1;
+        if(node_map[label] < 0)
+            iftError("spx_imgi has a label %d at voxel %d", __func__, spx_imgi->val[p], p);
+    }
+    return node_map;
+}
+
+void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file, 
+                            char *model_dir, iftFileSet *fs)
+{
+    // get the layers (from 1) that will be used in the skip connection of the current layer
+    int *skip_layers = iftAllocIntArray(layer);
+    int nskip = 0;
+    for(int l = 1; l < layer; l++){
+        if(arch->layer[layer-1].skip_connection[l-1] > 0)
+        {
+            skip_layers[nskip] = l;
+            nskip++;
+        }   
+    }
+    
+    // if there is no skip connection, return
+    if(nskip == 0)
+    {
+        iftFree(skip_layers);
+        return;
+    }
+
+    // get the finer residual layer (with more nodes) to be used as reference in the upsampling
+    int *finer_layers = iftGFLIMGetFinerResidualLayer(arch);
+
+    int finer_scale_index = 0; // this index refers to the matrices, kernel_maps, and load maps loaded
+
+    // compute the kernel maps for the layers that will be used in the skip connection
+    iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
+    iftIntArray **kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
+    for(int j = 0; j < nskip; j++)
+    {
+        // the layer j may have skip connections to layers finer than itself, so we need to find its finer scale and map it from finer_layer
+        int i = skip_layers[j];
+        kernels_maps[j] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, finer_layers[i-1]-1);
+        if(finer_scale_index == 0 && finer_layers[layer-1] == finer_layers[i-1]) // if the skip layer is the finer layer, store its index
+            finer_scale_index = j;
+    }
+    // create a mapping from the kernels of the finer layer to those of the current layer
+    kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
+    for(int i = 0; i < arch->nlayers-1; i++)
+        iftDestroyIntArray(&kernels_maps_all[i]);
+    iftFree(kernels_maps_all);
+
+    for (int file_id = 0; file_id < fs->n; file_id++)
+    {
+        char ext[10], filename[512];
+        sprintf(ext, "%s", iftFileExt(fs->files[file_id]->path));
+        char *basename = iftFilename(fs->files[file_id]->path, ext);
+        
+        sprintf(filename, "%s/labels%d/%s.pgm", model_dir, finer_layers[layer-1], basename);
+        iftImage *spx_img0 = iftReadImageByExt(filename);
+
+        int **node_maps = iftAlloc(nskip+1, sizeof(int *));
+        iftMatrix **matrices = iftAlloc(nskip+1, sizeof(iftMatrix *));
+
+        for(int j = 0; j < nskip; j++)
+        {
+            int i = skip_layers[j];
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, i, basename);
+            iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
+            iftGFLIMMaxNormGraph(graph_skip);
+            matrices[j] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
+            iftDestroyGFLIMGraph(&graph_skip);
+
+            sprintf(filename, "%s/labels%d/%s.pgm", model_dir, i, basename);
+            iftImage *spx_img = iftReadImageByExt(filename);
+
+            node_maps[j] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
+            iftDestroyImage(&spx_img);
+        }
+        sprintf(filename, "%s/layer%d/%s.json", model_dir, layer, basename);
+        iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
+        iftGFLIMMaxNormGraph(graph_skip);
+        matrices[nskip] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
+        iftDestroyGFLIMGraph(&graph_skip);
+
+        sprintf(filename, "%s/labels%d/%s.pgm", model_dir, layer, basename);
+        iftImage *spx_img = iftReadImageByExt(filename);
+        node_maps[nskip] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
+
+        iftDestroyImage(&spx_img);
+
+        // merge the feature matrices
+        iftMatrix *merged = NULL;
+        if(strcmp(arch->layer[layer-1].skip_type, "dotprod") == 0)
+            merged = iftGFLIMMergeMatrices_dotProd(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+        else if(strcmp(arch->layer[layer-1].skip_type, "dotprod_sumscale0") == 0)
+            merged = iftGFLIMMergeMatrices_dotProd_sumScale0(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+        else if(strcmp(arch->layer[layer-1].skip_type, "dotprod_sumscalei") == 0)
+            merged = iftGFLIMMergeMatrices_dotProd_sumScalei(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum") == 0)
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, -1);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscale0") == 0)
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, 0);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscalei") == 0)
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, nskip);
+        else
+            iftError("Unknown merge function: %s",  __func__, arch->layer[layer-1].skip_type);
+
+        for(int j = 0; j < nskip+1; j++)
+        {
+            iftDestroyMatrix(&matrices[j]);
+            iftFree(node_maps[j]);
+        }
+        iftFree(matrices);
+        iftFree(node_maps);
+
+        // copy the merged features to the graph of the current layer
+        sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+        iftGFLIMGraph *graph_finer = iftReadGFLIMGraph(filename);
+        if(graph_finer->num_nodes != merged->nrows || graph_finer->num_feats != merged->ncols)
+            iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
+                    graph_finer->num_nodes, graph_finer->num_feats, merged->nrows, merged->ncols); 
+        for(int i = 0; i < graph_finer->num_nodes; i++)
+        {
+            for(int j = 0; j < graph_finer->num_feats; j++)
+                graph_finer->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
+        }
+        // min-max normalization per channel
+        /*for(int j = 0; j < graph_finer->num_feats; j++)
+        {
+            float min = iftMatrixElem(merged, j, 0);
+            float max = iftMatrixElem(merged, j, 0);
+            for(int i = 1; i < graph_finer->num_nodes; i++)
+            {
+                if(iftMatrixElem(merged, j, i) < min)
+                    min = iftMatrixElem(merged, j, i);
+                if(iftMatrixElem(merged, j, i) > max)
+                    max = iftMatrixElem(merged, j, i);
+            }
+            for(int i = 0; i < graph_finer->num_nodes; i++)
+                graph_finer->nodes[i].feats[j] = (iftMatrixElem(merged, j, i) - min) / (max - min);
+        }*/
+        iftDestroyMatrix(&merged);
+
+        // save the graph with the skip connections
+        sprintf(filename, "%s/layer%d/%s.json", model_dir, layer, basename);
+        iftWriteGFLIMGraph(graph_finer, filename);
+        iftDestroyGFLIMGraph(&graph_finer);
+
+        // save the superpixel image of the finer layer
+		sprintf(filename, "%s/labels%d/%s.pgm", model_dir, layer, basename);
+		iftWriteImageByExt(spx_img0, filename);
+        iftDestroyImage(&spx_img0);
+
+        iftFree(basename);
+   }
+    iftFree(skip_layers);
+    for(int j = 0; j < nskip+1; j++)
+        iftDestroyIntArray(&kernels_maps[j]);
+    iftFree(kernels_maps);
+    iftFree(finer_layers);
+}
+
+void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label_imgs,
+                            iftFileSet *fs, int first, int last, int layer, 
+                            iftGFLIMArch *arch, char *kernels_file, 
+                            char *model_dir)
+{
+    // get the layers that will be used in the skip connection of the current layer
+    int *skip_layers = iftAllocIntArray(layer);
+    int nskip = 0;
+    for(int l = 1; l < layer; l++){
+        if(arch->layer[layer-1].skip_connection[l-1] > 0)
+        {
+            skip_layers[nskip] = l;
+            nskip++;
+        }   
+    }
+    // if there is no skip connection, return
+    if(nskip == 0)
+    {
+        iftFree(skip_layers);
+        return;
+    }
+
+    // get the finer residual layer (with more nodes) to be used as reference in the upsampling
+    int *finer_layers = iftGFLIMGetFinerResidualLayer(arch);
+
+    int finer_scale_index = 0; // this index refers to the matrices, kernel_maps, and load maps loaded
+
+    // compute the kernel maps for the layers that will be used in the skip connection
+    iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
+    iftIntArray **kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
+    for(int j = 0; j < nskip; j++)
+    {
+        // the layer j may have skip connections to layers finer than itself, so we need to find its finer scale and map it from finer_layer
+        int i = skip_layers[j];
+        kernels_maps[j] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, finer_layers[i-1]-1);
+        if(finer_scale_index == 0 && finer_layers[layer-1] == finer_layers[i-1]) // if the skip layer is the finer layer, store its index
+            finer_scale_index = j;
+    }
+    // create a mapping from the kernels of the finer layer to those of the current layer
+    kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
+    for(int i = 0; i < arch->nlayers-1; i++)
+        iftDestroyIntArray(&kernels_maps_all[i]);
+    iftFree(kernels_maps_all);
+
+    for (int k = 0; k <= last - first; k++)
+    {
+        int file_id = k + first;
+        char ext[10], filename[512];
+        sprintf(ext, "%s", iftFileExt(fs->files[file_id]->path));
+        char *basename = iftFilename(fs->files[file_id]->path, ext);
+
+        sprintf(filename, "%s/labels%d/%s.pgm", model_dir, finer_layers[layer-1], basename);
+        iftImage *spx_img0 = iftReadImageByExt(filename);
+
+        int **node_maps = iftAlloc(nskip+1, sizeof(int *));
+        iftMatrix **matrices = iftAlloc(nskip+1, sizeof(iftMatrix *));
+
+        for(int j = 0; j < nskip; j++)
+        {
+            int i = skip_layers[j];
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, i, basename);
+            iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
+            iftGFLIMMaxNormGraph(graph_skip);
+            matrices[j] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
+            iftDestroyGFLIMGraph(&graph_skip);
+
+            sprintf(filename, "%s/labels%d/%s.pgm", model_dir, i, basename);
+            iftImage *spx_img = iftReadImageByExt(filename);
+            
+            node_maps[j] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
+            iftDestroyImage(&spx_img);
+        }
+        iftGFLIMMaxNormGraph(input->val[k]);
+        matrices[nskip] = iftGFLIMGraphToNodeFeaturesMatrix(input->val[k]);
+        node_maps[nskip] = iftGFLIMComputeNodeMap(label_imgs->val[k], spx_img0);
+        iftDestroyImage(&(label_imgs->val[k]));
+        label_imgs->val[k] = spx_img0;
+        spx_img0 = NULL;
+
+        // merge the feature matrices
+        iftMatrix *merged = NULL;
+        if(strcmp(arch->layer[layer-1].skip_type, "dotprod") == 0)
+            merged = iftGFLIMMergeMatrices_dotProd(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+        else if(strcmp(arch->layer[layer-1].skip_type, "dotprod_sumscale0") == 0)
+            merged = iftGFLIMMergeMatrices_dotProd_sumScale0(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+        else if(strcmp(arch->layer[layer-1].skip_type , "dotprod_sumscalei") == 0)
+            merged = iftGFLIMMergeMatrices_dotProd_sumScalei(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum") == 0)
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, -1);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscale0") == 0)
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, 0);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscalei") == 0)
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, nskip);
+        else
+            iftError("Unknown merge function: %s", __func__, arch->layer[layer-1].skip_type);
+
+        for(int j = 0; j < nskip+1; j++)
+        {
+            iftDestroyMatrix(&matrices[j]);
+            iftFree(node_maps[j]);
+        }
+        iftFree(matrices);
+        iftFree(node_maps);
+
+        // copy the merged features to the graph of the current layer
+        sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+        iftDestroyGFLIMGraph(&(input->val[k]));
+        iftGFLIMGraph *graph_finer = iftReadGFLIMGraph(filename);
+        if(graph_finer->num_nodes != merged->nrows || graph_finer->num_feats != merged->ncols)
+            iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
+                    graph_finer->num_nodes, graph_finer->num_feats, merged->nrows, merged->ncols); 
+        for(int i = 0; i < graph_finer->num_nodes; i++)
+        {
+            for(int j = 0; j < graph_finer->num_feats; j++)
+                graph_finer->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
+        }
+        // min-max normalization per channel
+        /*for(int j = 0; j < graph_finer->num_feats; j++)
+        {
+            float min = iftMatrixElem(merged, j, 0);
+            float max = iftMatrixElem(merged, j, 0);
+            for(int i = 1; i < graph_finer->num_nodes; i++)
+            {
+                if(iftMatrixElem(merged, j, i) < min)
+                    min = iftMatrixElem(merged, j, i);
+                if(iftMatrixElem(merged, j, i) > max)
+                    max = iftMatrixElem(merged, j, i);
+            }
+            for(int i = 0; i < graph_finer->num_nodes; i++)
+                graph_finer->nodes[i].feats[j] = (iftMatrixElem(merged, j, i) - min) / (max - min);
+        }*/
+        iftDestroyMatrix(&merged);
+        input->val[k] = graph_finer;
+        graph_finer = NULL;
+        iftFree(basename);
+    }
+    iftFree(skip_layers);
+    for(int j = 0; j < nskip+1; j++)
+        iftDestroyIntArray(&kernels_maps[j]);
+    iftFree(kernels_maps);
+    iftFree(finer_layers);
+}
+
+
+
 // ============ FUNCTIONS TO DECODE FEATURES ============ //
 
 iftFImage *TestAdaptativeDecoder2(iftGFLIMGraph *graph, int *channel_label, int label)
@@ -2178,9 +3244,6 @@ iftFImage *TestAdaptativeDecoder2(iftGFLIMGraph *graph, int *channel_label, int 
         else
             low_end = means_otsu;
         high_end = means_otsu + stdev;
-
-        /*printf("low_end: %f, high_end: %f, means_otsu: %d, stdev: %f, mu: %f \n", 
-            low_end, high_end, means_otsu, stdev, mu);*/
 
         /* Estimate the weight of each channel */
         //iftImage *band = iftCreateImage(graph->num_nodes, 1, 1);
@@ -3314,16 +4377,16 @@ iftImageArray *iftGFLIMDecodeLayer(iftGFLIMGraph *graph,
  * @param initial_seeds The number of initial seeds.
  * @param nsuperpixels The number of superpixels.
  * @param basename An array with the name of the images.
- * @param graph_feat The graph feature. @see iftGFLIMGraphFeature.
- * @param graph_type The graph type. @see iftGFLIMGraphType.
+ * @param graph_feat The graph feature. @see iftGFLIMGraphNodeFeature.
+ * @param graph_type The graph type. @see iftGFLIMGraphSpxMethod.
  * @return The FLIM graph array.
  */
 iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_dir,
                                                  int first, int last,
                                                  int initial_seeds, int nsuperpixels,
                                                  char **basename,
-                                                 iftGFLIMGraphFeature graph_feat,
-                                                 iftGFLIMGraphType graph_type)
+                                                 iftGFLIMGraphNodeFeature graph_feat,
+                                                 iftGFLIMGraphSpxMethod graph_type)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -3341,7 +4404,7 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_d
     printf("\t graph_type: %d\n", graph_type);
 #endif
 
-    iftGFLIMGraphArray *input = iftCreateEmptyFLIMGraphArray(last - first + 1);
+    iftGFLIMGraphArray *input = iftCreateGFLIMGraphArray(last - first + 1);
 
 #pragma omp parallel for
     for (int k = 0; k <= last - first; k++)
@@ -3358,7 +4421,7 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_d
 
         if (graph_type == IFT_FLIMGRAPH_TYPE_ERGC)
             initial_seeds = 0;
-        input->val[k] = iftImageToFLIMGraph(img, nsuperpixels, initial_seeds, &label_img, graph_feat, graph_type);
+        input->val[k] = iftImageToGFLIMGraph(img, nsuperpixels, initial_seeds, &label_img, graph_feat, graph_type);
 
         iftWriteImageByExt(label_img, label_file);
         iftDestroyImage(&label_img);

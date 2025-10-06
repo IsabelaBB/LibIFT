@@ -43,6 +43,7 @@ typedef struct iftGFLIMLayer {
   int  pool_size;        /* pooling sizes align x, y, and z */
   float  pool_stride;         /* pooling stride */
   int *skip_connection;    /* index of the layers to apply skip connection */
+  char *skip_type;    /* type of skip connection: dotprod, dotprod_sumScale0, dotprod_sumScalei, sum, sum_sumScale0, sum_sumScalei */
 } iftGFLIMLayer;
 
 //! swig(destroyer = iftDestroyGFLIMArch)

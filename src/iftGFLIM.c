@@ -38,6 +38,13 @@ iftGFLIMArch *iftReadGFLIMArch(char *filename) {
             for (int i = 0; i < arch->nlayers; i++)
                 arch->layer[l].skip_connection[i] = input->val[i];
             iftFree(input);
+            if (iftDictContainKey("skip_type", layer_dict, NULL)){
+                arch->layer[l].skip_type = iftGetStrValFromDict("skip_type", layer_dict);
+            }else{
+                iftError("skip_type not found in layer %d", __func__, l+1);
+            }
+        }else{
+            arch->layer[l].skip_type = iftAllocCharArray(1);
         }
         
         iftDict *pool_dict = iftGetDictFromDict("pooling", layer_dict);
@@ -99,6 +106,7 @@ void iftWriteGFLIMArch(iftGFLIMArch *arch, char *filename)
         skip_connection[l] = iftCreateIntArray(arch->nlayers);
         for (int i = 0; i < arch->nlayers; i++) skip_connection[l]->val[i] = arch->layer[l].skip_connection[i];
         iftInsertIntoDict("skip_connection",skip_connection[l],conv[l]);
+        iftInsertIntoDict("skip_type",arch->layer[l].skip_type,conv[l]);
 
         char *pool_type = arch->layer[l].pool_type;
         iftInsertIntoDict("type",pool_type,pooling[l]);
@@ -131,6 +139,8 @@ void iftDestroyGFLIMArch(iftGFLIMArch **arch) {
     if (aux != NULL) {
         for (int l = 0; l < aux->nlayers; l++) {
             iftFree(aux->layer[l].pool_type);
+            iftFree(aux->layer[l].skip_connection);
+            iftFree(aux->layer[l].skip_type);
         }
         iftFree(aux->layer);
         iftFree(aux);

@@ -176,6 +176,16 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
                                   iftGFLIMGraphSpxMethod graph_type,
                                   iftImageArray *label_imgs);
 
+void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label_imgs,
+                            iftFileSet *fs, int first, int last, int layer, 
+                            iftGFLIMArch *arch, char *kernels_file, 
+                            char *model_dir);
+
+void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file, 
+                            char *model_dir, iftFileSet *fs);
+                            
+int* iftGFLIMGetFinerResidualLayer(iftGFLIMArch *arch);
+
 #ifdef __cplusplus
 }
 #endif
