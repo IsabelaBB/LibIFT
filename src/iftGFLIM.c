@@ -237,7 +237,7 @@ void iftGFLIMRelabelConnectedComponentsInPlace(iftGFLIMGraph *graph, iftLabeledS
  * @param S set of labeled graph nodes.
  * @param kernel_size Number of neighbors to compose a kernel.
  * @param attention_opt The attention option to compute the features. @see iftGFLIMGraphAttention.
- * @param aggregation_opt The aggregation option. @see iftGFLIMAggregationType.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return iftDataSet* kernel bank
  * @note The truelabel in the dataset is the label from the seeds.
  */
@@ -245,7 +245,7 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
                                         iftLabeledSet *S,
                                         int kernel_size,
                                         iftGFLIMGraphAttention attention_opt,
-                                        iftGFLIMAggregationType aggregation_opt)
+                                        iftGFLIMAggregation aggregation_opt)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -292,7 +292,7 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
             Z->nclasses = Z->sample[s].truelabel;
 
         // find the k most similar neighbors
-        iftIntArray *neighbors = iftGetKNeighborsFLIMGraph(p, graph, kernel_neighbors,
+        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, kernel_neighbors,
                                                            1, true, attention_opt);
 
         // aggregate the features of the neighbors and fill missing neighbors with the values in band_filling
@@ -333,11 +333,11 @@ void StatisticsFromAllSeedsGraph(iftFileSet *fs_seeds, char *dir, float *mean, f
 
     basename = iftFilename(fs_seeds->files[0]->path, "-seeds_graph.txt");
     sprintf(filename, "%s/%s.json", dir, basename);
-    graph = iftReadFLIMGraph(filename);
+    graph = iftReadGFLIMGraph(filename);
     nfeats = graph->num_feats;
     iftFree(basename);
     float *sum_sqrd = iftAllocFloatArray(nfeats);
-    iftDestroyFLIMGraph(&graph);
+    iftDestroyGFLIMGraph(&graph);
 
     for (int i = 0; i < fs_seeds->n; i++)
     {
@@ -346,7 +346,7 @@ void StatisticsFromAllSeedsGraph(iftFileSet *fs_seeds, char *dir, float *mean, f
 
         // read the graph
         sprintf(filename, "%s/%s.json", dir, basename);
-        graph = iftReadFLIMGraph(filename);
+        graph = iftReadGFLIMGraph(filename);
         iftFree(basename);
         if(nfeats != graph->num_feats)
             iftError("Number of features in the graph is different from the number of features in the seeds", __func__);
@@ -368,7 +368,7 @@ void StatisticsFromAllSeedsGraph(iftFileSet *fs_seeds, char *dir, float *mean, f
             seed = seed->next;
         }
         iftDestroyLabeledSet(&S);
-        iftDestroyFLIMGraph(&graph);
+        iftDestroyGFLIMGraph(&graph);
     }
 
     // compute the mean of the features
@@ -536,7 +536,7 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
     // Set input parameters
     int ninput_channels = graph->val[0]->num_feats;
     char *basename = NULL;
-    iftGFLIMGraphArray *output_graph = iftCreateEmptyFLIMGraphArray(graph->n);
+    iftGFLIMGraphArray *output_graph = iftCreateGFLIMGraphArray(graph->n);
 
     // Read consensus parameters of the current layer
 
@@ -561,8 +561,8 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
         iftMatrix *imgM = NULL;
 
         // normalize the graph
-        if (use_bias == NULL) iftNormalizeFLIMGraphByZScore(graph->val[i], mean, stdev);
-        imgM = iftGFLIMGraphToFeatureMatrix(graph->val[i], arch->layer[layer].kernel_size, IFT_FLIMGRAPH_ATTENTION_NONE, IFT_GFLIM_AGGREGATION_CONCAT/*, NULL*/);
+        if (use_bias == NULL) iftGFLIMGraphZNormalization(graph->val[i], mean, stdev);
+        imgM = iftGFLIMGraphToNeighborhoodFeatureMatrix(graph->val[i], arch->layer[layer].kernel_size, IFT_FLIMGRAPH_ATTENTION_NONE, IFT_GFLIM_AGGREGATION_CONCAT/*, NULL*/);
 
         // convolution
         iftMatrix *conv = iftMultMatrices(imgM, kernelbank); // (n, m*k) x (m*k, k*k) = (n, k*k)
@@ -581,7 +581,7 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
         }
 
         // pooling
-        output_graph->val[i] = iftMImageToFLIMGraph(activ, graph->val[i]);
+        output_graph->val[i] = iftMImageToGFLIMGraph(activ, graph->val[i]);
         iftGFLIMPoolingLayer(output_graph->val[i],
                              arch->layer[layer].pool_type,
                              arch->layer[layer].pool_size,
@@ -738,16 +738,16 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
     {
         basename = iftFilename(fs_seeds->files[i]->path, "-seeds_graph.txt");
         sprintf(filename, "%s/%s%s", input_dir, basename, ext);
-        iftGFLIMGraph *graph = iftReadFLIMGraph(filename);
-        iftIsValidFLIMGraph(graph);
+        iftGFLIMGraph *graph = iftReadGFLIMGraph(filename);
+        iftIsValidGFLIMGraph(graph);
 
         sprintf(filename, "%s/%s.json", tmp_dir, basename);
-        iftWriteFLIMGraph(graph, filename);
+        iftWriteGFLIMGraph(graph, filename);
         if (i == 0)
             ninput_channels = graph->num_feats;
 
         iftFree(basename);
-        iftDestroyFLIMGraph(&graph);
+        iftDestroyGFLIMGraph(&graph);
     }
 
     // compute mean and std of the graph node seeds
@@ -762,7 +762,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
 
         // read the input graph
         sprintf(filename, "%s/%s.json", tmp_dir, basename);
-        iftGFLIMGraph *graph = iftReadFLIMGraph(filename);
+        iftGFLIMGraph *graph = iftReadGFLIMGraph(filename);
 
         //printf("Processing file %s: %d of %d files\r", basename, i + 1, ngraphs);
         //fflush(stdout);
@@ -779,9 +779,9 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
         }
 
         /* Apply marker-based image normalization */
-        iftNormalizeFLIMGraphByZScore(graph, mean, stdev);
+        iftGFLIMGraphZNormalization(graph, mean, stdev);
         sprintf(filename, "%s/%s-norm.json", tmp_dir, basename);
-        iftWriteFLIMGraph(graph, filename);
+        iftWriteGFLIMGraph(graph, filename);
 
         /* Learn and save kernel bank */
 
@@ -790,7 +790,7 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
                                                      arch->layer[0].nkernels_per_image,
                                                      arch->layer[0].nkernels_per_marker);
 
-        iftDestroyFLIMGraph(&graph);
+        iftDestroyGFLIMGraph(&graph);
         iftDestroyLabeledSet(&S);
         sprintf(filename, "%s/%s-kernels.npy", tmp_dir, basename);
         iftWriteMatrix(kernelbank, filename);
@@ -847,13 +847,13 @@ void iftGFLIMTrainLayer(char *input_dir, char *markers_dir,
     {
         basename = iftFilename(fs_seeds->files[i]->path, "-seeds_graph.txt");
         sprintf(filename, "%s/%s.json", tmp_dir, basename);
-        iftGFLIMGraphArray *graph = iftCreateEmptyFLIMGraphArray(1);
-        graph->val[0] = iftReadFLIMGraph(filename);
+        iftGFLIMGraphArray *graph = iftCreateGFLIMGraphArray(1);
+        graph->val[0] = iftReadGFLIMGraph(filename);
         output = FLIMGraphConvolutionalLayer(graph, arch, 0, layer_index, atrous_factor, param_dir);
-        iftDestroyFLIMGraphArray(&graph);
+        iftDestroyGFLIMGraphArray(&graph);
         sprintf(filename, "%s/%s.json", output_dir, basename);
-        iftWriteFLIMGraph(output->val[0], filename);
-        iftDestroyFLIMGraphArray(&output);
+        iftWriteGFLIMGraph(output->val[0], filename);
+        iftDestroyGFLIMGraphArray(&output);
         iftFree(basename);
     }
     arch->layer[0].pool_stride = pool_stride;
@@ -922,7 +922,7 @@ void FLIMGraphExtractFeaturesFromLayerPerBatch(iftFileSet *fs_graphs, int first,
     char ext[20];
     sprintf(ext, "%s", iftFileExt(fs_graphs->files[0]->path));
     char **basename = (char **)calloc(ngraphs, sizeof(char *));
-    input = iftCreateEmptyFLIMGraphArray(ngraphs);
+    input = iftCreateGFLIMGraphArray(ngraphs);
     output = NULL;
 
     /* Load batch */
@@ -930,7 +930,7 @@ void FLIMGraphExtractFeaturesFromLayerPerBatch(iftFileSet *fs_graphs, int first,
     for (int i = first, k = 0; i <= last; i++, k++)
     {
         sprintf(filename, "%s/%s", orig_dir, fs_graphs->files[i]->path);
-        input->val[k] = iftReadFLIMGraph(filename);
+        input->val[k] = iftReadGFLIMGraph(filename);
         basename[k] = iftFilename(fs_graphs->files[i]->path, ext);
     }
 
@@ -940,7 +940,7 @@ void FLIMGraphExtractFeaturesFromLayerPerBatch(iftFileSet *fs_graphs, int first,
 
     for (int k = 0; k < ngraphs; k++)
     {
-        iftDestroyFLIMGraph(&input->val[k]);
+        iftDestroyGFLIMGraph(&input->val[k]);
         input->val[k] = output->val[k];
         output->val[k] = NULL;
     }
@@ -950,8 +950,8 @@ void FLIMGraphExtractFeaturesFromLayerPerBatch(iftFileSet *fs_graphs, int first,
     {
         sprintf(filename, "%s/%s.json", feat_dir, basename[k]);
         iftFree(basename[k]);
-        iftWriteFLIMGraph(input->val[k], filename);
-        iftDestroyFLIMGraph(&input->val[k]);
+        iftWriteGFLIMGraph(input->val[k], filename);
+        iftDestroyGFLIMGraph(&input->val[k]);
     }
 
     iftFree(input);
@@ -1046,7 +1046,7 @@ iftMImage *iftGFLIMGraphAtrousAveragePooling(iftGFLIMGraph *graph,
     for (int p = 0; p < graph->num_nodes; p++)
     {
         // find the k most similar neighbors of the node p
-        iftIntArray *neighbors = iftGetKNeighborsFLIMGraph(p, graph,
+        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph,
                                                         pool_size, atrous_factor,
                                                         true, IFT_FLIMGRAPH_ATTENTION_NONE);
 
@@ -1092,7 +1092,7 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
     for (int p = 0; p < graph->num_nodes; p++)
     {
         // find the k most similar neighbors of the node p
-        iftIntArray *neighbors = iftGetKNeighborsFLIMGraph(p, graph, pool_size,
+        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, pool_size,
                                                            atrous_factor, true, 
                                                            IFT_FLIMGRAPH_ATTENTION_NONE);
 
@@ -1163,7 +1163,7 @@ void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
                 iftError("Invalid pooling %s", "pooling", pool_type);
         }
 
-        iftMImageToFLIMGraphInplace(pool, graph);
+        iftMImageToGFLIMGraphInplace(pool, graph);
         iftDestroyMImage(&pool);
     }
 }
@@ -1349,7 +1349,7 @@ void iftWriteActivationsImg(char *source, char *destination, char *ext, char *la
         char *basename = iftFilename(fs_imgs->files[i]->path, ext_input);
         if (labels_dir != NULL)
         {
-            iftGFLIMGraph *graph = iftReadFLIMGraph(fs_imgs->files[i]->path);
+            iftGFLIMGraph *graph = iftReadGFLIMGraph(fs_imgs->files[i]->path);
             char filename[200];
             sprintf(filename, "%s/%s.pgm", labels_dir, basename);
             iftImage *img = iftReadImageByExt(filename);
@@ -1374,7 +1374,7 @@ void iftWriteActivationsImg(char *source, char *destination, char *ext, char *la
                 iftDestroyImage(&(activations[j]));
 
             iftFree(activations);
-            iftDestroyFLIMGraph(&graph);
+            iftDestroyGFLIMGraph(&graph);
         }
         else
         {
