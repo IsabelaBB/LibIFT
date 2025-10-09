@@ -733,7 +733,7 @@ iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
 
     int nsamples = iftLabeledSetSize(S);
     int kernel_neighbors = iftMin(graph->num_nodes, kernel_size);
-    int tensor_size = aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT ? graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
+    int tensor_size = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) ? graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
     iftDataSet *Z = iftCreateDataSet(nsamples, tensor_size);
 
     iftLabeledSet *seed;
@@ -3167,6 +3167,7 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
             for(int j = 0; j < graph_finer->num_feats; j++)
                 graph_finer->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
         }
+        
         // min-max normalization per channel
         /*for(int j = 0; j < graph_finer->num_feats; j++)
         {

@@ -236,6 +236,8 @@ iftGFLIMAggregation iftGLIMGraphGetAggregation(char *arg)
         return IFT_GFLIM_AGGREGATION_MEAN;
     else if (strcmp(arg, "WMEAN") == 0)
         return IFT_GFLIM_AGGREGATION_WMEAN;
+    else if (strcmp(arg, "WCONCAT") == 0)
+        return IFT_GFLIM_AGGREGATION_WCONCAT;
     else
         iftError("Invalid aggregation type %s", __func__, arg);
     return IFT_GFLIM_AGGREGATION_CONCAT;
@@ -4240,7 +4242,7 @@ double *iftGFLIMGraphAggregateFeatures(int p,
 {
     double *output_features = NULL;
     int i = 0;
-    double w[neighbors->n - 1];
+    double w[neighbors->n];
 
     if (neighbors->val[0] != p)
         iftError("Neighbor of %d is %d", __func__, p, neighbors->val[0]);
@@ -4255,6 +4257,34 @@ double *iftGFLIMGraphAggregateFeatures(int p,
         {
             memcpy(output_features + i * graph->num_feats, graph->nodes[neighbors->val[i]].feats, graph->num_feats * sizeof(double));
             i++;
+        }
+
+        break;
+
+    case IFT_GFLIM_AGGREGATION_WCONCAT:
+
+        output_features = iftAllocDoubleArray(num_adj * graph->num_feats);
+        double *node_feats = graph->nodes[p].feats;
+        double total_strength = 0.0; 
+        while (i < neighbors->n)
+        {
+            double *neighb_feats = graph->nodes[neighbors->val[i]].feats;
+            memcpy(output_features + i * graph->num_feats, neighb_feats, graph->num_feats * sizeof(double));
+            double dist=0.0;
+            for (int j=0; j < graph->num_feats; j++)
+                dist += (node_feats[j]-neighb_feats[j])*(node_feats[j]-neighb_feats[j]);
+            w[i] = exp(-sqrtf(dist)/graph->num_feats);
+            total_strength += w[i];
+            i++;
+        }
+
+        if(total_strength == 0.0)
+            total_strength = IFT_EPSILON;
+
+        for (i = 0; i < neighbors->n; i++)
+        {
+            for (int b = 0; b < graph->num_feats; b++)
+                output_features[i * graph->num_feats + b] *= (1.0f - w[i] / total_strength);
         }
 
         break;
@@ -4350,7 +4380,7 @@ iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
         iftError("Number of neighbors must be positive", __func__);
 
     // cria a matriz de saída
-    int out_num_feats = aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT ? num_adj * graph->num_feats : 2 * graph->num_feats;
+    int out_num_feats = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) ? num_adj * graph->num_feats : 2 * graph->num_feats;
     iftMatrix *matrix = iftCreateMatrix(out_num_feats, graph->num_nodes);
 
     for (int p = 0; p < graph->num_nodes; p++)
@@ -4363,11 +4393,11 @@ iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
             neighbors_all[p]->n = neighbors->n;
         }*/
 
-        double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors, graph, num_adj, aggregation_opt);
+        double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors, graph, num_adj, aggregation_opt);        
 
         for (int b = 0; b < out_num_feats; b++)
-            iftMatrixElem(matrix, b, p) = (float)feature_vector[b];
-
+                iftMatrixElem(matrix, b, p) = (float)feature_vector[b];
+        
         iftDestroyIntArray(&neighbors);
         free(feature_vector);
     }

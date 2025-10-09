@@ -118,6 +118,7 @@ typedef enum {
  */
 typedef enum {
     IFT_GFLIM_AGGREGATION_CONCAT,   // Concatenate the features of the nodes
+    IFT_GFLIM_AGGREGATION_WCONCAT,  // Concatenate the features of the nodes and weight by the similarity with the initial node
     IFT_GFLIM_AGGREGATION_MEAN,     // Average the features of the nodes
     IFT_GFLIM_AGGREGATION_WMEAN     // Weighted mean of the features of the nodes
   } iftGFLIMAggregation;

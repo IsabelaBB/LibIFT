@@ -608,7 +608,7 @@ class GFLIMFunctions():
             layer (int): Layer number.
             stride (str): Stride type ('graph-based', 'none', etc.).
             attention (str): Attention type ('NONE', 'CLASS_DOMINANCE', etc.).
-            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN)
+            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN, WCONCAT)
         """
         self.__callFunction__(self.functions['CreateLayerModel'], [model_dir, arch_file, layer, stride, attention, aggregation], "Creating weights layer {}:\t".format(layer))
 
@@ -621,7 +621,7 @@ class GFLIMFunctions():
             layer (int): Layer number.
             stride (str): Stride type ('graph-based', 'none', etc.).
             attention (str): Attention type ('NONE', 'CLASS_DOMINANCE', etc.).
-            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN)
+            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN, WCONCAT)
         """
         self.__callFunction__(self.functions['EncodeLayer'], [model_dir, arch_file, layer, stride, attention, aggregation], "Encoding layer {}:\t\t".format(layer))
 
@@ -656,7 +656,7 @@ class GFLIMFunctions():
             layer (int): Layer number.
             stride (str): Stride type ('graph-based', 'none', etc.).
             attention (str): Attention type ('NONE', 'CLASS_DOMINANCE', etc.).
-            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN)
+            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN, WCONCAT)
             dropout (bool): Whether to apply dropout.
         """
         self.__callFunction__(self.functions['EncodeMergedLayer'], [model_dir, arch_file, layer, stride, attention, aggregation, 1 if dropout else 0], "Encoding Merged layer {}:\t\t".format(layer))
@@ -682,7 +682,7 @@ class GFLIMFunctions():
             nfeat_markers (int): Number of feature points per marker (if -1, do not perform k-means).
             kernel_size (int): Kernel size.
             attention (str): Attention type ('NONE', 'CLASS_DOMINANCE', etc.).
-            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN)
+            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN, WCONCAT)
         """
         self.__callFunction__(self.functions['ConvertSeeds'], [model_dir, markers_dir, nfeat_markers, kernel_size, attention, aggregation], 'Converting seeds:\t\t')
 
@@ -699,14 +699,14 @@ class GFLIMFunctions():
             batch_size (int): Batch size.
             stride (str): Stride type ('graph-based', 'none', or 'image-based').
             attention (str): Attention type ('NONE', 'CLASS_DOMINANCE', etc.).
-            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN)
+            aggregation (str): Aggregation strategy (CONCAT, MEAN, WMEAN, WCONCAT)
             dropout (bool): Whether to apply dropout.
             save_intermediate (bool, optional): Whether to save intermediate features and superpixel labels.
             layers_save_act (list): List of layers to save activations.
             layers_decode (list): List of layers to decode.
             decoders (list): List of decoders to use.
         """
-        self.__callFunction__(self.functions['Extract'], [img_dir, graphs_dir, spx_dir, model_dir, arch_file, nlayers, batch_size, stride, attention, aggregation, 1 if dropout else 0, 1 if save_intermediate else 0, ",".join(str(i) for i in layers_save_act), ",".join(str(i) for i in layers_decode), ",".join(str(i) for i in decoders)], 'Extracting features:\t\t')
+        self.__callFunction__(self.functions['Extract'], [img_dir, graphs_dir, spx_dir, model_dir, arch_file, nlayers, batch_size, stride, attention, aggregation, 1 if dropout else 0, 1 if save_intermediate else 0, ",".join(str(i) for i in layers_save_act) if len(layers_save_act) > 0 else -1, ",".join(str(i) for i in layers_decode) if len(layers_decode) > 0 else -1, ",".join(str(i) for i in decoders)], 'Extracting features:\t\t')
 
     def write_kernels_correspondence(self, markers_dir_scale0, spx_dir_scale0, spx_dir_scalei, save_file, save_markers_folder=None):
         """
@@ -760,7 +760,7 @@ class GFLIMModel():
             graph_feats (str): Type of graph features to use ('RGB', 'RGBXY', 'HSV', 'HSVI', 'LAB', 'LABI').
             stride (str): Stride type ('graph-based', 'none', etc.).
             attention (str): Attention type ('NONE', 'CLASS_DOMINANCE', etc.).
-            aggregation (str): Aggregation strategy ('CONCAT', 'MEAN', 'WMEAN').
+            aggregation (str): Aggregation strategy ('CONCAT', 'MEAN', 'WMEAN', WCONCAT).
             dropout (bool): Whether to apply dropout.
         """
 
@@ -1005,6 +1005,7 @@ class GFLIMModel():
                                    layers_activations, 
                                    layers_decode,
                                    decoders)
+            
 
             # decode the output features, write the activations, and remove the layer and label directories to free up space
             #for layer in range(1,self.arch['nlayers']+1):
@@ -1331,8 +1332,8 @@ class GFLIMultiScaleUModel(GFLIMModel):
 
 
     def run_model(self, img_splits_names, train=True, decode_train=True, activation_train=True,
-                           extract=True, save_intermediate=False, layers_activations = [],
-                           layers_decode = [], decoders=["hybrid", "graph-adaptive"], batchsize=64):
+                           extract=True, save_intermediate=False, layers_activations = [-1],
+                           layers_decode = [-1], decoders=["hybrid", "graph-adaptive"], batchsize=64):
         
         if not train and not extract:
             print("Nothing to do. Please set train and/or extract to True.")
@@ -1390,7 +1391,7 @@ class GFLIMultiScaleUModel(GFLIMModel):
 
 def getModelPath(ds_name, split_id, markers_name, arch_name, 
                  stride, spx_alg, final_spx, graph_feats, 
-                 attention, dropout, init_seeds=0, model_name='gflim-BoFP'):
+                 attention, aggregation, dropout, init_seeds=0, model_name='gflim-BoFP'):
     tmp = 'kmeans'
     if dropout:
         tmp += '-dropout'
@@ -1411,34 +1412,35 @@ def getModelPath(ds_name, split_id, markers_name, arch_name,
                 raise ValueError("init_seeds must be positive when spx_alg is 'DISF'.")
         spx += '-'.join([str(f) for f in final_spx])
 
-    return f'/home/isabela/Codes/LibIFT/Results/{ds_name}/split{split_id}/{markers_name}/{arch_name}/{model_name}/{stride}/{spx_alg}/{spx}/{tmp}/{graph_feats}-{attention}'
+    return f'/home/isabela/Codes/LibIFT/Results/{ds_name}/split{split_id}/{markers_name}/{arch_name}/{model_name}/{stride}/{spx_alg}/{spx}/{tmp}/{graph_feats}-{attention}-{aggregation}'
 
 
 def GFLIMModelExample():
-    DATASET_PATH = '/home/isabela/Codes/LibIFT/Datasets/cells_dataset'
+    DATASET_PATH = '/home/isabela/Codes/LibIFT/Datasets/schisto'
     DS_NAME = DATASET_PATH.split('/')[-1]
     SPX_ALG = 'DISF'
-    INIT_SEEDS = 50000
-    FINAL_SPX = 20000
+    INIT_SEEDS = 20000
+    FINAL_SPX = 10000
     GRAPH_FEATS = 'SUM'
     AGGREGATION = 'CONCAT'
     MARKERS_NAME = 'interactive_markers'
     STRIDE = 'graph-based'
-    ATTENTION = 'CLASS_DOMINANCE'
+    ATTENTION = 'NONE'
     DROPOUT = False
 
-    for ARCH_NAME in ['arch_cells_noskip',
-                      'arch_cells_dotprod_1', 'arch_cells_dotprod_2', 
-                      'arch_cells_dotprod_sumscale0_1', 'arch_cells_dotprod_sumscale0_2', 
-                      'arch_cells_dotprod_sumscalei_1', 'arch_cells_dotprod_sumscalei_2',
-                      'arch_cells_sum_1', 'arch_cells_sum_2'
+    for ARCH_NAME in [#'arch_schisto_noskip',
+                      #'arch_schisto_dotprod_1', 'arch_schisto_dotprod_2', 
+                      #'arch_schisto_dotprod_sumscale0_1', 'arch_schisto_dotprod_sumscale0_2', 
+                      #'arch_schisto_dotprod_sumscalei_1', 'arch_schisto_dotprod_sumscalei_2',
+                      #'arch_schisto_sum_1', 
+                      'arch_schisto_sum_2'
                       ]:
 
         for SPLIT_ID in [1]: #range(1, 6):
             print(f'Running GFLIMModelExample with ARCH_NAME={ARCH_NAME} and SPLIT_ID={SPLIT_ID}')
             model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
                                     STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
-                                    ATTENTION, DROPOUT, INIT_SEEDS)
+                                    ATTENTION, AGGREGATION, DROPOUT, INIT_SEEDS)
             
             model = GFLIMModel(DATASET_PATH, model_dir, 
                                             f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
@@ -1447,7 +1449,7 @@ def GFLIMModelExample():
                                             SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
                                             STRIDE, ATTENTION, AGGREGATION, DROPOUT)
 
-            model.run_model('interactive_splits', activation_train=True, train=True, extract=True, save_intermediate=False, layers_activations=[1,2,3], layers_decode=[1,2,3], decoders=['hybrid', 'graph-adaptive'], batchsize=64)
+            model.run_model('interactive_splits', activation_train=True, train=True, extract=True, save_intermediate=False, layers_activations=[], layers_decode=[1,2,3], decoders=['hybrid', 'graph-adaptive'], batchsize=64)
 
 
 def GFLIMMultiScaleUModelExample():
@@ -1457,7 +1459,7 @@ def GFLIMMultiScaleUModelExample():
     INIT_SEEDS = 10000
     SPX = 8000
     GRAPH_FEATS = 'SUM'
-    ARCH_NAME = 'arch_cells_test'
+    ARCH_NAME = 'arch_schisto_test'
 
     AGGREGATION = 'CONCAT'
     MARKERS_NAME = 'interactive_markers'
@@ -1480,7 +1482,7 @@ def GFLIMMultiScaleUModelExample():
 
         model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
                                 STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
-                                ATTENTION, DROPOUT, model_name='gflim-BoFP-multiscale')
+                                ATTENTION, AGGREGATION, DROPOUT, model_name='gflim-BoFP-multiscale')
         
         model = GFLIMultiScaleUModel(
         #model = GFLIMModel(
@@ -1491,7 +1493,7 @@ def GFLIMMultiScaleUModelExample():
                                         SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
                                         STRIDE, ATTENTION, AGGREGATION, DROPOUT)
                                         
-        model.run_model('interactive_splits', activation_extract=False, activation_train=True, extract=False, decoders=[])
+        model.run_model('interactive_splits', activation_train=True, extract=False, decoders=[])
 
 
 def test():

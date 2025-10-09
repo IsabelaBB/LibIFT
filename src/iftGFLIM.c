@@ -274,7 +274,7 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
 
     int nsamples = iftLabeledSetSize(S);
     int kernel_neighbors = iftMin(graph->num_nodes, kernel_size);
-    int tensor_size = aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT ? graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
+    int tensor_size = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) ? graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
     iftDataSet *Z = iftCreateDataSet(nsamples, tensor_size);
 
     iftLabeledSet *seed = S;
@@ -1110,6 +1110,23 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
         double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors,
                                                             graph, pool_size,
                                                             IFT_GFLIM_AGGREGATION_CONCAT);
+        
+        /*float strength[neighbors->n], total_strength = IFT_EPSILON; 
+        for (int j = 0; j < neighbors->n; j++){
+            float dist=0.0;
+            int i;
+            double *A = graph->nodes[p].feats;
+            double *B = graph->nodes[neighbors->val[j]].feats;
+            for (i=0; i < graph->num_feats; i++)
+                dist += (A[i]-B[i])*(A[i]-B[i]);
+            strength[j] = dist;
+            total_strength += strength[j];
+        }
+        for (int i = 0, j = 0; i < pool_size; i++){
+            for (int b = 0; b < graph->num_feats; b++, j++)
+                pool->val[p][b] = iftMax(pool->val[p][b], (float)feature_vector[j] * (1.0f - strength[i] / total_strength));
+        }*/
+
         for (int i = 0, j = 0; i < pool_size; i++)
         {
             for (int b = 0; b < graph->num_feats; b++, j++)
