@@ -2172,11 +2172,29 @@ iftMatrix *iftGFLIMUpsampleFeatureMatrix(iftMatrix *X,
                                     int *nodes_map, iftIntArray *kernels_map, 
                                     int nnodes, int nfeats)
 {
+    /***
+     * Upsample a feature matrix X to a new number of nodes (nnodes) and features (nfeats)
+     * using the provided nodes_map and kernels_map.
+     */
     iftMatrix *X_up = iftCreateMatrix(nfeats, nnodes);
+    if(kernels_map->n < nfeats)
+        iftError("kernels_map->n %d < nfeats %d", __func__, kernels_map->n, nfeats);
+
+    if(nodes_map == NULL)
+        iftError("nodes_map is NULL", __func__);
+    // if the number of nodes in the upsampled matrix is smaller than in the original
+    if(nnodes < X->nrows)
+        iftError("nnodes %d < X->nrows %d", __func__, nnodes, X->nrows);
+    
     for(int i = 0; i < nnodes; i++)
     {
         for(int j = 0; j < nfeats; j++)
         {
+            if(kernels_map->val[j] < 0 || kernels_map->val[j] >= X->ncols){
+                iftError("kernels_map->val[%d] %d out of bounds [0,%d)", __func__, j, kernels_map->val[j], X->ncols);
+            }
+            if(nodes_map[i] < 0 || nodes_map[i] >= X->nrows)
+                iftError("nodes_map[%d] %d out of bounds [0,%d)", __func__, i, nodes_map[i], X->nrows);
             iftMatrixElem(X_up, j, i) = iftMatrixElem(X, kernels_map->val[j], nodes_map[i]);
         }
     }
@@ -2708,7 +2726,7 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
     const char line_delimiter[] = "\n";
     const char number_delimiter[] = " ";
     char *line, *endptr; 
-    int nkernels0 = 100, kernel_count = 0;
+    int nkernels = 100, nkernels0, kernel_count = 0;
 
     char* line_saveptr = NULL;
     char* number_saveptr = NULL;
@@ -2732,14 +2750,14 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
                 iftError("out of memory", __func__);
         }
 
-        kernel_maps_scale0[line_count] = iftAllocIntArray(nkernels0);
-        kernel_count = 0;
-
+        kernel_count = 0, nkernels = 100;
+        kernel_maps_scale0[line_count] = iftAllocIntArray(nkernels);
+        
         // get each number
         while (inner_token != NULL) {
 
             // allocate memory for more kernels if needed
-            if(kernel_count >= nkernels0)
+            if(kernel_count >= nkernels)
             {
                 nkernels0 += 100;
                 kernel_maps_scale0[line_count] = realloc(kernel_maps_scale0[line_count], nkernels0 * sizeof(int));
@@ -2750,6 +2768,8 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
             kernel_count++;
             inner_token = strtok_r(NULL, number_delimiter, &number_saveptr);
         }
+        if(nkernels != kernel_count)
+            kernel_maps_scale0[line_count] = realloc(kernel_maps_scale0[line_count], kernel_count * sizeof(int));
         if(line_count == 0)
             nkernels0 = kernel_count;
         line_count++;
@@ -2761,6 +2781,7 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
     iftIntArray **kernel_maps = iftAlloc(nlines, sizeof(iftIntArray *));
     
     // compute the kernel maps for all scales
+    // from scale 0 to scale 1
     int nkernelsi = 0;
     kernel_maps[0] = iftCreateIntArray(nkernels0);
     for(int i=0; i < nkernels0; i++)
@@ -2768,15 +2789,18 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
         int k0 = kernel_maps_scale0[0][i] - 1;
         if(k0 == i)
         {
-            kernel_maps[0]->val[nkernelsi] = nkernelsi;
+            kernel_maps[0]->val[i] = nkernelsi;
             nkernelsi++;
         }else
-            kernel_maps[0]->val[nkernelsi] = kernel_maps[0]->val[k0];
+            kernel_maps[0]->val[i] = kernel_maps[0]->val[k0];
     }
-
+    
+    // convert the scale 0 -> scale i from kernel_maps_scale0
+    // to scale i-1 -> scale i in kernel_maps
     for(int l = 1; l < nlines; l++)
     {
         nkernelsi = 0;
+        int kernels_prev = 0;
         kernel_maps[l] = iftCreateIntArray(nkernels0);
         for(int i=0; i < nkernels0; i++)
         {
@@ -2786,7 +2810,7 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
             {
                 if(k0 == k0_prev)
                 {
-                    kernel_maps[l]->val[nkernelsi] = nkernelsi;
+                    kernel_maps[l]->val[kernels_prev] = nkernelsi;
                     nkernelsi++;
                 }else{
                     int j = 0, k = k0;
@@ -2796,12 +2820,12 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
                         j++;
                     }
                     k = kernel_maps[l]->val[k];
-                    kernel_maps[l]->val[nkernelsi] = k;
-                    nkernelsi++;
+                    kernel_maps[l]->val[kernels_prev] = k;
                 }
+                kernels_prev++;
             }
         }
-        iftResizeIntArray(&(kernel_maps[l]), nkernelsi);
+        iftResizeIntArray(&(kernel_maps[l]), kernels_prev);
     }
     for(int l = 0; l < nlines; l++)
         iftFree(kernel_maps_scale0[l]);
@@ -2861,7 +2885,6 @@ iftIntArray *iftGFLIMMergeKernelScales(iftIntArray **kernel_maps, int nscales,
         else
             iftError("init must be less than nscales", __func__);
     }
-
     merged_map = iftCreateIntArray(kernel_maps[init]->n);
     for(int k = 0; k < kernel_maps[init]->n; k++)
         merged_map->val[k] = kernel_maps[init]->val[k];
@@ -2874,6 +2897,7 @@ iftIntArray *iftGFLIMMergeKernelScales(iftIntArray **kernel_maps, int nscales,
             merged_map->val[j] = kernel_maps[i]->val[k];
         }   
     }
+
     return merged_map;
 }
 
