@@ -193,7 +193,8 @@ class GFLIMData:
                 labels_in_spx = label_flat[idx]
                 # if labels 0 and 255 are present have the maximum occurence, we consider 255 as the label
                 unique_labels, counts = np.unique(labels_in_spx, return_counts=True)
-                if counts.argmax() == counts[unique_labels == 255]:
+                obj_spxs = counts[unique_labels == 255]
+                if len(obj_spxs) > 0 and counts.argmax() == obj_spxs[0]:
                     self.node_labels[node_id] = 255
                 else:
                     self.node_labels[node_id] = unique_labels[counts.argmax()]
@@ -634,7 +635,7 @@ class MarkersSelection:
             shutil.copytree(src_folder, dst_folder, dirs_exist_ok=True)
 
         # copy saliency maps and activations
-        nlayers = self.model.nlayers
+        nlayers = self.model.arch['nlayers']
         for layer in range(1, nlayers + 1):
             src_folder = os.path.join(self.model.model_dir, f'activationNoMerge{layer}')
             if os.path.exists(src_folder):
@@ -648,7 +649,7 @@ class MarkersSelection:
                 shutil.copytree(src_folder, dst_folder, dirs_exist_ok=True)
                 shutil.rmtree(src_folder, ignore_errors=True)
             
-            for d in ["graphadaptive", "hybrid"]:
+            for d in ["graph-adaptive", "hybrid"]:
                 src_folder = os.path.join(self.model.model_dir, f'{d}_{layer}')
                 if os.path.exists(src_folder):
                     dst_folder = os.path.join(dst_path, f'{d}_{layer}')
@@ -656,7 +657,7 @@ class MarkersSelection:
                     shutil.rmtree(src_folder, ignore_errors=True)
 
     def evaluate(self, layer : int, save_path : str, img_folder : str, labels_folder : str):
-        for d in ["graphadaptive", "hybrid"]:
+        for d in ["graph-adaptive", "hybrid"]:
             save_file = f'{save_path}_{d}_{layer}.pkl'
             saliency_dir = f"{self.model.model_dir}/{d}_{layer}/label2"
 
@@ -677,12 +678,19 @@ class MarkersSelection:
         self.write_graph_markers()
         
         if train:
-            self.model.run_model_parallel()
+            self.model.run_model(self.train_img_folder, 'train', save_intermediate=False, layers_activations=[1,2,3], 
+                            layers_decode=[1,2,3], decoders=['hybrid', 'graph-adaptive'], batchsize=64,
+                            graphs_path_src=f'{DATASET_PATH}/superpixels/{SPX_ALG}/{INIT_SEEDS}-{FINAL_SPX}/{GRAPH_FEATS}/graphs',
+                            spx_label_path_src=f'{DATASET_PATH}/superpixels/{SPX_ALG}/{INIT_SEEDS}-{FINAL_SPX}/{GRAPH_FEATS}/labels')
+            self.model.run_model(self.val_img_folder, 'extract', save_intermediate=False, layers_activations=[1,2,3], 
+                            layers_decode=[1,2,3], decoders=['hybrid', 'graph-adaptive'], batchsize=64,
+                            graphs_path_src=f'{DATASET_PATH}/superpixels/{SPX_ALG}/{INIT_SEEDS}-{FINAL_SPX}/{GRAPH_FEATS}/graphs',
+                            spx_label_path_src=f'{DATASET_PATH}/superpixels/{SPX_ALG}/{INIT_SEEDS}-{FINAL_SPX}/{GRAPH_FEATS}/labels')
             print(f"Moving results for iteration {iteration}...")
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
-            
-            for layer in range(1, self.model.nlayers + 1):
+
+            for layer in range(1, self.model.arch['nlayers'] + 1):
                 self.evaluate(layer, os.path.join(save_path,'train'), os.path.join(self.original_image_path, 'train'), os.path.join(self.labels_path, 'train'))
                 self.evaluate(layer, os.path.join(save_path,'val'), os.path.join(self.original_image_path, 'val'), os.path.join(self.labels_path, 'val'))
         
@@ -716,11 +724,13 @@ class MarkersSelection:
 
         print("Marker selection completed.")
 
-    def iterative_marker_selection_pairs(self, train=True):
+    def iterative_marker_selection_pairs(self, train_img_folder, val_img_folder, train=True):
         """
         Iteratively selects pairs of markers until the maximum number of markers is reached.
         Also avoids selecting neighbors of existing markers.
         """
+        self.train_img_folder = train_img_folder
+        self.val_img_folder = val_img_folder
 
         if self.initial_iteration > 0:
             print(f"Loading markers from iteration {self.initial_iteration}...")
@@ -745,11 +755,13 @@ class MarkersSelection:
 
         print("Marker selection completed.")
 
-    def iterative_marker_selection(self, train=True):
+    def iterative_marker_selection(self, train_img_folder, val_img_folder, train=True):
         """
         Iteratively selects pairs of markers until the maximum number of markers is reached.
         Also avoids selecting neighbors of existing markers.
         """
+        self.train_img_folder = train_img_folder
+        self.val_img_folder = val_img_folder
 
         # If initial_iteration is -1, get the last iteration
         if self.initial_iteration == -1:
@@ -810,16 +822,14 @@ if __name__ == "__main__":
     SPLIT_ID = 5
 
     model_dir = getModelPath(DS_NAME, SPLIT_ID, MARKERS_NAME, ARCH_NAME, 
-                            STRIDE, SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
-                            ATTENTION, DROPOUT)
+                            STRIDE, SPX_ALG, FINAL_SPX, GRAPH_FEATS, 
+                            ATTENTION, AGGREGATION, DROPOUT, INIT_SEEDS)
     
     print('Creating model ..')
-    model = GFLIMModel(DATASET_PATH, model_dir, 
-                                    f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
-                                    f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{SPLIT_ID}', 
-                                    SPLIT_ID,
-                                    SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
-                                    STRIDE, ATTENTION, AGGREGATION, DROPOUT)
+    model = GFLIMModel(model_dir, f'{DATASET_PATH}/archs/{ARCH_NAME}.json', 
+                    f'{DATASET_PATH}/markers/{MARKERS_NAME}/split{SPLIT_ID}', 
+                    SPX_ALG, INIT_SEEDS, FINAL_SPX, GRAPH_FEATS, 
+                    STRIDE, ATTENTION, AGGREGATION, DROPOUT)
     
     print('Getting gflim data ..')
     img_name = '6'
@@ -828,7 +838,7 @@ if __name__ == "__main__":
         label_path=os.path.join(DATASET_PATH, 'imgs', 'label', f'{img_name}.png'),
         graph_path=os.path.join(DATASET_PATH, 'superpixels', SPX_ALG, f'{INIT_SEEDS}-{FINAL_SPX}', GRAPH_FEATS, 'graphs', f'{img_name}.json'),
         superpixel_path=os.path.join(DATASET_PATH, 'superpixels', SPX_ALG, f'{INIT_SEEDS}-{FINAL_SPX}', GRAPH_FEATS, 'labels', f'{img_name}.pgm'),
-        num_neighbors=model.kernel_size
+        num_neighbors=model.arch['layer1']['conv']['kernel_size']
     )
     
     print('GFLIM data loaded.')
@@ -840,11 +850,14 @@ if __name__ == "__main__":
         original_image_path=os.path.join(DATASET_PATH, 'automatic_splits', f'split{SPLIT_ID}', 'orig'),
         labels_path=os.path.join(DATASET_PATH, 'automatic_splits', f'split{SPLIT_ID}', 'label'),
         save_path=os.path.join(model.model_dir, 'results_semi_automatic'),
-        max_markers=8,
-        initial_iteration=3, tsne=True
+        max_markers=60,
+        initial_iteration=0, tsne=True
     )
 
-    markers_selection.iterative_marker_selection(train=True)
+    train_img_folder = os.path.join(DATASET_PATH, 'automatic_splits', f'split{SPLIT_ID}', 'orig', 'train')
+    val_img_folder = os.path.join(DATASET_PATH, 'automatic_splits', f'split{SPLIT_ID}', 'orig', 'val')
+
+    markers_selection.iterative_marker_selection(train_img_folder, val_img_folder, train=True)
 
     """
     STRIDE = 'none'
