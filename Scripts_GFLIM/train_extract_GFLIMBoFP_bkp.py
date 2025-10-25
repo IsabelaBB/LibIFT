@@ -579,19 +579,21 @@ class GFLIMFunctions():
             sys.stdout.flush()
         os.system("{} {}".format(function, " ".join([str(i) for i in args])))
 
-    def create_graphs(self, dataset_path, final_spx, graphs_path_src, graph_feats, spx_alg, init_seeds=0):
+    def create_graphs(self, dataset_path, final_spx : list, graphs_path_src, graph_feats, spx_alg, init_seeds=0):
         """
         Create the graphs for the dataset if they do not exist.
         Args:
             dataset_path (str): images directory
-            final_spx (int): Number of superpixels.
+            final_spx (list): Number of superpixels.
             graphs_path_src (str): Path where the graphs and labels will be stored.
             graph_feats (str): Type of graph features to use.
             spx_alg (str): Superpixel algorithm to use.
             init_seeds (int): Initial number of seeds for the superpixel algorithm (only used when spx_alg=DISF).
         """
         if spx_alg in ['DISF', 'ERGC']:
-            self.__callFunction__(self.functions['CreateGraph'], [f'{dataset_path}/imgs/orig', final_spx, graphs_path_src, graph_feats, spx_alg, init_seeds], 'Creating graphs')
+            if len(final_spx) != 1:
+                raise ValueError("create_graphs: final_spx must have only one value when spx_alg is DISF or ERGC")
+            self.__callFunction__(self.functions['CreateGraph'], [f'{dataset_path}/imgs/orig', final_spx[0], graphs_path_src, graph_feats, spx_alg, init_seeds], 'Creating graphs')
         else:
             self.__callFunction__(self.functions['CreateSpxImageSH'], [f'--img {dataset_path}/imgs/orig', f'--save {graphs_path_src}', f'--node_feat {graph_feats}', f'--k {",".join([str(spx) for spx in final_spx])}'], 'Creating superpixel images')
             for spx in final_spx:
@@ -766,7 +768,7 @@ class GFLIMModel():
 
         self.graphs_path_src = os.path.join(self.dataset_path, 'superpixels', self.spx_alg, f'{self.init_seeds}-{self.final_spx}' if self.spx_alg == 'DISF' else f'{self.final_spx}', self.graph_feats)
         if not os.path.exists(self.graphs_path_src):
-            self.functions.create_graphs(self.dataset_path, self.final_spx, self.graphs_path_src, self.graph_feats, self.spx_alg, self.init_seeds)
+            self.functions.create_graphs(self.dataset_path, [self.final_spx], self.graphs_path_src, self.graph_feats, self.spx_alg, self.init_seeds)
 
         self.arch = self.read_architecture(self.arch_file)
 

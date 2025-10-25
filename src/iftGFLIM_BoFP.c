@@ -2726,7 +2726,7 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
     const char line_delimiter[] = "\n";
     const char number_delimiter[] = " ";
     char *line, *endptr; 
-    int nkernels = 100, nkernels0, kernel_count = 0;
+    int nkernels = 100, nkernels0 = 0, kernel_count = 0;
 
     char* line_saveptr = NULL;
     char* number_saveptr = NULL;
@@ -2747,7 +2747,7 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
             nlines += 100;
             kernel_maps_scale0 = realloc(kernel_maps_scale0, nlines * sizeof(int *));
             if(kernel_maps_scale0 == NULL)
-                iftError("out of memory", __func__);
+                iftError("out of memory, nlines=%d", __func__, nlines);
         }
 
         kernel_count = 0, nkernels = 100;
@@ -2759,10 +2759,10 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
             // allocate memory for more kernels if needed
             if(kernel_count >= nkernels)
             {
-                nkernels0 += 100;
-                kernel_maps_scale0[line_count] = realloc(kernel_maps_scale0[line_count], nkernels0 * sizeof(int));
+                nkernels += 100;
+                kernel_maps_scale0[line_count] = realloc(kernel_maps_scale0[line_count], nkernels * sizeof(int));
                 if(kernel_maps_scale0[line_count] == NULL)
-                    iftError("out of memory", __func__);
+                    iftError("out of memory, nkernels=%d", __func__, nkernels);
             }
             kernel_maps_scale0[line_count][kernel_count] = (int) strtol(inner_token,&endptr,10);
             kernel_count++;
@@ -2777,6 +2777,11 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
     }
     nlines = line_count;
     free(buf);
+
+    if(line_count == 0)
+        iftError("No lines found in the file", __func__);
+    if(nkernels0 == 0)
+        iftError("No kernels found in the first line of the file", __func__);
 
     iftIntArray **kernel_maps = iftAlloc(nlines, sizeof(iftIntArray *));
     

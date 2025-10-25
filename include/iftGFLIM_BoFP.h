@@ -185,6 +185,22 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
                             char *model_dir, iftFileSet *fs);
                             
 int* iftGFLIMGetFinerResidualLayer(iftGFLIMArch *arch);
+iftIntArray **iftGFLIMCompute_kernel_maps(char *filename);
+iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std);
+iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std);
+iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std);
+iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n, 
+                                        int **nodes_map, iftIntArray **kernels_map, 
+                                        int finer_scale, bool use_otsu, bool use_std,
+                                        int reinforce_scale);
+int *iftGFLIMComputeNodeMap(iftImage *spx_imgi, iftImage *spx_img0);
+void iftGFLIMMaxNormGraph(iftGFLIMGraph *graph);
 
 #ifdef __cplusplus
 }

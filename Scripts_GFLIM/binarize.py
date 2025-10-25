@@ -2,6 +2,7 @@ from skimage.filters import threshold_otsu
 import numpy as np
 from skimage import io
 import os
+import argparse
 
 def binarize_saliency(saliency):
     threshold = threshold_otsu(saliency)
@@ -22,8 +23,13 @@ def binarize_saliency(saliency):
     
     return bin_sal
 
-imgs_dir = '/home/isabela/Codes/LibIFT/Results/cells_dataset/split1/interactive_markers/arch_cells_noskip/gflim-BoFP/graph-based/DISF/50000-20000/kmeans/SUM-CLASS_DOMINANCE/graph-adaptive_3/label2'
-out_dir = '/home/isabela/Codes/LibIFT/Results/cells_dataset/split1/interactive_markers/arch_cells_noskip/gflim-BoFP/graph-based/DISF/50000-20000/kmeans/SUM-CLASS_DOMINANCE/graph-adaptive_3/bin_label2'
+parser = argparse.ArgumentParser("simple_example")
+parser.add_argument("input_dir", help="Input directory containing images.", type=str)
+parser.add_argument("output_dir", help="Output directory for binarized images.", type=str)
+args = parser.parse_args()
+
+imgs_dir = args.input_dir
+out_dir = args.output_dir
 os.makedirs(out_dir, exist_ok=True)
 for i,filename in enumerate(os.listdir(imgs_dir)):
         basename = filename.split(".")[0]
