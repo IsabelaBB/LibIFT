@@ -44,7 +44,8 @@ iftGFLIMArch *iftReadGFLIMArch(char *filename) {
                 iftError("skip_type not found in layer %d", __func__, l+1);
             }
         }else{
-            arch->layer[l].skip_type = iftAllocCharArray(1);
+            arch->layer[l].skip_type = iftAllocCharArray(2);
+            sprintf(arch->layer[l].skip_type, " ");
         }
         
         iftDict *pool_dict = iftGetDictFromDict("pooling", layer_dict);

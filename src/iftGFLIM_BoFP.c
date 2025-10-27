@@ -2554,6 +2554,32 @@ iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n,
     return merged;
 }
 
+iftMatrix *iftGFLIMMergeMatrices_concat(iftMatrix **X, int n, 
+                                        int **nodes_map,  int finer_scale)
+{
+    /*
+    Merge two feature matrices by concatenation
+    */
+
+    int nfeats = X[0]->ncols;
+    for(int i = 1; i < n; i++)
+        nfeats += X[i]->ncols;
+
+    iftMatrix *merged = iftCreateMatrix(nfeats, X[finer_scale]->nrows);
+    
+    nfeats = 0;
+    for(int i = 0; i < n; i++)
+    {
+        for(int j = 0; j < X[i]->ncols; j++)
+        {
+            for(int k = 0; k < merged->nrows; k++)
+                iftMatrixElem(merged, nfeats + j, k) = iftMatrixElem(X[i], j, nodes_map[i][k]);
+        }
+        nfeats += X[i]->ncols;
+    }
+    
+    return merged;
+}
 
 iftIntArray **iftGFLIMCompute_kernel_maps_bkp(char *filename, int *nscales)
 {
@@ -2951,23 +2977,27 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
     int *finer_layers = iftGFLIMGetFinerResidualLayer(arch);
 
     int finer_scale_index = 0; // this index refers to the matrices, kernel_maps, and load maps loaded
+    iftIntArray **kernels_maps = NULL;
 
-    // compute the kernel maps for the layers that will be used in the skip connection
-    iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
-    iftIntArray **kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
-    for(int j = 0; j < nskip; j++)
+    if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
     {
-        // the layer j may have skip connections to layers finer than itself, so we need to find its finer scale and map it from finer_layer
-        int i = skip_layers[j];
-        kernels_maps[j] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, finer_layers[i-1]-1);
-        if(finer_scale_index == 0 && finer_layers[layer-1] == finer_layers[i-1]) // if the skip layer is the finer layer, store its index
-            finer_scale_index = j;
+        // compute the kernel maps for the layers that will be used in the skip connection
+        iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
+        kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
+        for(int j = 0; j < nskip; j++)
+        {
+            // the layer j may have skip connections to layers finer than itself, so we need to find its finer scale and map it from finer_layer
+            int i = skip_layers[j];
+            kernels_maps[j] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, finer_layers[i-1]-1);
+            if(finer_scale_index == 0 && finer_layers[layer-1] == finer_layers[i-1]) // if the skip layer is the finer layer, store its index
+                finer_scale_index = j;
+        }
+        // create a mapping from the kernels of the finer layer to those of the current layer
+        kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
+        for(int i = 0; i < arch->nlayers-1; i++)
+            iftDestroyIntArray(&kernels_maps_all[i]);
+        iftFree(kernels_maps_all);
     }
-    // create a mapping from the kernels of the finer layer to those of the current layer
-    kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
-    for(int i = 0; i < arch->nlayers-1; i++)
-        iftDestroyIntArray(&kernels_maps_all[i]);
-    iftFree(kernels_maps_all);
 
     for (int file_id = 0; file_id < fs->n; file_id++)
     {
@@ -3022,6 +3052,8 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, 0);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscalei") == 0)
             merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, nskip);
+        else if(strcmp(arch->layer[layer-1].skip_type, "concat") == 0)
+            merged = iftGFLIMMergeMatrices_concat(matrices, nskip+1, node_maps, finer_scale_index);
         else
             iftError("Unknown merge function: %s",  __func__, arch->layer[layer-1].skip_type);
 
@@ -3033,38 +3065,51 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         iftFree(matrices);
         iftFree(node_maps);
 
-        // copy the merged features to the graph of the current layer
-        sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
-        iftGFLIMGraph *graph_finer = iftReadGFLIMGraph(filename);
-        if(graph_finer->num_nodes != merged->nrows || graph_finer->num_feats != merged->ncols)
-            iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
-                    graph_finer->num_nodes, graph_finer->num_feats, merged->nrows, merged->ncols); 
-        for(int i = 0; i < graph_finer->num_nodes; i++)
+        iftGFLIMGraph *graph_merged = NULL;
+        
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
         {
-            for(int j = 0; j < graph_finer->num_feats; j++)
-                graph_finer->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
+            // copy the merged features to the graph of the current layer
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+            graph_merged = iftReadGFLIMGraph(filename);
+        }else{
+            // read the finer layer graph to create a new graph with the merged features
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+            iftGFLIMGraph *graph_finer = iftReadGFLIMGraph(filename);
+            graph_merged = iftCopyGFLIMGraph(merged->ncols, graph_finer, false);
+            iftDestroyGFLIMGraph(&graph_finer);
+        }
+        
+        if(graph_merged->num_nodes != merged->nrows || graph_merged->num_feats != merged->ncols)
+            iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
+                graph_merged->num_nodes, graph_merged->num_feats, merged->nrows, merged->ncols); 
+        
+        for(int i = 0; i < graph_merged->num_nodes; i++)
+        {
+            for(int j = 0; j < graph_merged->num_feats; j++)
+                graph_merged->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
         }
         // min-max normalization per channel
-        /*for(int j = 0; j < graph_finer->num_feats; j++)
+        /*for(int j = 0; j < graph_merged->num_feats; j++)
         {
             float min = iftMatrixElem(merged, j, 0);
             float max = iftMatrixElem(merged, j, 0);
-            for(int i = 1; i < graph_finer->num_nodes; i++)
+            for(int i = 1; i < graph_merged->num_nodes; i++)
             {
                 if(iftMatrixElem(merged, j, i) < min)
                     min = iftMatrixElem(merged, j, i);
                 if(iftMatrixElem(merged, j, i) > max)
                     max = iftMatrixElem(merged, j, i);
             }
-            for(int i = 0; i < graph_finer->num_nodes; i++)
-                graph_finer->nodes[i].feats[j] = (iftMatrixElem(merged, j, i) - min) / (max - min);
+            for(int i = 0; i < graph_merged->num_nodes; i++)
+                graph_merged->nodes[i].feats[j] = (iftMatrixElem(merged, j, i) - min) / (max - min);
         }*/
         iftDestroyMatrix(&merged);
 
         // save the graph with the skip connections
         sprintf(filename, "%s/layer%d/%s.json", model_dir, layer, basename);
-        iftWriteGFLIMGraph(graph_finer, filename);
-        iftDestroyGFLIMGraph(&graph_finer);
+        iftWriteGFLIMGraph(graph_merged, filename);
+        iftDestroyGFLIMGraph(&graph_merged);
 
         // save the superpixel image of the finer layer
 		sprintf(filename, "%s/labels%d/%s.pgm", model_dir, layer, basename);
@@ -3074,9 +3119,12 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         iftFree(basename);
    }
     iftFree(skip_layers);
-    for(int j = 0; j < nskip+1; j++)
-        iftDestroyIntArray(&kernels_maps[j]);
-    iftFree(kernels_maps);
+    if(kernels_maps != NULL)
+    {
+        for(int j = 0; j < nskip+1; j++)
+            iftDestroyIntArray(&kernels_maps[j]);
+        iftFree(kernels_maps);
+    }
     iftFree(finer_layers);
 }
 
@@ -3106,23 +3154,27 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
     int *finer_layers = iftGFLIMGetFinerResidualLayer(arch);
 
     int finer_scale_index = 0; // this index refers to the matrices, kernel_maps, and load maps loaded
+    iftIntArray **kernels_maps = NULL;
 
-    // compute the kernel maps for the layers that will be used in the skip connection
-    iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
-    iftIntArray **kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
-    for(int j = 0; j < nskip; j++)
+    if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
     {
-        // the layer j may have skip connections to layers finer than itself, so we need to find its finer scale and map it from finer_layer
-        int i = skip_layers[j];
-        kernels_maps[j] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, finer_layers[i-1]-1);
-        if(finer_scale_index == 0 && finer_layers[layer-1] == finer_layers[i-1]) // if the skip layer is the finer layer, store its index
-            finer_scale_index = j;
+        // compute the kernel maps for the layers that will be used in the skip connection
+        iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
+        kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
+        for(int j = 0; j < nskip; j++)
+        {
+            // the layer j may have skip connections to layers finer than itself, so we need to find its finer scale and map it from finer_layer
+            int i = skip_layers[j];
+            kernels_maps[j] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, finer_layers[i-1]-1);
+            if(finer_scale_index == 0 && finer_layers[layer-1] == finer_layers[i-1]) // if the skip layer is the finer layer, store its index
+                finer_scale_index = j;
+        }
+        // create a mapping from the kernels of the finer layer to those of the current layer
+        kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
+        for(int i = 0; i < arch->nlayers-1; i++)
+            iftDestroyIntArray(&kernels_maps_all[i]);
+        iftFree(kernels_maps_all);
     }
-    // create a mapping from the kernels of the finer layer to those of the current layer
-    kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
-    for(int i = 0; i < arch->nlayers-1; i++)
-        iftDestroyIntArray(&kernels_maps_all[i]);
-    iftFree(kernels_maps_all);
 
     for (int k = 0; k <= last - first; k++)
     {
@@ -3173,6 +3225,8 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
             merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, 0);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscalei") == 0)
             merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, nskip);
+        else if(strcmp(arch->layer[layer-1].skip_type, "concat") == 0)
+            merged = iftGFLIMMergeMatrices_concat(matrices, nskip+1, node_maps, finer_scale_index);
         else
             iftError("Unknown merge function: %s", __func__, arch->layer[layer-1].skip_type);
 
@@ -3184,17 +3238,29 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
         iftFree(matrices);
         iftFree(node_maps);
 
-        // copy the merged features to the graph of the current layer
-        sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
         iftDestroyGFLIMGraph(&(input->val[k]));
-        iftGFLIMGraph *graph_finer = iftReadGFLIMGraph(filename);
-        if(graph_finer->num_nodes != merged->nrows || graph_finer->num_feats != merged->ncols)
-            iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
-                    graph_finer->num_nodes, graph_finer->num_feats, merged->nrows, merged->ncols); 
-        for(int i = 0; i < graph_finer->num_nodes; i++)
+
+        iftGFLIMGraph *graph_merged = NULL;
+
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
         {
-            for(int j = 0; j < graph_finer->num_feats; j++)
-                graph_finer->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
+            // copy the merged features to the graph of the current layer
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+            graph_merged = iftReadGFLIMGraph(filename);
+        }else{
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+            iftGFLIMGraph *graph_finer = iftReadGFLIMGraph(filename);
+            graph_merged = iftCopyGFLIMGraph(merged->ncols, graph_finer, false);
+            iftDestroyGFLIMGraph(&graph_finer);
+        }
+
+        if(graph_merged->num_nodes != merged->nrows || graph_merged->num_feats != merged->ncols)
+            iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
+                    graph_merged->num_nodes, graph_merged->num_feats, merged->nrows, merged->ncols); 
+        for(int i = 0; i < graph_merged->num_nodes; i++)
+        {
+            for(int j = 0; j < graph_merged->num_feats; j++)
+                graph_merged->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
         }
         
         // min-max normalization per channel
@@ -3213,14 +3279,17 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
                 graph_finer->nodes[i].feats[j] = (iftMatrixElem(merged, j, i) - min) / (max - min);
         }*/
         iftDestroyMatrix(&merged);
-        input->val[k] = graph_finer;
-        graph_finer = NULL;
+        input->val[k] = graph_merged;
+        graph_merged = NULL;
         iftFree(basename);
     }
     iftFree(skip_layers);
-    for(int j = 0; j < nskip+1; j++)
-        iftDestroyIntArray(&kernels_maps[j]);
-    iftFree(kernels_maps);
+    if(kernels_maps != NULL)
+    {
+        for(int j = 0; j < nskip+1; j++)
+            iftDestroyIntArray(&kernels_maps[j]);
+        iftFree(kernels_maps);
+    }
     iftFree(finer_layers);
 }
 
