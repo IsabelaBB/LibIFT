@@ -185,23 +185,26 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
                             char *model_dir, iftFileSet *fs);
                             
 int* iftGFLIMGetFinerResidualLayer(iftGFLIMArch *arch);
-iftIntArray **iftGFLIMCompute_kernel_maps(char *filename);
+iftIntArray **iftGFLIMCompute_kernel_maps(char *filename, int *nscales);
 iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
                                         int finer_scale, bool use_otsu, bool use_std);
 iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
                                         int finer_scale, bool use_otsu, bool use_std);
 iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
                                         int finer_scale, bool use_otsu, bool use_std);
 iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
                                         int finer_scale, bool use_otsu, bool use_std,
                                         int reinforce_scale);
+iftMatrix *iftGFLIMMergeMatrices_sum_att(iftMatrix **X, int n, 
+                                        int *kernel_labels,
+                                        int finer_scale,
+                                    iftGFLIMGraph *graph);
 int *iftGFLIMComputeNodeMap(iftImage *spx_imgi, iftImage *spx_img0);
 void iftGFLIMMaxNormGraph(iftGFLIMGraph *graph);
-
+iftMatrix *iftGFLIMUpsampleFeatureMatrix(iftMatrix *X, 
+                                    int *nodes_map, iftIntArray *kernels_map, 
+                                    int nnodes, int nfeats);
+                                    
 #ifdef __cplusplus
 }
 #endif

@@ -2282,8 +2282,7 @@ float **iftGFLIMStdFromFeatureMatrix(iftMatrix **X, int n, int finer_scale)
     return stds;
 }
 
-iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
+iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n,  
                                         int finer_scale, bool use_otsu, bool use_std)
 {
     /*
@@ -2301,12 +2300,11 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n,
     for(int i = 0; i < n; i++)
     {
         if(i == finer_scale) continue;
-        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
-
+        
         if(use_otsu)
         {
-            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
-            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(X[i]);
+            iftGFLIMSumValueConditionToFeatureMatrix(X[i], otsu_thresholds);
             iftFree(otsu_thresholds);
         }
 
@@ -2315,10 +2313,9 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n,
         {
             for(int k = 0; k < X[finer_scale]->nrows; k++)
             {
-                iftMatrixElem(merged, j, k) *= iftMatrixElem(tmp, j, k);
+                iftMatrixElem(merged, j, k) *= iftMatrixElem(X[i], j, k);
             }
         }
-        iftDestroyMatrix(&tmp);
     }
 
     if(use_std)
@@ -2342,7 +2339,6 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n,
 }
 
 iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
                                         int finer_scale, bool use_otsu, bool use_std)
 {
     /*
@@ -2360,12 +2356,11 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n,
     for(int i = 0; i < n; i++)
     {
         if(i == finer_scale) continue;
-        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
 
         if(use_otsu)
         {
-            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
-            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(X[i]);
+            iftGFLIMSumValueConditionToFeatureMatrix(X[i], otsu_thresholds);
             iftFree(otsu_thresholds);
         }
 
@@ -2374,10 +2369,9 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n,
         {
             for(int k = 0; k < X[finer_scale]->nrows; k++)
             {
-                iftMatrixElem(merged, j, k) *= iftMatrixElem(tmp, j, k);
+                iftMatrixElem(merged, j, k) *= iftMatrixElem(X[i], j, k);
             }
         }
-        iftDestroyMatrix(&tmp);
     }
 
     if(use_std)
@@ -2407,8 +2401,7 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n,
     return merged;
 }
 
-iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
+iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n,  
                                         int finer_scale, bool use_otsu, bool use_std)
 {
     /*
@@ -2426,12 +2419,11 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n,
     for(int i = 0; i < n; i++)
     {
         if(i == finer_scale) continue;
-        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
-
+        
         if(use_otsu)
         {
-            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
-            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(X[i]);
+            iftGFLIMSumValueConditionToFeatureMatrix(X[i], otsu_thresholds);
             iftFree(otsu_thresholds);
         }
 
@@ -2440,10 +2432,9 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n,
         {
             for(int k = 0; k < X[finer_scale]->nrows; k++)
             {
-                iftMatrixElem(merged, j, k) *= iftMatrixElem(tmp, j, k);
+                iftMatrixElem(merged, j, k) *= iftMatrixElem(X[i], j, k);
             }
         }
-        iftDestroyMatrix(&tmp);
     }
 
     if(use_std)
@@ -2463,24 +2454,17 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n,
         iftFree(stds);
     }
 
-    iftMatrix *sum_matrix = X[finer_scale];
-    if(X[n-1]->nrows != X[finer_scale]->nrows || X[n-1]->ncols != X[finer_scale]->ncols)
-        sum_matrix = iftGFLIMUpsampleFeatureMatrix(X[n-1], nodes_map[n-1], kernels_map[n-1], X[finer_scale]->nrows, X[finer_scale]->ncols);
-    for(int i = 0; i < sum_matrix->nrows; i++)
+    for(int i = 0; i < X[n-1]->nrows; i++)
     {
-        for(int j = 0; j < sum_matrix->ncols; j++)
+        for(int j = 0; j < X[n-1]->ncols; j++)
         {
-            iftMatrixElem(merged, j, i) += iftMatrixElem(sum_matrix, j, i);
+            iftMatrixElem(merged, j, i) += iftMatrixElem(X[n-1], j, i);
         }
     }
-    if(X[n-1]->nrows != X[finer_scale]->nrows || X[n-1]->ncols != X[finer_scale]->ncols)
-        iftDestroyMatrix(&sum_matrix);
-    sum_matrix = NULL;
     return merged;
 }
 
 iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n, 
-                                        int **nodes_map, iftIntArray **kernels_map, 
                                         int finer_scale, bool use_otsu, bool use_std,
                                         int reinforce_scale)
 {
@@ -2499,12 +2483,11 @@ iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n,
     for(int i = 0; i < n; i++)
     {
         if(i == finer_scale) continue;
-        iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(X[i], nodes_map[i], kernels_map[i], X[finer_scale]->nrows, X[finer_scale]->ncols);
 
         if(use_otsu)
         {
-            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(tmp);
-            iftGFLIMSumValueConditionToFeatureMatrix(tmp, otsu_thresholds);
+            float *otsu_thresholds = iftGFLIMOtsuFromFeatureMatrix(X[i]);
+            iftGFLIMSumValueConditionToFeatureMatrix(X[i], otsu_thresholds);
             iftFree(otsu_thresholds);
         }
 
@@ -2513,10 +2496,9 @@ iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n,
         {
             for(int k = 0; k < X[finer_scale]->nrows; k++)
             {
-                iftMatrixElem(merged, j, k) += iftMatrixElem(tmp, j, k);
+                iftMatrixElem(merged, j, k) += iftMatrixElem(X[i], j, k);
             }
         }
-        iftDestroyMatrix(&tmp);
     }
 
     if(use_std)
@@ -2536,23 +2518,159 @@ iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n,
         iftFree(stds);
     }
 
-    if(reinforce_scale > 0)
+    if(reinforce_scale >= 0)
     {
-        iftMatrix *sum_matrix = X[finer_scale];
-        if(X[reinforce_scale]->nrows != X[finer_scale]->nrows || X[reinforce_scale]->ncols != X[finer_scale]->ncols)
-            sum_matrix = iftGFLIMUpsampleFeatureMatrix(X[reinforce_scale], nodes_map[reinforce_scale], kernels_map[reinforce_scale], X[finer_scale]->nrows, X[finer_scale]->ncols);
-        for(int i = 0; i < sum_matrix->nrows; i++)
+        for(int i = 0; i < X[reinforce_scale]->nrows; i++)
         {
-            for(int j = 0; j < sum_matrix->ncols; j++)
-                iftMatrixElem(merged, j, i) += iftMatrixElem(sum_matrix, j, i);
+            for(int j = 0; j < X[reinforce_scale]->ncols; j++)
+                iftMatrixElem(merged, j, i) += iftMatrixElem(X[reinforce_scale], j, i);
         }
-        if(X[reinforce_scale]->nrows != X[finer_scale]->nrows || X[reinforce_scale]->ncols != X[finer_scale]->ncols)
-            iftDestroyMatrix(&sum_matrix);
-        sum_matrix = NULL;
     }
     
     return merged;
 }
+
+iftMatrix *iftGFLIMMergeMatrices_sum_att(iftMatrix **X, int n, 
+                                        int *kernel_labels,
+                                        int finer_scale,
+                                    iftGFLIMGraph *graph)
+{
+    /*
+    Merge feature matrices by sum with attention 
+    */
+
+    // get the number of labels and the minimum label
+    int nlabels = kernel_labels[0], minLabel = kernel_labels[0];
+    for (int j = 1; j < X[0]->ncols; j++)
+    {
+        if (kernel_labels[j] < minLabel)
+            minLabel = kernel_labels[j];
+        if (kernel_labels[j] > nlabels)
+            nlabels = kernel_labels[j];
+    }
+    nlabels = nlabels - minLabel + 1;
+
+    // compute the number of kernels per label
+    int nkernels[nlabels];
+    for (int j = 0; j < nlabels; j++)
+        nkernels[j] = 0;
+    for (int j = 0; j < X[0]->ncols; j++)
+        nkernels[kernel_labels[j] - minLabel]++;
+    
+    iftMatrix **X_norm = iftAlloc(n, sizeof(iftMatrix *));
+    for(int scale = 0; scale < n; scale++)
+        X_norm[scale] = iftCreateMatrix(X[scale]->ncols, X[scale]->nrows);
+    
+    for(int i = 0; i < X[0]->nrows; i++)
+    {
+        double label_strength[nlabels];
+
+        for (int l = 1; l < nlabels; l++)
+            label_strength[l] = 0;
+
+        double min[nlabels], max[nlabels];
+        // min-max normalization
+        for (int l = 1; l < nlabels; l++)
+        {
+            min[l] = IFT_INFINITY_FLT;
+            max[l] = IFT_INFINITY_FLT_NEG;
+        }
+        for(int scale = 0; scale < n; scale++)
+        {
+            for(int j = 0; j < X[scale]->ncols; j++)
+            {
+                int label = kernel_labels[j] - minLabel;
+                if(label == 0) continue;
+                if (iftMatrixElem(X[scale], j, i) < min[label])
+                    min[label] = iftMatrixElem(X[scale], j, i);
+                if (iftMatrixElem(X[scale], j, i) > max[label])
+                    max[label] = iftMatrixElem(X[scale], j, i);
+            }
+        }
+        
+        for(int scale = 0; scale < n; scale++)
+        {
+            double label_strength_s[nlabels];
+            for (int l = 1; l < nlabels; l++)
+                label_strength_s[l] = 0;
+
+            for (int j = 0; j < X[scale]->ncols; j++)
+            {
+                int label = kernel_labels[j] - minLabel;
+                if(label == 0) continue;
+
+                if (max[label] == min[label])
+                    iftMatrixElem(X_norm[scale], j, i) = 0;
+                else
+                    iftMatrixElem(X_norm[scale], j, i) = (iftMatrixElem(X[scale], j, i) - min[label]) / (max[label] - min[label]);
+
+                label_strength_s[label] += iftMatrixElem(X_norm[scale], j, i);
+            }
+            for (int l = 1; l < nlabels; l++)
+                label_strength[l] += (label_strength_s[l] / nkernels[l]);
+            
+        }
+        for (int l = 1; l < nlabels; l++)
+            label_strength[l] /= n;
+        
+        for(int scale = 0; scale < n; scale++)
+        {
+            for(int j = 0; j < X_norm[scale]->ncols; j++)
+            {
+                int label = kernel_labels[j] - minLabel;
+                if(label == 0) continue;
+
+                double max_val = iftMax(label_strength[label], iftMatrixElem(X_norm[scale], j, i));
+
+                double label_dominance = 0;
+                if (max_val != 0)
+                    label_dominance = (label_strength[label] - iftMatrixElem(X_norm[scale], j, i)) / max_val; // [-1,1]
+
+                iftMatrixElem(X_norm[scale], j, i) = (iftMatrixElem(X_norm[scale], j, i) * label_dominance) + 1;
+            }
+        }
+    }
+
+    iftMatrix *merged = iftCreateMatrix(X[finer_scale]->ncols, X[finer_scale]->nrows);
+
+    for(int scale = 0; scale < n; scale++)
+    {
+        for (int i = 0; i < X[scale]->nrows; i++)
+        {
+            float *attention_vals = iftAllocFloatArray(X[scale]->ncols);
+            iftSet *node = graph->nodes[i].adj;
+            while (node != NULL)
+            {
+                for (int j = 0; j < X[scale]->ncols; j++)
+                {
+                    int label = kernel_labels[j] - minLabel;
+                    if(label != 0)
+                        attention_vals[j] += iftMatrixElem(X_norm[scale], j, node->elem);
+                }
+                node = node->next;
+            }
+            for (int j = 0; j < X[scale]->ncols; j++)
+            {
+                int label = kernel_labels[j] - minLabel;
+                if(label != 0)
+                {
+                    attention_vals[j] /= graph->nodes[i].numNeighbors;
+                    attention_vals[j] += iftMatrixElem(X_norm[scale], j, i);
+                    iftMatrixElem(merged, j, i) += iftMatrixElem(X[scale], j, i) * attention_vals[j];
+                }else
+                    iftMatrixElem(merged, j, i) += iftMatrixElem(X[scale], j, i);
+            }
+            iftFree(attention_vals);
+        }
+    }
+
+    for(int scale = 0; scale < n; scale++)
+        iftDestroyMatrix(&X_norm[scale]);
+    iftFree(X_norm);
+    
+    return merged;
+}
+
 
 iftMatrix *iftGFLIMMergeMatrices_concat(iftMatrix **X, int n, 
                                         int **nodes_map,  int finer_scale)
@@ -2743,7 +2861,7 @@ char* read_file(const char* filename) {
     return content; 
 } 
 
-iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
+iftIntArray **iftGFLIMCompute_kernel_maps(char *filename, int *nscales)
 {
     
     char *buf = read_file(filename);
@@ -2810,7 +2928,8 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename)
         iftError("No kernels found in the first line of the file", __func__);
 
     iftIntArray **kernel_maps = iftAlloc(nlines, sizeof(iftIntArray *));
-    
+    *nscales = nlines;
+
     // compute the kernel maps for all scales
     // from scale 0 to scale 1
     int nkernelsi = 0;
@@ -2965,7 +3084,6 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             nskip++;
         }   
     }
-    
     // if there is no skip connection, return
     if(nskip == 0)
     {
@@ -2981,8 +3099,9 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
 
     if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
     {
+        int nlayers_ = 0;
         // compute the kernel maps for the layers that will be used in the skip connection
-        iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
+        iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file, &nlayers_); // compute the kernel maps for all layers
         kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
         for(int j = 0; j < nskip; j++)
         {
@@ -2994,10 +3113,23 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         }
         // create a mapping from the kernels of the finer layer to those of the current layer
         kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
-        for(int i = 0; i < arch->nlayers-1; i++)
+        for(int i = 0; i < nlayers_; i++)
             iftDestroyIntArray(&kernels_maps_all[i]);
         iftFree(kernels_maps_all);
     }
+
+    int **kernel_labels = NULL;
+    if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+    {
+        // load the kernel labels for attention-based merging
+        char filename[512];
+        int nkernels = 0;
+        sprintf(filename, "%s/model/conv%d-labels.txt", model_dir, finer_layers[layer-1]);
+        kernel_labels = iftAlloc(1, sizeof(int *));
+        kernel_labels[0] = iftGFLIMLoadKernelLabels(filename, &nkernels);
+    }
+
+    
 
     for (int file_id = 0; file_id < fs->n; file_id++)
     {
@@ -3016,7 +3148,10 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             int i = skip_layers[j];
             sprintf(filename, "%s/layer%d/%s.json", model_dir, i, basename);
             iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
-            iftGFLIMMaxNormGraph(graph_skip);
+
+            if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+                iftGFLIMMaxNormGraph(graph_skip);
+
             matrices[j] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
             iftDestroyGFLIMGraph(&graph_skip);
 
@@ -3028,7 +3163,9 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         }
         sprintf(filename, "%s/layer%d/%s.json", model_dir, layer, basename);
         iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
-        iftGFLIMMaxNormGraph(graph_skip);
+
+        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+            iftGFLIMMaxNormGraph(graph_skip);
         matrices[nskip] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
         iftDestroyGFLIMGraph(&graph_skip);
 
@@ -3036,24 +3173,49 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         iftImage *spx_img = iftReadImageByExt(filename);
         node_maps[nskip] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
 
+        node_maps[nskip] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
         iftDestroyImage(&spx_img);
+        
+        iftGFLIMGraph *graph_merged = NULL;
+
+        // residual connections that require upscaling
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
+        {
+            for(int j = 0; j < nskip+1; j++)
+            {
+                if(j == finer_scale_index) continue;
+                iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(matrices[j], node_maps[j], kernels_maps[j], matrices[finer_scale_index]->nrows, matrices[finer_scale_index]->ncols);
+                iftDestroyMatrix(&matrices[j]);
+                matrices[j] = tmp;
+                tmp = NULL;
+            }
+        }
+
+        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+        {
+            // read the finer graph to be used in attention-based merging
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+            graph_merged = iftReadGFLIMGraph(filename);
+        }
 
         // merge the feature matrices
         iftMatrix *merged = NULL;
         if(strcmp(arch->layer[layer-1].skip_type, "dotprod") == 0)
-            merged = iftGFLIMMergeMatrices_dotProd(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+            merged = iftGFLIMMergeMatrices_dotProd(matrices, nskip+1, finer_scale_index, false, false);
         else if(strcmp(arch->layer[layer-1].skip_type, "dotprod_sumscale0") == 0)
-            merged = iftGFLIMMergeMatrices_dotProd_sumScale0(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+            merged = iftGFLIMMergeMatrices_dotProd_sumScale0(matrices, nskip+1, finer_scale_index, false, false);
         else if(strcmp(arch->layer[layer-1].skip_type, "dotprod_sumscalei") == 0)
-            merged = iftGFLIMMergeMatrices_dotProd_sumScalei(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+            merged = iftGFLIMMergeMatrices_dotProd_sumScalei(matrices, nskip+1, finer_scale_index, false, false);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum") == 0)
-            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, -1);
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, finer_scale_index, false, false, -1);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscale0") == 0)
-            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, 0);
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, finer_scale_index, false, false, 0);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscalei") == 0)
-            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, nskip);
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, finer_scale_index, false, false, nskip);
         else if(strcmp(arch->layer[layer-1].skip_type, "concat") == 0)
             merged = iftGFLIMMergeMatrices_concat(matrices, nskip+1, node_maps, finer_scale_index);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+            merged = iftGFLIMMergeMatrices_sum_att(matrices, nskip+1, kernel_labels[0], finer_scale_index, graph_merged);
         else
             iftError("Unknown merge function: %s",  __func__, arch->layer[layer-1].skip_type);
 
@@ -3116,9 +3278,18 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
 		iftWriteImageByExt(spx_img0, filename);
         iftDestroyImage(&spx_img0);
 
+        iftDestroyImage(&spx_img0);
         iftFree(basename);
    }
     iftFree(skip_layers);
+
+    if(kernel_labels != NULL)
+    {
+        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+            iftFree(kernel_labels[0]);
+        iftFree(kernel_labels);
+    }
+
     if(kernels_maps != NULL)
     {
         for(int j = 0; j < nskip+1; j++)
@@ -3133,7 +3304,7 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
                             iftGFLIMArch *arch, char *kernels_file, 
                             char *model_dir)
 {
-    // get the layers that will be used in the skip connection of the current layer
+    // get the layers (from 1) that will be used in the skip connection of the current layer
     int *skip_layers = iftAllocIntArray(layer);
     int nskip = 0;
     for(int l = 1; l < layer; l++){
@@ -3158,8 +3329,9 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
 
     if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
     {
+        int nlayers_ = 0;
         // compute the kernel maps for the layers that will be used in the skip connection
-        iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file); // compute the kernel maps for all layers
+        iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file, &nlayers_); // compute the kernel maps for all layers
         kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
         for(int j = 0; j < nskip; j++)
         {
@@ -3171,9 +3343,20 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
         }
         // create a mapping from the kernels of the finer layer to those of the current layer
         kernels_maps[nskip] = iftGFLIMMergeKernelScales(kernels_maps_all, layer, finer_layers[layer-1]-1, layer-1);
-        for(int i = 0; i < arch->nlayers-1; i++)
+        for(int i = 0; i < nlayers_; i++)
             iftDestroyIntArray(&kernels_maps_all[i]);
         iftFree(kernels_maps_all);
+    }
+
+    int **kernel_labels = NULL;
+    if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+    {
+        // load the kernel labels for attention-based merging
+        char filename[512];
+        int nkernels = 0;
+        sprintf(filename, "%s/model/conv%d-labels.txt", model_dir, finer_layers[layer-1]);
+        kernel_labels = iftAlloc(1, sizeof(int *));
+        kernel_labels[0] = iftGFLIMLoadKernelLabels(filename, &nkernels);
     }
 
     for (int k = 0; k <= last - first; k++)
@@ -3194,7 +3377,10 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
             int i = skip_layers[j];
             sprintf(filename, "%s/layer%d/%s.json", model_dir, i, basename);
             iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
-            iftGFLIMMaxNormGraph(graph_skip);
+
+            if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+                iftGFLIMMaxNormGraph(graph_skip);
+
             matrices[j] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
             iftDestroyGFLIMGraph(&graph_skip);
 
@@ -3204,31 +3390,57 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
             node_maps[j] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
             iftDestroyImage(&spx_img);
         }
-        iftGFLIMMaxNormGraph(input->val[k]);
+
+        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+            iftGFLIMMaxNormGraph(input->val[k]);
         matrices[nskip] = iftGFLIMGraphToNodeFeaturesMatrix(input->val[k]);
         node_maps[nskip] = iftGFLIMComputeNodeMap(label_imgs->val[k], spx_img0);
         iftDestroyImage(&(label_imgs->val[k]));
         label_imgs->val[k] = spx_img0;
         spx_img0 = NULL;
 
+        iftGFLIMGraph *graph_merged = NULL;
+
+        // residual connections that require upscaling
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
+        {
+            for(int j = 0; j < nskip+1; j++)
+            {
+                if(j == finer_scale_index) continue;
+                iftMatrix *tmp = iftGFLIMUpsampleFeatureMatrix(matrices[j], node_maps[j], kernels_maps[j], matrices[finer_scale_index]->nrows, matrices[finer_scale_index]->ncols);
+                iftDestroyMatrix(&matrices[j]);
+                matrices[j] = tmp;
+                tmp = NULL;
+            }
+        }
+
+        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+        {
+            // read the finer graph to be used in attention-based merging
+            sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
+            graph_merged = iftReadGFLIMGraph(filename);
+        }
+
         // merge the feature matrices
         iftMatrix *merged = NULL;
         if(strcmp(arch->layer[layer-1].skip_type, "dotprod") == 0)
-            merged = iftGFLIMMergeMatrices_dotProd(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+            merged = iftGFLIMMergeMatrices_dotProd(matrices, nskip+1, finer_scale_index, false, false);
         else if(strcmp(arch->layer[layer-1].skip_type, "dotprod_sumscale0") == 0)
-            merged = iftGFLIMMergeMatrices_dotProd_sumScale0(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
-        else if(strcmp(arch->layer[layer-1].skip_type , "dotprod_sumscalei") == 0)
-            merged = iftGFLIMMergeMatrices_dotProd_sumScalei(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false);
+            merged = iftGFLIMMergeMatrices_dotProd_sumScale0(matrices, nskip+1, finer_scale_index, false, false);
+        else if(strcmp(arch->layer[layer-1].skip_type, "dotprod_sumscalei") == 0)
+            merged = iftGFLIMMergeMatrices_dotProd_sumScalei(matrices, nskip+1, finer_scale_index, false, false);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum") == 0)
-            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, -1);
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, finer_scale_index, false, false, -1);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscale0") == 0)
-            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, 0);
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, finer_scale_index, false, false, 0);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_sumscalei") == 0)
-            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, node_maps, kernels_maps, finer_scale_index, false, false, nskip);
+            merged = iftGFLIMMergeMatrices_sum(matrices, nskip+1, finer_scale_index, false, false, nskip);
         else if(strcmp(arch->layer[layer-1].skip_type, "concat") == 0)
             merged = iftGFLIMMergeMatrices_concat(matrices, nskip+1, node_maps, finer_scale_index);
+        else if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+            merged = iftGFLIMMergeMatrices_sum_att(matrices, nskip+1, kernel_labels[0], finer_scale_index, graph_merged);
         else
-            iftError("Unknown merge function: %s", __func__, arch->layer[layer-1].skip_type);
+            iftError("Unknown merge function: %s",  __func__, arch->layer[layer-1].skip_type);
 
         for(int j = 0; j < nskip+1; j++)
         {
@@ -3240,7 +3452,12 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
 
         iftDestroyGFLIMGraph(&(input->val[k]));
 
-        iftGFLIMGraph *graph_merged = NULL;
+        if(kernel_labels != NULL)
+        {
+            if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
+                iftFree(kernel_labels[0]);
+            iftFree(kernel_labels);
+        }
 
         if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
         {
@@ -3248,6 +3465,7 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
             sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
             graph_merged = iftReadGFLIMGraph(filename);
         }else{
+            // read the finer layer graph to create a new graph with the merged features
             sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
             iftGFLIMGraph *graph_finer = iftReadGFLIMGraph(filename);
             graph_merged = iftCopyGFLIMGraph(merged->ncols, graph_finer, false);
@@ -3264,19 +3482,19 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
         }
         
         // min-max normalization per channel
-        /*for(int j = 0; j < graph_finer->num_feats; j++)
+        /*for(int j = 0; j < graph_merged->num_feats; j++)
         {
             float min = iftMatrixElem(merged, j, 0);
             float max = iftMatrixElem(merged, j, 0);
-            for(int i = 1; i < graph_finer->num_nodes; i++)
+            for(int i = 1; i < graph_merged->num_nodes; i++)
             {
                 if(iftMatrixElem(merged, j, i) < min)
                     min = iftMatrixElem(merged, j, i);
                 if(iftMatrixElem(merged, j, i) > max)
                     max = iftMatrixElem(merged, j, i);
             }
-            for(int i = 0; i < graph_finer->num_nodes; i++)
-                graph_finer->nodes[i].feats[j] = (iftMatrixElem(merged, j, i) - min) / (max - min);
+            for(int i = 0; i < graph_merged->num_nodes; i++)
+                graph_merged->nodes[i].feats[j] = (iftMatrixElem(merged, j, i) - min) / (max - min);
         }*/
         iftDestroyMatrix(&merged);
         input->val[k] = graph_merged;

@@ -638,7 +638,7 @@ class GFLIMFunctions():
         """
         self.__callFunction__(self.functions['EncodeLayer'], [model_dir, arch_file, layer, stride, attention, aggregation], "Encoding layer {}:\t\t".format(layer))
 
-    def write_activations(self, model_dir, layer, batchsize, skip=None):
+    def write_activations(self, model_dir, layer, batchsize, skip=None, arch=None):
         """
         Write the activations for the given layer.
         Args:
@@ -649,7 +649,10 @@ class GFLIMFunctions():
         if skip == None:
             self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer, batchsize], "Writing activations layer {}:\t".format(layer))
         else:
-            self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer, batchsize, skip], "Writing activations layer {} with skip connection:\t".format(layer))
+            if arch == None:
+                self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer, batchsize, skip], "Writing activations layer {} with skip connection:\t".format(layer))
+            else:
+                self.__callFunction__(self.functions['WriteActivations'], [model_dir, layer, batchsize, skip, arch], "Writing activations layer {} with skip connection:\t".format(layer))
 
     def merge_layer_models(self, model_dir, layer):
         """
@@ -932,7 +935,7 @@ class GFLIMModel():
         # write activations of the merged data
         if write_activation:
             shutil.rmtree(os.path.join(self.model_dir, f'activation{layer}'), ignore_errors=True)
-            self.functions.write_activations(self.model_dir, layer, batchsize, first_scale)
+            self.functions.write_activations(self.model_dir, layer, batchsize, first_scale, self.arch_file)
 
         for d in decoders: 
             self.functions.decode_layer(self.model_dir, self.arch_file, layer, d, self.stride)
@@ -1044,7 +1047,6 @@ class GFLIMModel():
             shutil.rmtree(f'{self.model_dir}/labels{layer}', ignore_errors=True)
             shutil.rmtree(f'{self.model_dir}/layer{layer}', ignore_errors=True)
 
-        print("graphs path:" , graphs_path_src, " spx labels path:", spx_label_path_src)
         if(graphs_path_src is not None and spx_label_path_src is not None and os.path.exists(graphs_path_src) and os.path.exists(spx_label_path_src)):
             # copy the graphs and superpixel labels from the provided directories to the model directory
             self.__copyGraphsAndLabels__(images_folder, graphs_path_src, spx_label_path_src)
