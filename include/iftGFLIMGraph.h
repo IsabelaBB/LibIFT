@@ -35,8 +35,8 @@ typedef struct iftGFLIMGraphNode iftGFLIMGraphNode;
  */
 typedef struct iftGFLIMGraphNode{
     double  *feats;             // Features of the node
-    unsigned long numNeighbors; // Number of neighbors
-    unsigned long numPixels;    // Number of pixels in the node (considering its a superpixel)
+    int numNeighbors; // Number of neighbors
+    int numPixels;    // Number of pixels in the node (considering its a superpixel)
     iftSet *adj;                // Adjacency list of the node, in which each element contains the index of a neighbor node
 }iftGFLIMGraphNode;
 
@@ -46,9 +46,9 @@ typedef struct iftGFLIMGraphNode{
  */
 typedef struct _iftGFLIMGraph {
     iftGFLIMGraphNode *nodes;    // Array of nodes. @see iftGFLIMGraphNode
-    unsigned long num_nodes;    // Number of nodes
-    unsigned long num_feats;    // Number of features in each node
-    unsigned long num_edges;    // Number of edges
+    int num_nodes;    // Number of nodes
+    int num_feats;    // Number of features in each node
+    int num_edges;    // Number of edges
 } iftGFLIMGraph;
 
 /* --------------------- GFLIMGraphArray structure definition ----------------------------- */
@@ -63,6 +63,17 @@ typedef struct iftGFLIMGraphArray{
     iftGFLIMGraph **val; // Array of graphs. @see iftGFLIMGraph 
     int n;              // Number of graphs.
 } iftGFLIMGraphArray;
+
+/* --------------------- GFLIMAdjacencyList structure definition ----------------------------- */
+
+/**
+ * @struct iftGFLIMAdjacencyList
+ * @brief Adjacency list for a graph in GFLIM.
+ */
+typedef struct iftGFLIMAdjacencyList {
+    iftIntArray **neighbors;  // Array of adjacency lists
+    int num_nodes;        // Number of nodes in the graph
+} iftGFLIMAdjacencyList;
 
 /* --------------------- Enums for types in GFLIMGraph ----------------------------- */
 
@@ -147,41 +158,41 @@ void iftWriteGFLIMGraph(iftGFLIMGraph *graph, char *filename);
 /* --------------------- GFLIMGraph transform ----------------------------- */
 void iftGFLIMGraphZNormalization(iftGFLIMGraph *graph, float *mean, float *stdev);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMean(
-                    unsigned long num_superpixels, 
+                    int num_superpixels, 
                     iftAdjRel *A, iftMImage *oiginal_img, 
                     iftImage *labeled_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSum(
-                    unsigned long num_superpixels,
+                    int num_superpixels,
                     iftAdjRel *A, iftMImage *oiginal_img, 
                     iftImage *labeled_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsize(
-                    unsigned long num_superpixels,
+                    int num_superpixels,
                     iftAdjRel *A, iftMImage *oiginal_img, 
                     iftImage *labeled_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanMultRelsize(
-    unsigned long num_superpixels,
+    int num_superpixels,
     iftAdjRel *A, iftMImage *oiginal_img, 
     iftImage *labeled_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsize(
-                unsigned long num_superpixels,
+                int num_superpixels,
                 iftAdjRel *A,
                 iftMImage *oiginal_img, iftImage *labeled_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeNeighb(
-        unsigned long num_superpixels,
+        int num_superpixels,
         iftAdjRel *A, iftMImage *oiginal_img, 
         iftImage *labeled_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeHaralick(
-    unsigned long num_superpixels,
+    int num_superpixels,
     iftAdjRel *A, iftMImage *oiginal_img, 
     iftImage *labeled_img,
     iftImage *gray_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsizeConcatHaralick(
-    unsigned long num_superpixels,
+    int num_superpixels,
     iftAdjRel *A,
     iftMImage *oiginal_img, iftImage *labeled_img,
     iftImage *gray_img);
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
-    unsigned long num_superpixels,
+    int num_superpixels,
     iftAdjRel *A,
     iftMImage *oiginal_img, iftImage *labeled_img,
     iftGFLIMGraphNodeFeature feat_type,
@@ -191,7 +202,8 @@ iftGFLIMGraph *iftImageToGFLIMGraph(iftImage *img,
     int num_superpixels, int param,
     iftImage **label_img,
     iftGFLIMGraphNodeFeature graph_feat,
-    iftGFLIMGraphSpxMethod graph_type);
+    iftGFLIMGraphSpxMethod graph_type,
+    iftImage *mask);
 iftMImage *iftGFLIMGraphToMImage(iftGFLIMGraph *graph, iftImage *labels);
 iftGFLIMGraph *iftMImageToGFLIMGraph(iftMImage *mimg,
     iftGFLIMGraph *graph_ref);
@@ -228,6 +240,9 @@ iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
                                    iftGFLIMGraphAttention attention_opt,
                                    iftGFLIMAggregation aggregation_opt/*,
                                    iftIntArray **neighbors_all*/);
+
+iftGFLIMAdjacencyList *iftGFLIMComputeAdjacencyList(iftGFLIMGraph *graph);
+void iftGFLIMDestroyAdjacencyList(iftGFLIMAdjacencyList **adj_list);
 
 #ifdef __cplusplus
 }

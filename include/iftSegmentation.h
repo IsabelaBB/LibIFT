@@ -1104,6 +1104,8 @@ iftImage *iftFillContour(   iftImage *contour);
 //! swig(newobject)
 iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_superpixels, iftImage *mask);
 
+iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_superpixels, iftImage *mask);
+
 /**
 * @brief Computes Intersection over Union for Object Detection
 * @author Felipe Crispim

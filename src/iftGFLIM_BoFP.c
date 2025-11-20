@@ -393,8 +393,9 @@ iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
         u.z = 1.0;
 
         p = u.y * label_img->xsize + u.x;
-
-        classes_count[label_img->val[p] - 1][tmp->label - minclass]++;
+        int spx_label = label_img->val[p];
+        if(spx_label > 0)
+            classes_count[spx_label - 1][tmp->label - minclass]++;
         tmp = tmp->next;
     }
 
@@ -474,7 +475,11 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage 
     int *nodes_map = iftAllocIntArray(num_nodes0); // num_nodes0 is always greater than or equal to num_nodes
     for (int i = 0; i < label_img0->n; i++)
     {
-        if (nodes_map[label_img0->val[i] - 1] != 0)
+        int spx_label0 = label_img0->val[i];
+        if(spx_label0 == 0)
+            continue;
+
+        if (nodes_map[spx_label0 - 1] != 0)
             continue;
 
         iftVoxel u;
@@ -495,7 +500,7 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage 
         u.z = u.z / scale[2];
 
         p = iftGetVoxelIndex(label_img, u);
-        nodes_map[label_img0->val[i] - 1] = label_img->val[p];
+        nodes_map[spx_label0 - 1] = label_img->val[p];
     }
 
     int **class_count = iftAlloc(num_nodes, sizeof(int *)); // pixels per class at each node
@@ -513,6 +518,7 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage 
     
     tmp = S;
     iftBMap *visited = iftCreateBMap(num_nodes); // to avoid inserting the same node multiple times
+    bool *remove_nodes = (bool *)calloc(num_nodes0, sizeof(bool));
     while (tmp != NULL)
     {
         int node0 = tmp->elem;
@@ -521,7 +527,21 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage 
         if(iftBMapValue(visited, node) == 0)
         {
             iftBMapSet1(visited, node); // mark node as visited
+            tmp = tmp->next;
+        }else{
+            tmp = tmp->next;
+            remove_nodes[node0] = true;
+            iftRemoveLabeledSetElem(&S, node0); // remove the node if it was already visited
+        }
+    }
 
+    tmp = S;
+    while (tmp != NULL)
+    {
+        int node0 = tmp->elem;
+        int node = nodes_map[node0] - 1; // map node0 to node
+        
+        if(!remove_nodes[node0]){
             int max_class = 0;
             int max_count = class_count[node][0];
             for (int c = 1; c < nclasses; c++)
@@ -539,13 +559,11 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage 
             }
             else
                 iftError("Node %d has no class assigned", __func__, node0);
-        
-            tmp = tmp->next;
-        }else{
-            tmp = tmp->next;
-            iftRemoveLabeledSetElem(&S, node0); // remove the node if it was already visited
         }
+        tmp = tmp->next;
     }
+    iftFree(remove_nodes);
+
     free(nodes_map);
     iftDestroyBMap(&visited);
     
@@ -1079,7 +1097,7 @@ iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
             {
                 int p = iftMGetVoxelIndex(input_labels, u);
                 int label = input_labels->val[p];
-                if (!iftBMapValue(visited, label - 1))
+                if (label > 0 && !iftBMapValue(visited, label - 1))
                 {
                     iftBMapSet1(visited, label - 1);
                     num_nodes++;
@@ -1126,6 +1144,7 @@ iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
             {
                 int p = iftMGetVoxelIndex(input_labels, u);
                 int old_label = input_labels->val[p] - 1;
+                if (old_label < 0) continue;
                 int new_label = map_nodes[old_label];
                 iftGFLIMGraphNode *node = &(output_graph->nodes[new_label]);
 
@@ -1152,6 +1171,10 @@ iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
             {
                 int p = iftMGetVoxelIndex(input_labels, u);
                 int old_label = input_labels->val[p] - 1;
+                if (old_label < 0) {
+                    q++;
+                    continue;
+                }
                 int new_label = map_nodes[old_label];
                 iftGFLIMGraphNode *node = &(output_graph->nodes[new_label]);
 
@@ -1163,7 +1186,7 @@ iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
                     {
                         int q_index = iftMGetVoxelIndex(output_labels, q_voxel);
                         int q_label = output_labels->val[q_index] - 1;
-                        if (new_label > q_label && !iftBMapValue(neighbors[new_label], q_label))
+                        if (q_label >= 0 && new_label > q_label && !iftBMapValue(neighbors[new_label], q_label))
                         {
                             iftGFLIMGraphInsertNeighborNode(node, q_label);
                             iftGFLIMGraphInsertNeighborNode(&(output_graph->nodes[q_label]), new_label);
@@ -1370,7 +1393,14 @@ void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftGFLIMLayer layer,
             int nodes_map[graph->val[i]->num_nodes];
             output_graph = iftGFLIMGraphStride(graph->val[i], layer.pool_stride, nodes_map);
             for (int j = 0; j < input_labels->n; j++)
-                input_labels->val[j] = nodes_map[input_labels->val[j] - 1] + 1;
+            {
+                int spx_label = input_labels->val[j] - 1;
+                if(spx_label >= 0)
+                    input_labels->val[j] = nodes_map[spx_label] + 1;
+                else
+                    input_labels->val[j] = 0;
+            }
+                
             iftDestroyGFLIMGraph(&(graph->val[i]));
             graph->val[i] = output_graph;
             output_graph = NULL;
@@ -1415,7 +1445,14 @@ void iftGFLIMStrideBatch_v2(iftGFLIMGraphArray *graph, iftGFLIMLayer layer,
                 int nodes_map[graph->val[i]->num_nodes];
                 output_graph = iftGFLIMGraphStride(graph->val[i], layer.pool_stride, nodes_map);
                 for (int j = 0; j < labels_img->val[i]->n; j++)
-                    labels_img->val[i]->val[j] = nodes_map[labels_img->val[i]->val[j] - 1] + 1;
+                {
+                    int spx_label = labels_img->val[i]->val[j] - 1;
+                    if (spx_label < 0)
+                        labels_img->val[i]->val[j] = 0;
+                    else
+                        labels_img->val[i]->val[j] = nodes_map[spx_label] + 1;
+                }
+                    
                 iftDestroyGFLIMGraph(&(graph->val[i]));
                 graph->val[i] = output_graph;
                 output_graph = NULL;
@@ -1931,7 +1968,13 @@ iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
         (*output_labels) = iftCreateImage(input_labels->xsize, input_labels->ysize, input_labels->zsize);
         output_graph = iftGFLIMGraphStride(pooling_graph, layer.pool_stride, nodes_map);
         for (int j = 0; j < input_labels->n; j++)
-            (*output_labels)->val[j] = nodes_map[input_labels->val[j] - 1] + 1;
+        {
+            int spx_label = input_labels->val[j] - 1;
+            if(spx_label < 0)
+                (*output_labels)->val[j] = 0;
+            else
+                (*output_labels)->val[j] = nodes_map[spx_label] + 1;
+        }
     }
 
     if (pooling_graph != NULL)
@@ -2672,6 +2715,274 @@ iftMatrix *iftGFLIMMergeMatrices_sum_att(iftMatrix **X, int n,
 }
 
 
+iftMatrix *iftGFLIMMergeMatrices_concat_att(iftMatrix **X, iftGFLIMAdjacencyList **Adjacency_lists, 
+                                        int n, int **nodes_map,  
+                                        int **kernel_labels, 
+                                        int finer_scale,
+                                        iftIntArray **kernels_maps)
+{
+    /*
+    Merge feature matrices by concatenation with attention 
+    */
+
+    /*
+    nodes_map : finer scale -> current scale
+    kernels_maps : finer scale -> current scale
+    kernel_labels : kernels finer scale -> labels finer scale
+    */
+
+    if(kernels_maps == NULL)
+        iftError("kernels_maps is NULL", __func__);
+
+    for(int scale = 0; scale < n; scale++)
+    {
+        if(kernels_maps[scale] == NULL)
+            iftError("kernels_maps[%d] is NULL", __func__, scale);
+        if(nodes_map[scale] == NULL)
+            iftError("nodes_map[%d] is NULL", __func__, scale);
+        if(kernels_maps[scale]->n != X[scale]->ncols)
+            iftError("kernels_maps[%d]->n %d != X[%d]->ncols %d", __func__, scale, kernels_maps[scale]->n, scale, X[scale]->ncols);
+    }
+
+    printf("Merging by concatenation with attention... nscales %d finer scale %d \n", n, finer_scale);
+
+    // get the number of labels and the minimum label
+    int nlabels = kernel_labels[finer_scale][0], minLabel = kernel_labels[finer_scale][0];
+    for (int j = 0; j < X[finer_scale]->ncols; j++)
+    {
+        if (kernel_labels[finer_scale][j] < minLabel)
+            minLabel = kernel_labels[finer_scale][j];
+        if (kernel_labels[finer_scale][j] > nlabels)
+            nlabels = kernel_labels[finer_scale][j];
+    }
+    nlabels = nlabels - minLabel + 1;
+    printf("nlabels %d minLabel %d\n", nlabels, minLabel);
+
+    printf("Allocating normalized feature matrices...\n");
+    iftMatrix **X_norm = iftAlloc(n, sizeof(iftMatrix *));
+    for(int scale = 0; scale < n; scale++)
+        X_norm[scale] = iftCreateMatrix(X[scale]->ncols, X[scale]->nrows);
+
+    printf("Processing nodes...\n");
+    for(int i = 0; i < X[finer_scale]->nrows; i++)
+    {
+        printf("A Processing node %d / %d\n", i, X[finer_scale]->nrows);
+        float label_strength[nlabels];
+
+        for (int l = 0; l < nlabels; l++)
+            label_strength[l] = 0;
+
+        float min[nlabels], max[nlabels];
+        // min-max normalization
+        for (int l = 0; l < nlabels; l++)
+        {
+            min[l] = IFT_INFINITY_FLT;
+            max[l] = IFT_INFINITY_FLT_NEG;
+        }
+
+        int nkernels[n][nlabels];
+        for(int scale = 0; scale < n; scale++)
+        {
+            if(i >= X[scale]->nrows) continue;
+            printf("B Processing scale %d / %d\n", scale, n);
+
+            // compute the number of kernels per label
+            int nkernels[scale][nlabels];
+            for (int j = 0; j < nlabels; j++)
+                nkernels[scale][j] = 0;
+
+            int *kernel_labels_s = kernel_labels[scale];
+            for(int j = 0; j < X[scale]->ncols; j++)
+            {
+                printf("C Processing feature %d / %d\n", j, X[scale]->ncols);
+                int label = kernel_labels_s[j] - minLabel;
+                printf("label %d\n", label);
+                if(label == 0) continue;
+
+                float val = iftMatrixElem(X[scale], j, i);
+                if (val < min[label]) min[label] = val;
+                if (val > max[label]) max[label] = val;
+
+                nkernels[scale][label]++;
+            }
+            kernel_labels_s = NULL;
+        }
+
+        printf("D Finished min-max computation\n");
+        
+        for(int scale = 0; scale < n; scale++)
+        {
+            if(i >= X[scale]->nrows) continue;
+            
+            float label_strength_s[nlabels];
+            for (int l = 0; l < nlabels; l++)
+                label_strength_s[l] = 0;
+
+            int *kernel_labels_s = kernel_labels[scale];
+            for (int j = 0; j < X[scale]->ncols; j++)
+            {
+                int label = kernel_labels_s[j] - minLabel;
+                if(label == 0) continue;
+
+                if (max[label] == min[label])
+                    iftMatrixElem(X_norm[scale], j, i) = 0;
+                else
+                    iftMatrixElem(X_norm[scale], j, i) = 
+                                    (iftMatrixElem(X[scale], j, i) - min[label]) / (max[label] - min[label]);
+
+                label_strength_s[label] += iftMatrixElem(X_norm[scale], j, i);
+            }
+            for (int l = 0; l < nlabels; l++)
+                label_strength[l] += (label_strength_s[l] / nkernels[scale][l]);
+            kernel_labels_s = NULL;
+        }
+
+        for (int l = 0; l < nlabels; l++)
+            label_strength[l] /= n;
+        
+        for(int scale = 0; scale < n; scale++)
+        {
+            if(i >= X[scale]->nrows) continue;
+
+            int *kernel_labels_s = kernel_labels[scale];
+            for(int j = 0; j < X_norm[scale]->ncols; j++)
+            {
+                int label = kernel_labels_s[j] - minLabel;
+                if(label == 0) continue;
+
+                printf("scale %d nscales %d node %d feature %d nnodes %d nfeatures %d label %d label_strength %.4f\n", 
+                    scale, n, i, j, X[scale]->nrows, X[scale]->ncols, label, label_strength[label]);
+                float max_val = iftMax(label_strength[label], iftMatrixElem(X_norm[scale], j, i));
+                printf("X_norm %.4f max_val %.4f\n", iftMatrixElem(X_norm[scale], j, i), max_val);
+                float label_dominance = 0;
+                if (max_val != 0.0f)
+                    label_dominance = (label_strength[label] - iftMatrixElem(X_norm[scale], j, i)) / max_val; // [-1,1]
+                printf("label_dominance %.4f\n", label_dominance);
+                iftMatrixElem(X_norm[scale], j, i) = (iftMatrixElem(X_norm[scale], j, i) * label_dominance) + 1;
+                printf("X_norm %.4f \n ", iftMatrixElem(X_norm[scale], j, i));
+            }
+            kernel_labels_s = NULL;
+        }
+    }
+
+    printf("Merging with attention...\n");
+
+    int nfeats = X[0]->ncols;
+    for(int i = 1; i < n; i++) nfeats += X[i]->ncols;
+
+    iftMatrix *merged = iftCreateMatrix(nfeats, X[finer_scale]->nrows);
+
+    nfeats = 0;
+    for(int scale = 0; scale < n; scale++)
+    {
+        printf("Scale %d / %d\n", scale, n);
+        bool *visited = iftAllocBoolArray(X[scale]->nrows);
+        printf("A \n");
+        int copy_from[X[scale]->nrows];
+        printf("B \n");
+        iftIntArray *kernels_maps_s = kernels_maps[scale];
+        printf("C \n");
+        int *kernel_labels_s = kernel_labels[scale];
+        printf("D \n");
+        iftGFLIMAdjacencyList *adj_list_scale = Adjacency_lists[scale];
+        printf("E \n");
+        for (int i = 0; i < X[finer_scale]->nrows; i++)
+        {
+            printf("Node %d / %d\n", i, X[finer_scale]->nrows);
+            int node_id = nodes_map[scale][i];
+            printf("Mapped to node %d / %d\n", node_id, X[scale]->nrows);
+            if(!visited[node_id])
+            {
+                printf("Not visited\n");
+                visited[node_id] = true;
+                copy_from[node_id] = i;
+                float *attention_vals = iftAllocFloatArray(X[scale]->ncols);
+                printf("Computing attention values for node %d with %ld neighbors\n", 
+                        node_id, adj_list_scale->neighbors[node_id]->n);
+                for(int k = 0; k < adj_list_scale->neighbors[node_id]->n; k++)
+                {
+                    //printf("Neighbor %d / %ld\n", k, adj_list_scale->neighbors[node_id]->n);
+                    for (int j = 0; j < X[scale]->ncols; j++)
+                    {
+                        //printf("Feature %d / %d\n", j, X[scale]->ncols);
+                        int label = kernel_labels_s[kernels_maps_s->val[j]] - minLabel;
+                        //printf("Label %d\n", label);
+                        if(label != 0)
+                            attention_vals[j] += iftMatrixElem(X_norm[scale], j, 
+                                                    adj_list_scale->neighbors[node_id]->val[k]);
+                    }
+                }
+
+                for (int j = 0; j < X[scale]->ncols; j++)
+                {
+                    printf("Feature %d / %d\n", j, X[scale]->ncols);
+                    int label = kernel_labels_s[kernels_maps_s->val[j]] - minLabel;
+                    if(label != 0)
+                    {
+                        attention_vals[j] /= (float)adj_list_scale->neighbors[node_id]->n;
+                        attention_vals[j] += iftMatrixElem(X_norm[scale], j, node_id);
+                        iftMatrixElem(merged, nfeats+j, i) = iftMatrixElem(X[scale], j, node_id) * attention_vals[j];
+                    }else
+                        iftMatrixElem(merged, nfeats+j, i) = iftMatrixElem(X[scale], j, node_id);
+                }
+                iftFree(attention_vals);
+            }else{
+                printf("Already visited\n");
+                int copy = copy_from[node_id];
+                printf("Copying features from node %d to node %d\n", copy, i);
+                for (int j = 0; j < X[scale]->ncols; j++)
+                    iftMatrixElem(merged, nfeats+j, i) = iftMatrixElem(merged, nfeats+j, copy);
+            }
+            printf("Copying from node %d to node %d\n", node_id, copy_from[node_id]);
+        }
+        nfeats += X[scale]->ncols;
+        adj_list_scale = NULL;
+        kernels_maps_s = NULL;
+        iftFree(visited);
+        printf("Done Scale %d / %d\n", scale+1, n);
+    }
+
+    printf("Finished merging.\n");
+    for(int scale = 0; scale < n; scale++)
+        iftDestroyMatrix(&X_norm[scale]);
+    iftFree(X_norm);
+    
+    printf("Returning merged matrix.\n");
+    return merged;
+}
+
+/**
+ * @brief Recursively get the layers to be concatenated in a skip connection
+ * @param arch GFLIM architecture
+ * @param layer Current layer
+ * @param skip_layer Skip connection layer
+ * @param layers_to_concat Array to store the layers to be concatenated
+ * @param index Last filled position in the layers_to_concat array (use 0 in the first call)
+ * @return Updated index in the layers_to_concat array
+ * @note layers_to_concat will contain the layers in reverse order (from the coarser layer to the finer layer)
+ */
+int getLayersToConcat(iftGFLIMArch *arch, int layer, int skip_layer, iftIntArray *layers_to_concat, int index)
+{
+    
+    while(skip_layer > 0){ // itera sobre as camadas indicadas no skip connection
+        if(arch->layer[layer-1].skip_connection[skip_layer-1])
+        {
+            if(index == layers_to_concat->n) // realoca se necessario
+            {
+                layers_to_concat->n *= 2;
+                layers_to_concat->val = realloc(layers_to_concat->val, (layers_to_concat->n * 2) * sizeof(int));
+            }
+            layers_to_concat->val[index++] = skip_layer; // adiciona a camada skip na lista
+            // se for concat, busca recursivamente as camadas a serem concatenadas
+            if(strcmp(arch->layer[skip_layer-1].skip_type, "concat") == 0 ||
+               strcmp(arch->layer[skip_layer-1].skip_type, "concat_att") == 0)
+                index = getLayersToConcat(arch, skip_layer, skip_layer-1, layers_to_concat, index);
+        }
+        skip_layer--;
+    }
+    return index;
+}
+
 iftMatrix *iftGFLIMMergeMatrices_concat(iftMatrix **X, int n, 
                                         int **nodes_map,  int finer_scale)
 {
@@ -3062,8 +3373,7 @@ int *iftGFLIMComputeNodeMap(iftImage *spx_imgi, iftImage *spx_img0){
     for(int p = 0; p < spx_img0->n; p++)
     {
         int label = spx_img0->val[p] - 1;
-        if(label < 0)
-            iftError("spx_img0 has a label %d at voxel %d", __func__, spx_img0->val[p], p);
+        if(label < 0) continue;
         node_map[label] = spx_imgi->val[p] - 1;
         if(node_map[label] < 0)
             iftError("spx_imgi has a label %d at voxel %d", __func__, spx_imgi->val[p], p);
@@ -3129,19 +3439,69 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         kernel_labels[0] = iftGFLIMLoadKernelLabels(filename, &nkernels);
     }
 
-    
+    if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+    {
+        char filename[512];
+
+        int nkernels = 0;
+        // load the kernel labels for attention-based merging
+        iftIntArray *layers_to_concat = iftCreateIntArray(arch->nlayers);
+        kernel_labels = iftAlloc(nskip+1, sizeof(int *));
+
+        int nlayers_ = 0;
+        // compute the kernel maps for the layers that will be used in the skip connection
+        iftIntArray **kernels_maps_all = iftGFLIMCompute_kernel_maps(kernels_file, &nlayers_); // compute the kernel maps for all layers
+        kernels_maps = iftAlloc(nskip+1, sizeof(iftIntArray *));
+
+        for(int s = 0; s < nskip; s++)
+        {
+            int skip_layer = skip_layers[s]; // get the finer residual layer for the skip layer
+            layers_to_concat->val[0] = skip_layer; // add skip layer
+            int nconcat_layers = getLayersToConcat(arch, skip_layer, skip_layer-1, layers_to_concat, 1);
+            kernel_labels[s] = NULL;
+            nkernels = 0;
+
+            for(int i = 0; i < nconcat_layers; i++)
+            {
+                sprintf(filename, "%s/model/conv%d-labels.txt", model_dir, layers_to_concat->val[i]);
+                if(!iftFileExists(filename))
+                    iftError("File %s does not exist", "main", filename);
+                    
+                /* load merged model */
+                int nkernels_i = 0;
+                int *kernel_labels_i = iftGFLIMLoadKernelLabels(filename, &nkernels_i);
+                
+                nkernels += nkernels_i;
+                kernel_labels[s] = realloc(kernel_labels[s], nkernels * sizeof(int));
+                for(int j = 0; j < nkernels_i; j++)
+                    kernel_labels[s][nkernels - nkernels_i + j] = kernel_labels_i[j];
+                iftFree(kernel_labels_i);
+            }
+        }
+        // for the current layer
+        nkernels = 0;
+        sprintf(filename, "%s/model/conv%d-labels.txt", model_dir, layer);
+        if(!iftFileExists(filename))
+            iftError("File %s does not exist", "main", filename);
+        kernel_labels[nskip] = iftGFLIMLoadKernelLabels(filename, &nkernels);
+        iftDestroyIntArray(&layers_to_concat);
+    }
 
     for (int file_id = 0; file_id < fs->n; file_id++)
     {
         char ext[10], filename[512];
         sprintf(ext, "%s", iftFileExt(fs->files[file_id]->path));
         char *basename = iftFilename(fs->files[file_id]->path, ext);
-        
+
         sprintf(filename, "%s/labels%d/%s.pgm", model_dir, finer_layers[layer-1], basename);
         iftImage *spx_img0 = iftReadImageByExt(filename);
 
         int **node_maps = iftAlloc(nskip+1, sizeof(int *));
         iftMatrix **matrices = iftAlloc(nskip+1, sizeof(iftMatrix *));
+        iftGFLIMAdjacencyList **Adjacency_lists = NULL;
+
+        if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+            Adjacency_lists = iftAlloc(nskip+1, sizeof(iftGFLIMAdjacencyList *));
 
         for(int j = 0; j < nskip; j++)
         {
@@ -3149,10 +3509,14 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             sprintf(filename, "%s/layer%d/%s.json", model_dir, i, basename);
             iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
 
-            if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+            if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0 && 
+                strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
                 iftGFLIMMaxNormGraph(graph_skip);
 
             matrices[j] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
+            if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+                Adjacency_lists[j] = iftGFLIMComputeAdjacencyList(graph_skip);
+
             iftDestroyGFLIMGraph(&graph_skip);
 
             sprintf(filename, "%s/labels%d/%s.pgm", model_dir, i, basename);
@@ -3161,25 +3525,30 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             node_maps[j] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
             iftDestroyImage(&spx_img);
         }
+
         sprintf(filename, "%s/layer%d/%s.json", model_dir, layer, basename);
         iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
 
-        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0 && 
+            strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
             iftGFLIMMaxNormGraph(graph_skip);
         matrices[nskip] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
+        if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+            Adjacency_lists[nskip] = iftGFLIMComputeAdjacencyList(graph_skip);
+        
         iftDestroyGFLIMGraph(&graph_skip);
 
         sprintf(filename, "%s/labels%d/%s.pgm", model_dir, layer, basename);
         iftImage *spx_img = iftReadImageByExt(filename);
-        node_maps[nskip] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
 
         node_maps[nskip] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
         iftDestroyImage(&spx_img);
-        
+
         iftGFLIMGraph *graph_merged = NULL;
 
         // residual connections that require upscaling
-        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0 && 
+            strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
         {
             for(int j = 0; j < nskip+1; j++)
             {
@@ -3216,9 +3585,11 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             merged = iftGFLIMMergeMatrices_concat(matrices, nskip+1, node_maps, finer_scale_index);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
             merged = iftGFLIMMergeMatrices_sum_att(matrices, nskip+1, kernel_labels[0], finer_scale_index, graph_merged);
+        else if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+            merged = iftGFLIMMergeMatrices_concat_att(matrices, Adjacency_lists, nskip+1, node_maps, kernel_labels, finer_scale_index, kernels_maps);
         else
             iftError("Unknown merge function: %s",  __func__, arch->layer[layer-1].skip_type);
-
+        
         for(int j = 0; j < nskip+1; j++)
         {
             iftDestroyMatrix(&matrices[j]);
@@ -3226,10 +3597,17 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         }
         iftFree(matrices);
         iftFree(node_maps);
-
-        iftGFLIMGraph *graph_merged = NULL;
         
-        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
+        if(Adjacency_lists != NULL)
+        {
+            for(int j = 0; j < nskip+1; j++)
+                iftGFLIMDestroyAdjacencyList(&Adjacency_lists[j]);
+            iftFree(Adjacency_lists);
+        }
+
+        
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0 && 
+            strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
         {
             // copy the merged features to the graph of the current layer
             sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
@@ -3241,7 +3619,7 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             graph_merged = iftCopyGFLIMGraph(merged->ncols, graph_finer, false);
             iftDestroyGFLIMGraph(&graph_finer);
         }
-        
+
         if(graph_merged->num_nodes != merged->nrows || graph_merged->num_feats != merged->ncols)
             iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
                 graph_merged->num_nodes, graph_merged->num_feats, merged->nrows, merged->ncols); 
@@ -3251,6 +3629,7 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
             for(int j = 0; j < graph_merged->num_feats; j++)
                 graph_merged->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
         }
+
         // min-max normalization per channel
         /*for(int j = 0; j < graph_merged->num_feats; j++)
         {
@@ -3276,17 +3655,21 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
         // save the superpixel image of the finer layer
 		sprintf(filename, "%s/labels%d/%s.pgm", model_dir, layer, basename);
 		iftWriteImageByExt(spx_img0, filename);
-        iftDestroyImage(&spx_img0);
 
         iftDestroyImage(&spx_img0);
         iftFree(basename);
-   }
+    }
     iftFree(skip_layers);
 
     if(kernel_labels != NULL)
     {
         if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
             iftFree(kernel_labels[0]);
+        else if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+        {
+            for(int j = 0; j < nskip+1; j++)
+                iftFree(kernel_labels[j]);
+        }
         iftFree(kernel_labels);
     }
 
@@ -3359,6 +3742,48 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
         kernel_labels[0] = iftGFLIMLoadKernelLabels(filename, &nkernels);
     }
 
+    if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+    {
+        char filename[512];
+        int nkernels = 0;
+        iftIntArray *layers_to_concat = iftCreateIntArray(arch->nlayers);
+
+        // load the kernel labels for attention-based merging
+        kernel_labels = iftAlloc(nskip+1, sizeof(int *));
+        for(int s = 0; s < nskip; s++)
+        {
+            int skip_layer = skip_layers[s]; // get the finer residual layer for the skip layer
+            layers_to_concat->val[0] = skip_layer; // add skip layer
+            int nconcat_layers = getLayersToConcat(arch, skip_layer, skip_layer-1, layers_to_concat, 1);
+            kernel_labels[s] = NULL;
+            nkernels = 0;
+
+            for(int i = 0; i < nconcat_layers; i++)
+            {
+                sprintf(filename, "%s/model/conv%d-labels.txt", model_dir, layers_to_concat->val[i]);
+                if(!iftFileExists(filename))
+                    iftError("File %s does not exist", "main", filename);
+                    
+                /* load merged model */
+                int nkernels_i = 0;
+                int *kernel_labels_i = iftGFLIMLoadKernelLabels(filename, &nkernels_i);
+                
+                nkernels += nkernels_i;
+                kernel_labels[s] = realloc(kernel_labels[s], nkernels * sizeof(int));
+                for(int j = 0; j < nkernels_i; j++)
+                    kernel_labels[s][nkernels - nkernels_i + j] = kernel_labels_i[j];
+                iftFree(kernel_labels_i);
+            }
+        }
+        // for the current layer
+        nkernels = 0;
+        sprintf(filename, "%s/model/conv%d-labels.txt", model_dir, layer);
+        if(!iftFileExists(filename))
+            iftError("File %s does not exist", "main", filename);
+        kernel_labels[nskip] = iftGFLIMLoadKernelLabels(filename, &nkernels);
+        iftDestroyIntArray(&layers_to_concat);
+    }
+
     for (int k = 0; k <= last - first; k++)
     {
         int file_id = k + first;
@@ -3371,6 +3796,10 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
 
         int **node_maps = iftAlloc(nskip+1, sizeof(int *));
         iftMatrix **matrices = iftAlloc(nskip+1, sizeof(iftMatrix *));
+        iftGFLIMAdjacencyList **Adjacency_lists = NULL;
+
+        if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+            Adjacency_lists = iftAlloc(nskip+1, sizeof(iftGFLIMAdjacencyList *));
 
         for(int j = 0; j < nskip; j++)
         {
@@ -3378,22 +3807,30 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
             sprintf(filename, "%s/layer%d/%s.json", model_dir, i, basename);
             iftGFLIMGraph *graph_skip = iftReadGFLIMGraph(filename);
 
-            if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+            if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0 && 
+                strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
                 iftGFLIMMaxNormGraph(graph_skip);
 
             matrices[j] = iftGFLIMGraphToNodeFeaturesMatrix(graph_skip);
+            if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+                Adjacency_lists[j] = iftGFLIMComputeAdjacencyList(graph_skip);
+
             iftDestroyGFLIMGraph(&graph_skip);
 
             sprintf(filename, "%s/labels%d/%s.pgm", model_dir, i, basename);
             iftImage *spx_img = iftReadImageByExt(filename);
-            
+
             node_maps[j] = iftGFLIMComputeNodeMap(spx_img, spx_img0);
             iftDestroyImage(&spx_img);
         }
 
-        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0)
+        if(strcmp(arch->layer[layer-1].skip_type, "sum_att") != 0 && 
+            strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
             iftGFLIMMaxNormGraph(input->val[k]);
         matrices[nskip] = iftGFLIMGraphToNodeFeaturesMatrix(input->val[k]);
+        if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+            Adjacency_lists[nskip] = iftGFLIMComputeAdjacencyList(input->val[k]);
+        
         node_maps[nskip] = iftGFLIMComputeNodeMap(label_imgs->val[k], spx_img0);
         iftDestroyImage(&(label_imgs->val[k]));
         label_imgs->val[k] = spx_img0;
@@ -3402,7 +3839,8 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
         iftGFLIMGraph *graph_merged = NULL;
 
         // residual connections that require upscaling
-        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0 && 
+        strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
         {
             for(int j = 0; j < nskip+1; j++)
             {
@@ -3439,6 +3877,8 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
             merged = iftGFLIMMergeMatrices_concat(matrices, nskip+1, node_maps, finer_scale_index);
         else if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
             merged = iftGFLIMMergeMatrices_sum_att(matrices, nskip+1, kernel_labels[0], finer_scale_index, graph_merged);
+        else if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+            merged = iftGFLIMMergeMatrices_concat_att(matrices, Adjacency_lists, nskip+1, node_maps, kernel_labels, finer_scale_index, kernels_maps);
         else
             iftError("Unknown merge function: %s",  __func__, arch->layer[layer-1].skip_type);
 
@@ -3452,14 +3892,26 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
 
         iftDestroyGFLIMGraph(&(input->val[k]));
 
+        if(Adjacency_lists != NULL)
+        {
+            for(int j = 0; j < nskip+1; j++)
+                iftGFLIMDestroyAdjacencyList(&Adjacency_lists[j]);
+            iftFree(Adjacency_lists);
+        }
         if(kernel_labels != NULL)
         {
             if(strcmp(arch->layer[layer-1].skip_type, "sum_att") == 0)
                 iftFree(kernel_labels[0]);
+            else if(strcmp(arch->layer[layer-1].skip_type, "concat_att") == 0)
+            {
+                for(int j = 0; j < nskip+1; j++)
+                    iftFree(kernel_labels[j]);
+            }
             iftFree(kernel_labels);
         }
 
-        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0)
+        if(strcmp(arch->layer[layer-1].skip_type, "concat") != 0 && 
+            strcmp(arch->layer[layer-1].skip_type, "concat_att") != 0)
         {
             // copy the merged features to the graph of the current layer
             sprintf(filename, "%s/layer%d/%s.json", model_dir, finer_layers[layer-1], basename);
@@ -3474,13 +3926,14 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
 
         if(graph_merged->num_nodes != merged->nrows || graph_merged->num_feats != merged->ncols)
             iftError("Graph and merged matrix dimensions do not match: (%ld, %ld) != (%d, %d)", __func__, 
-                    graph_merged->num_nodes, graph_merged->num_feats, merged->nrows, merged->ncols); 
+                graph_merged->num_nodes, graph_merged->num_feats, merged->nrows, merged->ncols); 
+
         for(int i = 0; i < graph_merged->num_nodes; i++)
         {
             for(int j = 0; j < graph_merged->num_feats; j++)
                 graph_merged->nodes[i].feats[j] = iftMatrixElem(merged, j, i);
         }
-        
+
         // min-max normalization per channel
         /*for(int j = 0; j < graph_merged->num_feats; j++)
         {
@@ -3502,6 +3955,7 @@ void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label
         iftFree(basename);
     }
     iftFree(skip_layers);
+
     if(kernels_maps != NULL)
     {
         for(int j = 0; j < nskip+1; j++)
@@ -4573,8 +5027,11 @@ iftImageArray *iftGFLIMDecodeLayer(iftGFLIMGraph *graph,
             salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
             // fill the saliency image with the saliency of the graph nodes.
             for (int p = 0; p < label_img->n; p++)
-                salie[l]->val[p] = salie_graph->val[label_img->val[p] - 1];
-            
+            {
+                int spx_label = label_img->val[p] - 1;
+                if(spx_label < 0) salie[l]->val[p] = 0;
+                else salie[l]->val[p] = salie_graph->val[spx_label];
+            }
             iftFree(salie_graph);
         }
         break;
@@ -4598,7 +5055,9 @@ iftImageArray *iftGFLIMDecodeLayer(iftGFLIMGraph *graph,
             // fill the saliency image with the saliency of the graph nodes.
             for (int p = 0; p < label_img->n; p++)
             {
-                salie[l]->val[p] = saliencyGraph[label_img->val[p] - 1];
+                int spx_label = label_img->val[p] - 1;
+                if(spx_label < 0) salie[l]->val[p] = 0;
+                else salie[l]->val[p] = saliencyGraph[spx_label];
             }
             iftFree(saliencyGraph);
         }
@@ -4624,7 +5083,9 @@ iftImageArray *iftGFLIMDecodeLayer(iftGFLIMGraph *graph,
             // fill the saliency image with the saliency of the graph nodes.
             for (int p = 0; p < label_img->n; p++)
             {
-                salie[l]->val[p] = saliencyGraph[label_img->val[p] - 1];
+                int spx_label = label_img->val[p] - 1;
+                if(spx_label < 0) salie[l]->val[p] = 0;
+                else salie[l]->val[p] = saliencyGraph[spx_label];
             }
             iftFree(saliencyGraph);
         }
@@ -4640,8 +5101,11 @@ iftImageArray *iftGFLIMDecodeLayer(iftGFLIMGraph *graph,
             salie[l] = iftCreateFImage(label_img->xsize, label_img->ysize, label_img->zsize);
             // fill the saliency image with the saliency of the graph nodes.
             for (int p = 0; p < label_img->n; p++)
-                salie[l]->val[p] = salie_graph->val[label_img->val[p] - 1];
-            
+            {
+                int spx_label = label_img->val[p] - 1;
+                if(spx_label < 0) salie[l]->val[p] = 0;
+                else salie[l]->val[p] = salie_graph->val[spx_label];
+            }
             iftFree(salie_graph);
         }
         break;
@@ -4703,7 +5167,8 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_d
                                                  int initial_seeds, int nsuperpixels,
                                                  char **basename,
                                                  iftGFLIMGraphNodeFeature graph_feat,
-                                                 iftGFLIMGraphSpxMethod graph_type)
+                                                 iftGFLIMGraphSpxMethod graph_type,
+                                                 bool use_mask)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -4719,6 +5184,7 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_d
     printf("\t basename: %s\n", basename == NULL ? "NULL" : "not NULL");
     printf("\t graph_feat: %d\n", graph_feat);
     printf("\t graph_type: %d\n", graph_type);
+    printf("\t mask_dir: %s\n", mask_dir == NULL ? "NULL" : "not NULL");
 #endif
 
     iftGFLIMGraphArray *input = iftCreateGFLIMGraphArray(last - first + 1);
@@ -4727,18 +5193,27 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_d
     for (int k = 0; k <= last - first; k++)
     {
         int i = k + first;
-        char ext[10], label_file[512];
+        char ext[10], label_file[1024], mask_file[1024];
 
         sprintf(ext, "%s", iftFileExt(fs->files[i]->path));
         basename[k] = iftFilename(fs->files[i]->path, ext);
         sprintf(label_file, "%s/%s.pgm", labels_dir, basename[k]);
-
+        
         iftImage *img = iftReadImageByExt(fs->files[i]->path);
         iftImage *label_img = NULL;
+        iftImage *mask = NULL;
+        if (use_mask)
+        {
+            strcpy(mask_file, fs->files[i]->path);
+            GetMaskDirInplace(mask_file);
+            mask = iftReadImageByExt(mask_file);
+        }
 
         if (graph_type == IFT_FLIMGRAPH_TYPE_ERGC)
             initial_seeds = 0;
-        input->val[k] = iftImageToGFLIMGraph(img, nsuperpixels, initial_seeds, &label_img, graph_feat, graph_type);
+        input->val[k] = iftImageToGFLIMGraph(img, nsuperpixels, initial_seeds, &label_img, graph_feat, graph_type, mask);
+
+        if (mask != NULL) iftDestroyImage(&mask);
 
         iftWriteImageByExt(label_img, label_file);
         iftDestroyImage(&label_img);
@@ -4752,7 +5227,8 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
                                                     int initial_seeds, int nsuperpixels,
                                                     iftGFLIMGraphNodeFeature graph_feat,
                                                     iftGFLIMGraphSpxMethod graph_type,
-                                                    iftImageArray *label_imgs)
+                                                    iftImageArray *label_imgs,
+                                                    bool use_mask)
 {
     iftGFLIMGraphArray *input = iftCreateGFLIMGraphArray(last - first + 1);
 
@@ -4760,8 +5236,17 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
     {
         int i = k + first;
         iftImage *img = iftReadImageByExt(fs->files[i]->path);
-        input->val[k] = iftImageToGFLIMGraph(img, nsuperpixels, initial_seeds, &(label_imgs->val[k]), graph_feat, graph_type);
+        iftImage *mask = NULL;
+        if(use_mask)
+        {
+            char filename[1024];
+            strcpy(filename, fs->files[i]->path);
+            GetMaskDirInplace(filename);
+            mask = iftReadImageByExt(filename);
+        }
+        input->val[k] = iftImageToGFLIMGraph(img, nsuperpixels, initial_seeds, &(label_imgs->val[k]), graph_feat, graph_type, mask);
         iftDestroyImage(&img);
+        if(use_mask) iftDestroyImage(&mask);
     }
     return input;
 }

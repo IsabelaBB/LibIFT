@@ -870,11 +870,17 @@ void iftSVMClassify(iftSVM* svm, iftDataSet* Z, uchar status) {
             iftSVMClassifyOVA(svm, Z, status);
         }
     } else {
-        if(svm->params->probability==1)
-           iftSVMClassifyOVO_Probability(svm, Z, status);
-        else
-           iftSVMClassifyOVO(svm, Z, status); 
+        printf("Classifying with OVO SVM\n");
+        if(svm->params->probability==1){
+            printf("Using probability estimates\n");
+            iftSVMClassifyOVO_Probability(svm, Z, status);
+        } else {
+            printf("Not using probability estimates\n");
+            iftSVMClassifyOVO(svm, Z, status);
+        }
     }
+
+    printf("Classification done.\n");
 }
 
 
@@ -975,7 +981,7 @@ void iftSVMTrainOVA(iftSVM *svm,   iftDataSet *Ztrain, iftDataSet *Zref) {
 int iftSVMClassifyOVO(  iftSVM *svm, iftDataSet *Z, uchar sample_status) {
     int s, nsamples = Z->nsamples;
     int nfeats = Z->nfeats;
-
+    
     int nerrors = 0;
     int precomp = svm->params->kernel_type == IFT_PRECOMPUTED;
 
@@ -987,13 +993,11 @@ int iftSVMClassifyOVO(  iftSVM *svm, iftDataSet *Z, uchar sample_status) {
 
     // temporary buffer to get predictions from libsvm
     svmNode *x = (svmNode *) iftAlloc(precomp + nfeats + 1, sizeof(svmNode));
-
+    
     for (s=0; s < nsamples; s++){
-
         if (iftHasSampleStatus(Z->sample[s], sample_status)) {
             iftSampleToSvmSample(Z->sample[s], x, s, nfeats, precomp);
             Z->sample[s].label = (int) svm_predict(svm->model[0], x, &Z->sample[s].weight);
-
             if (Z->sample[s].label != Z->sample[s].truelabel){
                 nerrors++;
             }

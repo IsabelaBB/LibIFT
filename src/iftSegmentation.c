@@ -4752,7 +4752,7 @@ iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_sup
         
         // Estimate the number of seeds to be removed 
         //num_maintain = iftMax(num_sampl_seeds * exp(-(it + 1)), num_superpixels);
-	num_maintain  = iftMax(num_seeds*(1.0-decrement_rate),num_superpixels);
+	      num_maintain  = iftMax(num_seeds*(1.0-decrement_rate),num_superpixels);
 	  
         // Compute the medoids
         for(iftSet *s = seeds; s != NULL; s = s->next)
@@ -4835,6 +4835,286 @@ iftImage *iftDISF(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_sup
 
     return label_img;
 }
+
+iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int num_superpixels, iftImage *mask)
+{    
+    // DISF with random sampling of initial seeds
+    int *root_map;
+    double *cost_map;
+    iftImage *label_img, *mask_img;
+    iftDHeap *heap;
+    iftSet *seeds;
+    float decrement_rate = (float) num_superpixels / (float) num_init_seeds;
+    
+
+    // INIT =======================================================================
+    label_img = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+    root_map = (int*)calloc(mimg->n, sizeof(int));
+    cost_map = (double*)calloc(mimg->n, sizeof(double));
+    heap = iftCreateDHeap(mimg->n, cost_map);
+
+    if(mask == NULL) mask_img = iftSelectImageDomain(mimg->xsize, mimg->ysize, mimg->zsize);
+    else mask_img = mask;
+
+    // RANDOM SAMPLING ==============================================================
+    iftImage *seed_img = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+
+    int nmask_pixels = 0;
+    for(int p = 0; p < mask_img->n; p++)
+    {
+      if(mask_img->val[p] == 0)
+          cost_map[p] = IFT_INFINITY_DBL_NEG;
+      else
+          nmask_pixels++;
+    }
+
+    if(nmask_pixels < num_superpixels)
+        iftError("Number of superpixels %d is greater than number of valid pixels in the mask %d.", __func__, num_superpixels, nmask_pixels);
+    
+    if(nmask_pixels < num_init_seeds){
+      iftWarning("Number of initial seeds %d is greater than number of valid pixels in the mask %d.", __func__, num_init_seeds, nmask_pixels);
+      num_init_seeds = iftMax(num_superpixels, nmask_pixels / 1.9);
+    }
+
+    seeds = NULL;
+    for(int p_index = 0; p_index < num_init_seeds; p_index++)
+    {
+      int r = rand() % mimg->n;
+      if(mask_img->val[r] > 0 && seed_img->val[r] == 0)
+      {
+        iftInsertSet(&seeds, r); 
+        seed_img->val[r] = 1;
+      }
+      else
+        p_index--;
+    }
+    
+    iftDestroyImage(&seed_img);
+    if(mask == NULL) iftDestroyImage(&mask_img);
+
+    // DISF ========================================================================
+    int it, num_seeds;
+
+    it = 0;
+    do
+    {
+        int num_maintain;
+        int *superpixel_area, *seed_index_lut;
+        bool **is_tree_adj;
+        float **superpixel_feats;
+        iftSet **superpixel_adj;
+
+        num_seeds = iftSetSize(seeds);
+
+        // Init --------------------------------------------------------------------
+        seed_index_lut = (int*)calloc(num_seeds, sizeof(int));
+        superpixel_area = (int *)calloc(num_seeds, sizeof(int));
+        is_tree_adj = (bool**)calloc(num_seeds, sizeof(bool*));
+        superpixel_feats = (float **)calloc(num_seeds, sizeof(float *));
+        superpixel_adj = (iftSet **)calloc(num_seeds, sizeof(iftSet *));
+        
+        #pragma omp parallel for
+        for(int i = 0; i < num_seeds; i++)
+        {   
+            superpixel_feats[i] = (float *)calloc(mimg->m, sizeof(float));
+            is_tree_adj[i] = (bool *)calloc(num_seeds, sizeof(bool));
+
+            for(int j = 0; j < mimg->m; ++j)
+                superpixel_feats[i][j] = 0;
+
+            for(int j = 0; j < num_seeds; ++j)
+                is_tree_adj[i][j] = false;
+
+            superpixel_adj[i] = NULL;
+        }
+
+        #pragma omp parallel for
+        for(int p_index = 0; p_index < mimg->n; p_index++)
+        {
+            root_map[p_index] = IFT_NIL;
+            label_img->val[p_index] = 0;
+            
+            if(cost_map[p_index] != IFT_INFINITY_DBL_NEG)
+                cost_map[p_index] = IFT_INFINITY_DBL;
+        }
+
+        int seed_count;
+        seed_count = 0;
+        for(iftSet *s = seeds; s != NULL; s = s->next)
+        {
+            root_map[s->elem] = s->elem;
+            cost_map[s->elem] = 0.0;
+            seed_index_lut[seed_count] = s->elem;
+            label_img->val[s->elem] = seed_count + 1;
+            seed_count++;
+
+            iftInsertDHeap(heap, s->elem);
+        }
+
+        // IFT ---------------------------------------------------------------------
+        while(!iftEmptyDHeap(heap))
+        {
+            int p_index, p_label;
+            iftVoxel p_voxel;
+
+            p_index = iftRemoveDHeap(heap);
+            p_voxel = iftMGetVoxelCoord(mimg, p_index);
+            p_label = label_img->val[p_index];
+
+            // Add spel p to its tree
+            superpixel_area[p_label - 1]++;
+            for(int j = 0; j < mimg->m; j++) superpixel_feats[p_label - 1][j] += mimg->val[p_index][j];
+
+            // For each adjacent
+            for(int i = 1; i < A->n; i++)
+            {
+                iftVoxel q_voxel;
+
+                q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+
+                if(iftMValidVoxel(mimg, q_voxel))
+                {
+                    int q_index, q_label;
+
+                    q_index = iftMGetVoxelIndex(mimg, q_voxel);
+                    q_label = label_img->val[q_index];
+
+                    if(heap->color[q_index] != IFT_BLACK)
+                    {
+                        double cost, color_dist;
+
+                        color_dist = 0.0;
+                        for(int j = 0; j < mimg->m; j++)
+                        {
+                            double tmp;
+
+                            tmp = mimg->val[q_index][j] - (superpixel_feats[p_label - 1][j]/(float)superpixel_area[p_label-1]);
+
+                            color_dist += tmp*tmp;
+                        }
+                        color_dist = sqrtf(color_dist);
+
+                        cost = iftMax(cost_map[p_index], color_dist);
+
+                        if(cost < cost_map[q_index])
+                        {
+                            cost_map[q_index] = cost;
+                            root_map[q_index] = root_map[p_index];
+                            label_img->val[q_index] = p_label;
+
+                            if(heap->color[q_index] == IFT_GRAY) iftGoUpDHeap(heap, heap->pos[q_index]);
+                            else iftInsertDHeap(heap, q_index);
+                        }
+                    }
+                    else if(q_label != p_label)
+                    {
+                        if(!is_tree_adj[p_label-1][q_label - 1])
+                        {
+                            iftInsertSet(&superpixel_adj[p_label-1], q_label-1);
+                            iftInsertSet(&superpixel_adj[q_label-1], p_label-1);
+                            is_tree_adj[p_label-1][q_label-1] = true;
+                            is_tree_adj[q_label-1][p_label-1] = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Seed selection ----------------------------------------------------------
+        iftDHeap *prio_heap;
+        double *superpixel_prior;
+
+        superpixel_prior = (double *)calloc(num_seeds, sizeof(double));
+        prio_heap = iftCreateDHeap(num_seeds, superpixel_prior);
+
+        iftSetRemovalPolicyDHeap(prio_heap, MAXVALUE);
+        
+        // Estimate the number of seeds to be removed 
+        //num_maintain = iftMax(num_sampl_seeds * exp(-(it + 1)), num_superpixels);
+	      num_maintain  = iftMax(num_seeds*(1.0-decrement_rate),num_superpixels);
+        
+        // Compute the medoids
+        for(iftSet *s = seeds; s != NULL; s = s->next)
+        {
+            int s_index, s_label;
+
+            s_index = s->elem;
+            s_label = label_img->val[s_index];
+
+            for(int j = 0; j < mimg->m; j++) 
+                superpixel_feats[s_label - 1][j] /= superpixel_area[s_label - 1];
+        }
+        
+        // Compute the relevance of each seed
+        for(iftSet *s = seeds; s != NULL; s = s->next)
+        {
+            int s_index, s_label;
+            double area_prio, grad_prio;
+
+            s_index = s->elem;
+            s_label = label_img->val[s_index];
+
+            area_prio = superpixel_area[s_label - 1]/(double)mimg->n;
+
+            grad_prio = IFT_INFINITY_DBL;
+            for(iftSet *t = superpixel_adj[s_label - 1]; t != NULL; t = t->next)
+            {
+                int t_label;
+                double grad;
+
+                t_label = t->elem;
+
+                grad = iftFeatDistance(superpixel_feats[s_label - 1], superpixel_feats[t_label], mimg->m);
+
+                if(grad_prio > grad) grad_prio = grad;
+            }
+
+            superpixel_prior[s_label - 1] = area_prio * grad_prio;
+
+            iftInsertDHeap(prio_heap, s_label - 1);
+        }
+
+        // Select the most relevant seeds
+        iftDestroySet(&seeds);
+
+        for(int i = 0; i < num_maintain; i++) 
+        {
+            int s_index, s_label;
+
+            s_label = iftRemoveDHeap(prio_heap);
+            s_index = seed_index_lut[s_label];
+
+            iftInsertSet(&seeds, s_index);
+        }
+        
+        ++it;
+
+        // Clear -------------------------------------------------------------------
+        for(int i = 0; i < num_seeds; i++) 
+        {
+            free(superpixel_feats[i]);
+            iftDestroySet(&superpixel_adj[i]);
+            free(is_tree_adj[i]);
+        }
+        free(is_tree_adj);
+        free(superpixel_feats);
+        free(superpixel_adj);
+        free(seed_index_lut);
+        free(superpixel_area);
+        free(superpixel_prior);
+        iftDestroyDHeap(&prio_heap);
+        iftResetDHeap(heap);
+    }while(num_seeds > num_superpixels);
+
+    // CLEAR =======================================================================
+    free(root_map);
+    free(cost_map);
+    iftDestroyDHeap(&heap);
+    iftDestroySet(&seeds);
+
+    return label_img;
+}
+
 
 float iftGetIoUDetection(iftBoundingBox gt_bb, iftBoundingBox pred_bb) { 
   int width, height, volume;

@@ -168,13 +168,15 @@ iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch(iftFileSet *fs, char *labels_d
                                 int initial_seeds, int nsuperpixels,
                                 char **basename,
                                 iftGFLIMGraphNodeFeature graph_feat,
-                                iftGFLIMGraphSpxMethod graph_type);
+                                iftGFLIMGraphSpxMethod graph_type,
+                                bool use_mask);
 iftGFLIMGraphArray *iftGFLIMImageToFLIMGraphBatch_v2(iftFileSet *fs,
                                   int first, int last,
                                   int initial_seeds, int nsuperpixels,
                                   iftGFLIMGraphNodeFeature graph_feat,
                                   iftGFLIMGraphSpxMethod graph_type,
-                                  iftImageArray *label_imgs);
+                                  iftImageArray *label_imgs,
+                                  bool use_mask);
 
 void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label_imgs,
                             iftFileSet *fs, int first, int last, int layer, 
@@ -204,7 +206,9 @@ void iftGFLIMMaxNormGraph(iftGFLIMGraph *graph);
 iftMatrix *iftGFLIMUpsampleFeatureMatrix(iftMatrix *X, 
                                     int *nodes_map, iftIntArray *kernels_map, 
                                     int nnodes, int nfeats);
-                                    
+
+int getLayersToConcat(iftGFLIMArch *arch, int layer, int skip_layer, iftIntArray *layers_to_concat, int index);
+
 #ifdef __cplusplus
 }
 #endif

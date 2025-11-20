@@ -95,6 +95,8 @@ float *iftGFLIMTriStateAdaptativeWeigth(iftMImage *mimg);
 
 iftFImage *iftGFLIMTriStateAdaptativeDecoder(iftMImage *mimg);
 
+void GetMaskDirInplace(char* dir);
+
 #ifdef __cplusplus
 }
 #endif

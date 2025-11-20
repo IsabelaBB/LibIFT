@@ -82,14 +82,14 @@ iftGFLIMGraph *iftCreateGFLIMGraph(int num_feats, int num_nodes)
     graph->nodes = (iftGFLIMGraphNode *)calloc(graph->num_nodes, sizeof(iftGFLIMGraphNode));
 
 #pragma omp parallel for
-    for (unsigned long spx_index = 0; spx_index < graph->num_nodes; spx_index++)
+    for (int spx_index = 0; spx_index < graph->num_nodes; spx_index++)
     {
         graph->nodes[spx_index].numNeighbors = 0;
         graph->nodes[spx_index].adj = NULL;
         graph->nodes[spx_index].numPixels = 0;
     }
 
-    for (unsigned long spx_index = 0; spx_index < graph->num_nodes; spx_index++)
+    for (int spx_index = 0; spx_index < graph->num_nodes; spx_index++)
         graph->nodes[spx_index].feats = (double *)calloc(num_feats, sizeof(double));
 
     return graph;
@@ -173,7 +173,7 @@ iftGFLIMGraph *iftCopyGFLIMGraph(int num_feats, iftGFLIMGraph *graph_orig, bool 
 
     iftGFLIMGraphNode *node = graph->nodes;
     iftGFLIMGraphNode *node_orig = graph_orig->nodes;
-    for (unsigned long node_index = 0; node_index < graph->num_nodes; node_index++)
+    for (int node_index = 0; node_index < graph->num_nodes; node_index++)
     {
         if (copy_features)
         {
@@ -346,8 +346,8 @@ iftGFLIMGraph *iftReadGFLIMGraph(char *filename)
         iftError("Graph file does not exist %s", __func__, filename);
     iftDict *graph_dict = iftReadJson(filename);
 
-    unsigned long num_nodes = (unsigned long)iftGetLongValFromDict("num_nodes", graph_dict); 
-    unsigned long num_feats = (unsigned long)iftGetLongValFromDict("num_feats", graph_dict); 
+    int num_nodes = (int)iftGetLongValFromDict("num_nodes", graph_dict); 
+    int num_feats = (int)iftGetLongValFromDict("num_feats", graph_dict); 
 
     bool directed = false;
     if (iftDictContainKey("directed", graph_dict, NULL))
@@ -359,16 +359,16 @@ iftGFLIMGraph *iftReadGFLIMGraph(char *filename)
         iftError("Number of features must be greater than 0", __func__);
 
     iftGFLIMGraph *graph = iftCreateGFLIMGraph(num_feats, num_nodes);
-    graph->num_edges = (unsigned long)iftGetLongValFromDict("num_edges", graph_dict); 
+    graph->num_edges = (int)iftGetLongValFromDict("num_edges", graph_dict); 
 
     char name[50];
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long l = 0; l < graph->num_nodes; l++)
+    for (int l = 0; l < graph->num_nodes; l++)
     {
-        sprintf(name, "node%lu", l);
+        sprintf(name, "node%d", l);
         iftDict *node_info = iftGetDictFromDict(name, graph_dict);
 
-        node->numPixels = (unsigned long)iftGetLongValFromDict("num_pixels", node_info);
+        node->numPixels = (int)iftGetLongValFromDict("num_pixels", node_info);
 
         iftDblArray *feats = iftGetDblArrayFromDict("feats", node_info);
         memcpy(node->feats, feats->val, graph->num_feats * sizeof(double));
@@ -408,9 +408,9 @@ void iftWriteGFLIMGraph(iftGFLIMGraph *graph, char *filename)
     // create json data
     iftDict *info = iftCreateDict();
 
-    iftInsertIntoDict("num_nodes", (long)graph->num_nodes, info);
-    iftInsertIntoDict("num_feats", (long)graph->num_feats, info);
-    iftInsertIntoDict("num_edges", (long)graph->num_edges, info);
+    iftInsertIntoDict("num_nodes", (int)graph->num_nodes, info);
+    iftInsertIntoDict("num_feats", (int)graph->num_feats, info);
+    iftInsertIntoDict("num_edges", (int)graph->num_edges, info);
     iftInsertIntoDict("directed", false, info);
 
     // save nodes information
@@ -419,16 +419,16 @@ void iftWriteGFLIMGraph(iftGFLIMGraph *graph, char *filename)
     iftIntArray *neighbors[graph->num_nodes];
 
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long i = 0; i < graph->num_nodes; i++)
+    for (int i = 0; i < graph->num_nodes; i++)
     {
         char node_name[100];
-        sprintf(node_name, "node%lu", i);
+        sprintf(node_name, "node%d", i);
         node_info[i] = iftCreateDict();
-        iftInsertIntoDict("num_pixels", (long)node->numPixels, node_info[i]);
+        iftInsertIntoDict("num_pixels", (int)node->numPixels, node_info[i]);
         feats[i] = iftCopyDblArray(node->feats, graph->num_feats);
         iftInsertIntoDict("feats", feats[i], node_info[i]);
 
-        long j = 0;
+        int j = 0;
         iftSet *neigh = node->adj;
         while (neigh != NULL)
         {
@@ -1056,8 +1056,8 @@ void iftImageToGridGFLIMGraphs(char *image_dir,
 
     if (!iftDirExists(image_dir))
         iftError("Image directory does not exist.", __func__);
-    iftFileSet *fs_imgs = iftLoadFileSetFromDir(image_dir, 1);
-    if (fs_imgs->n < 1)
+    iftFileSet *fs_imgs = iftLoadFileSetFromDirOrCSV(image_dir, 1, false);
+    if (fs_imgs == NULL || fs_imgs->n < 1)
         iftError("No images found.", __func__);
 
     iftMakeDir(labels_dir);
@@ -1329,12 +1329,12 @@ float **RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img,
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < original_img_rgb->m; band_index++)
+        for (int band_index = 0; band_index < original_img_rgb->m; band_index++)
             node->feats[band_index] += original_img_rgb->val[p_index][band_index];
 
         // look at neighbor pixels
@@ -1345,7 +1345,7 @@ float **RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img,
             if (iftMValidVoxel(original_img_rgb, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(original_img_rgb, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img_rgb, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
@@ -1360,7 +1360,7 @@ float **RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labeled_img,
         }
     }
 
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         iftDestroyBMap(&neighbors[spx_index]);
 
     return superpixel_colors;
@@ -1531,12 +1531,12 @@ iftGFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labele
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < original_img_rgb->m; band_index++)
+        for (int band_index = 0; band_index < original_img_rgb->m; band_index++)
             node->feats[band_index] += original_img_rgb->val[p_index][band_index];
 
         // look at neighbor pixels
@@ -1547,7 +1547,7 @@ iftGFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labele
             if (iftMValidVoxel(original_img_rgb, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(original_img_rgb, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img_rgb, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
@@ -1562,7 +1562,7 @@ iftGFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labele
         }
     }
 
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         iftDestroyBMap(&neighbors[spx_index]);
 
     return superpixel_colors;
@@ -1570,15 +1570,15 @@ iftGFLIMGraph *RGBBucketDescriptor(iftMImage *original_img_rgb, iftImage *labele
 */
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMean(
-                    unsigned long num_superpixels, 
-                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    int num_superpixels, 
+                    iftAdjRel *A, iftMImage *original_img, 
                     iftImage *labeled_img)
 {
     if (num_superpixels < 1)
         iftError("Number of superpixels must be positive", __func__);
     iftBMap *neighbors[num_superpixels];
 
-    iftGFLIMGraph *graph = iftCreateGFLIMGraph(oiginal_img->m, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateGFLIMGraph(original_img->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1586,27 +1586,30 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMean(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        // get its label
+        int label = (int)(labeled_img->val[p_index] - 1);
+        if(label < 0) continue; // ignore values outside the mask
+        
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -1618,9 +1621,9 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMean(
     }
 
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
-        for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+        for (int band_index = 0; band_index < graph->num_feats; band_index++)
             node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
         node++;
         iftDestroyBMap(&neighbors[spx_index]);
@@ -1630,15 +1633,15 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMean(
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSum(
-                    unsigned long num_superpixels,
-                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    int num_superpixels,
+                    iftAdjRel *A, iftMImage *original_img, 
                     iftImage *labeled_img)
 {
     if (num_superpixels < 1)
         iftError("Number of superpixels must be positive", __func__);
     iftBMap *neighbors[num_superpixels];
 
-    iftGFLIMGraph *graph = iftCreateGFLIMGraph(oiginal_img->m, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateGFLIMGraph(original_img->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1646,27 +1649,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSum(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -1677,15 +1681,15 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSum(
         }
     }
 
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         iftDestroyBMap(&neighbors[spx_index]);
     
     return graph;
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsize(
-                    unsigned long num_superpixels,
-                    iftAdjRel *A, iftMImage *oiginal_img, 
+                    int num_superpixels,
+                    iftAdjRel *A, iftMImage *original_img, 
                     iftImage *labeled_img)
 {
     if (num_superpixels < 1)
@@ -1694,7 +1698,7 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsize(
     iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
-    graph = iftCreateGFLIMGraph(oiginal_img->m, num_superpixels);
+    graph = iftCreateGFLIMGraph(original_img->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1702,27 +1706,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsize(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -1734,10 +1739,10 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsize(
     }
 
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
-        double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-        for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+        double rel_size = (double)node->numPixels / (double)original_img->n;
+        for (int band_index = 0; band_index < graph->num_feats; band_index++)
             node->feats[band_index] *= (1.0 + rel_size);
         node++;
         iftDestroyBMap(&neighbors[spx_index]);
@@ -1748,8 +1753,8 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsize(
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanMultRelsize(
-    unsigned long num_superpixels,
-    iftAdjRel *A, iftMImage *oiginal_img, 
+    int num_superpixels,
+    iftAdjRel *A, iftMImage *original_img, 
     iftImage *labeled_img)
 {
     if (num_superpixels < 1)
@@ -1758,7 +1763,7 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanMultRelsize(
     iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
-    graph = iftCreateGFLIMGraph(oiginal_img->m, num_superpixels);
+    graph = iftCreateGFLIMGraph(original_img->m, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1766,27 +1771,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanMultRelsize(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -1799,10 +1805,10 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanMultRelsize(
 
     iftGFLIMGraphNode *node = graph->nodes;
     node = graph->nodes;
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
-        double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-        for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+        double rel_size = (double)node->numPixels / (double)original_img->n;
+        for (int band_index = 0; band_index < graph->num_feats; band_index++)
         {
             node->feats[band_index] /= (double)node->numPixels;
             node->feats[band_index] *= (1.0 + rel_size);
@@ -1816,15 +1822,15 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanMultRelsize(
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsize(
-                unsigned long num_superpixels,
+                int num_superpixels,
                 iftAdjRel *A,
-                iftMImage *oiginal_img, iftImage *labeled_img)
+                iftMImage *original_img, iftImage *labeled_img)
 {
     if (num_superpixels < 1)
         iftError("Number of superpixels must be positive", __func__);
 
     iftBMap *neighbors[num_superpixels];
-    iftGFLIMGraph *graph = iftCreateGFLIMGraph(oiginal_img->m + 1, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateGFLIMGraph(original_img->m + 1, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1832,27 +1838,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsize(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -1864,11 +1871,11 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsize(
     }
 
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
-        for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+        for (int band_index = 0; band_index < graph->num_feats - 1; band_index++)
             node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
-        node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)oiginal_img->n;
+        node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)original_img->n;
         node++;
         iftDestroyBMap(&neighbors[spx_index]);
     }
@@ -1878,15 +1885,15 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsize(
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeNeighb(
-        unsigned long num_superpixels,
-        iftAdjRel *A, iftMImage *oiginal_img, 
+        int num_superpixels,
+        iftAdjRel *A, iftMImage *original_img, 
         iftImage *labeled_img)
 {
     if (num_superpixels < 1)
         iftError("Number of superpixels must be positive", __func__);
 
     iftBMap *neighbors[num_superpixels];
-    iftGFLIMGraph *graph = iftCreateGFLIMGraph(oiginal_img->m + 1, num_superpixels);
+    iftGFLIMGraph *graph = iftCreateGFLIMGraph(original_img->m + 1, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1894,27 +1901,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeNeighb(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -1926,9 +1934,9 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeNeighb(
     }
 
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
-        for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+        for (int band_index = 0; band_index < graph->num_feats - 1; band_index++)
             node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
 
         int sum_size = 0;
@@ -1949,8 +1957,8 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeNeighb(
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeHaralick(
-    unsigned long num_superpixels,
-    iftAdjRel *A, iftMImage *oiginal_img, 
+    int num_superpixels,
+    iftAdjRel *A, iftMImage *original_img,
     iftImage *labeled_img,
     iftImage *gray_img)
 {
@@ -1962,7 +1970,7 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeHaralick(
     iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
-    graph = iftCreateGFLIMGraph(oiginal_img->m + 6, num_superpixels);
+    graph = iftCreateGFLIMGraph(original_img->m + 6, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -1970,27 +1978,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeHaralick(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -2002,24 +2011,24 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatRelsizeHaralick(
     }
 
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+        for (int band_index = 0; band_index < original_img->m; band_index++)
             node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
-        node->feats[oiginal_img->m] = (double)node->numPixels / (double)oiginal_img->n;
+        node->feats[original_img->m] = (double)node->numPixels / (double)original_img->n;
         node++;
         iftDestroyBMap(&neighbors[spx_index]);
     }
-    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
+    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, original_img->m + 1);
     node = NULL;
 
     return graph;
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsizeConcatHaralick(
-    unsigned long num_superpixels,
+    int num_superpixels,
     iftAdjRel *A,
-    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftMImage *original_img, iftImage *labeled_img,
     iftImage *gray_img)
 {
     if (num_superpixels < 1)
@@ -2030,7 +2039,7 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsizeConcatHaralick(
     iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
-    graph = iftCreateGFLIMGraph(oiginal_img->m + 5, num_superpixels);
+    graph = iftCreateGFLIMGraph(original_img->m + 5, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -2038,27 +2047,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsizeConcatHaralick(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -2070,15 +2080,15 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsizeConcatHaralick(
     }
 
     iftGFLIMGraphNode *node = graph->nodes;
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
     {
-        double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+        double rel_size = (double)node->numPixels / (double)original_img->n;
+        for (int band_index = 0; band_index < original_img->m; band_index++)
             node->feats[band_index] *= (1.0 + rel_size);
         node++;
         iftDestroyBMap(&neighbors[spx_index]);
     }
-    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, original_img->m);
         
     node = NULL;
 
@@ -2086,9 +2096,9 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumMultRelsizeConcatHaralick(
 }
 
 iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
-    unsigned long num_superpixels,
+    int num_superpixels,
     iftAdjRel *A,
-    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftMImage *original_img, iftImage *labeled_img,
     iftGFLIMGraphNodeFeature feat_type,
     iftImage *gray_img)
 {
@@ -2100,7 +2110,7 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
     iftGFLIMGraph *graph;
     iftBMap *neighbors[num_superpixels];
 
-    graph = iftCreateGFLIMGraph(oiginal_img->m + 5, num_superpixels);
+    graph = iftCreateGFLIMGraph(original_img->m + 5, num_superpixels);
 
     for (int i = 0; i < num_superpixels; i++)
         neighbors[i] = iftCreateBMap(num_superpixels);
@@ -2108,27 +2118,28 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
+        if(label < 0) continue; // ignore values outside the mask
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
-                if (label > q_label && !iftBMapValue(neighbors[label], q_label))
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
                 {
                     iftGFLIMGraphInsertNeighborNode(node, q_label);
                     iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
@@ -2139,9 +2150,9 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
         }
     }
 
-    for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         iftDestroyBMap(&neighbors[spx_index]);
-    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+    iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, original_img->m);
 
     return graph;
 }
@@ -2153,7 +2164,7 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
  *
  * @param num_superpixels   The number of superpixels in `labeled_img`.
  * @param A                 An adjacency relation between pixels.
- * @param oiginal_img       The original image.
+ * @param original_img       The original image.
  * @param labeled_img       A map of superpixel labels.
  * @param feat_type         The type of feature to be computed.
  * @param gray_img         The gray image. It is used to compute the Haralick features.
@@ -2164,9 +2175,9 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
  */
 /*
 iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
-    unsigned long num_superpixels,
+    int num_superpixels,
     iftAdjRel *A,
-    iftMImage *oiginal_img, iftImage *labeled_img,
+    iftMImage *original_img, iftImage *labeled_img,
     iftGFLIMGraphNodeFeature feat_type,
     iftImage *gray_img)
 {
@@ -2186,20 +2197,20 @@ iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
     {
     case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE:
     case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB:
-        feat_num = oiginal_img->m + 1;
+        feat_num = original_img->m + 1;
         break;
 
     case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK:
-        feat_num = oiginal_img->m + 6;
+        feat_num = original_img->m + 6;
         break;
 
     case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
     case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
-        feat_num = oiginal_img->m + 5;
+        feat_num = original_img->m + 5;
         break;
 
     default:
-        feat_num = oiginal_img->m;
+        feat_num = original_img->m;
         break;
     }
 
@@ -2211,23 +2222,23 @@ iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
     // for each pixel
     for (int p_index = 0; p_index < labeled_img->n; p_index++)
     {
-        unsigned long label = (unsigned long)(labeled_img->val[p_index] - 1); // get its label
+        int label = (int)(labeled_img->val[p_index] - 1); // get its label
         iftGFLIMGraphNode *node = &(graph->nodes[label]);                      // get the node in the graph
         node->numPixels++;
 
         // increase the features (all feature types involve the mean or sum of the original image color values)
-        for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
-            node->feats[band_index] += oiginal_img->val[p_index][band_index];
+        for (int band_index = 0; band_index < original_img->m; band_index++)
+            node->feats[band_index] += original_img->val[p_index][band_index];
 
         // look at neighbor pixels
-        iftVoxel p_voxel = iftMGetVoxelCoord(oiginal_img, p_index);
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
         for (int i = 1; i < A->n; i++)
         {
             iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
-            if (iftMValidVoxel(oiginal_img, q_voxel))
+            if (iftMValidVoxel(original_img, q_voxel))
             {
                 // get the label of the neighbor pixel
-                unsigned long q_label = (unsigned long)(labeled_img->val[iftMGetVoxelIndex(oiginal_img, q_voxel)] - 1);
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
 
                 // check if neighbor relationship (the edge) is already in the graph
                 // since the graph is undirected, we check only one side and add both
@@ -2246,9 +2257,9 @@ iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
     switch (feat_type)
     {
     case IFT_FLIMGRAPH_FEATURE_MEAN:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
-            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+            for (int band_index = 0; band_index < graph->num_feats; band_index++)
                 node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
             node++;
             iftDestroyBMap(&neighbors[spx_index]);
@@ -2256,17 +2267,17 @@ iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
         break;
 
     case IFT_FLIMGRAPH_FEATURE_SUM:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
             iftDestroyBMap(&neighbors[spx_index]);
         }
         break;
 
     case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
-            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+            double rel_size = (double)node->numPixels / (double)original_img->n;
+            for (int band_index = 0; band_index < graph->num_feats; band_index++)
                 node->feats[band_index] *= (1.0 + rel_size);
             node++;
             iftDestroyBMap(&neighbors[spx_index]);
@@ -2275,10 +2286,10 @@ iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
 
     case IFT_FLIMGRAPH_FEATURE_MEAN_MULT_RELSIZE:
         node = graph->nodes;
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
-            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-            for (unsigned long band_index = 0; band_index < graph->num_feats; band_index++)
+            double rel_size = (double)node->numPixels / (double)original_img->n;
+            for (int band_index = 0; band_index < graph->num_feats; band_index++)
             {
                 node->feats[band_index] /= (double)node->numPixels;
                 node->feats[band_index] *= (1.0 + rel_size);
@@ -2289,20 +2300,20 @@ iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
         break;
 
     case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
-            for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+            for (int band_index = 0; band_index < graph->num_feats - 1; band_index++)
                 node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
-            node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)oiginal_img->n;
+            node->feats[graph->num_feats - 1] = (double)node->numPixels / (double)original_img->n;
             node++;
             iftDestroyBMap(&neighbors[spx_index]);
         }
         break;
 
     case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_NEIGHB:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
-            for (unsigned long band_index = 0; band_index < graph->num_feats - 1; band_index++)
+            for (int band_index = 0; band_index < graph->num_feats - 1; band_index++)
                 node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
 
             int sum_size = 0;
@@ -2320,34 +2331,34 @@ iftGFLIMGraph *iftSuperpixelImageToFLIMGraph(
         break;
 
     case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
-            for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            for (int band_index = 0; band_index < original_img->m; band_index++)
                 node->feats[band_index] = (node->feats[band_index] / (double)node->numPixels);
-            node->feats[oiginal_img->m] = (double)node->numPixels / (double)oiginal_img->n;
+            node->feats[original_img->m] = (double)node->numPixels / (double)original_img->n;
             node++;
             iftDestroyBMap(&neighbors[spx_index]);
         }
-        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m + 1);
+        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, original_img->m + 1);
         break;
 
     case IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
-            double rel_size = (double)node->numPixels / (double)oiginal_img->n;
-            for (unsigned long band_index = 0; band_index < oiginal_img->m; band_index++)
+            double rel_size = (double)node->numPixels / (double)original_img->n;
+            for (int band_index = 0; band_index < original_img->m; band_index++)
                 node->feats[band_index] *= (1.0 + rel_size);
             node++;
             iftDestroyBMap(&neighbors[spx_index]);
         }
-        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, original_img->m);
         break;
     case IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK:
-        for (unsigned long spx_index = 0; spx_index < num_superpixels; spx_index++)
+        for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
         {
             iftDestroyBMap(&neighbors[spx_index]);
         }
-        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, oiginal_img->m);
+        iftGFLIMGraphHaralickFeatures(graph, gray_img, labeled_img, original_img->m);
         break;
     default:
         iftError("Invalid feature type %d ", __func__, feat_type);
@@ -2377,7 +2388,8 @@ iftGFLIMGraph *iftImageToGFLIMGraph(iftImage *img,
                                   int num_superpixels, int param,
                                   iftImage **label_img,
                                   iftGFLIMGraphNodeFeature graph_feat,
-                                  iftGFLIMGraphSpxMethod graph_type)
+                                  iftGFLIMGraphSpxMethod graph_type,
+                                  iftImage *mask)
 {
     iftImage *label_img_tmp = NULL;
     iftMImage *mimg;
@@ -2393,7 +2405,7 @@ iftGFLIMGraph *iftImageToGFLIMGraph(iftImage *img,
     {
     case IFT_FLIMGRAPH_TYPE_DISF:
         A = iftCircular(sqrtf(2.0));
-        label_img_tmp = iftDISF(mimg, A, param, num_superpixels, NULL);
+        label_img_tmp = iftDISFRandom(mimg, A, param, num_superpixels, mask);
         break;
 
     case IFT_FLIMGRAPH_TYPE_ERGC:
@@ -2478,6 +2490,7 @@ iftGFLIMGraph *iftImageToGFLIMGraph(iftImage *img,
 
     iftDestroyAdjRel(&A);
     iftDestroyMImage(&mimg);
+
     return graph;
 }
 
@@ -2517,10 +2530,15 @@ iftImage *iftGFLIMGraphToImage(iftGFLIMGraph *graph, iftImage *labels, int Imax,
     {
         for (p = 0; p < img->n; p++)
         {
-            if (labels->val[p] - 1 < 0 || labels->val[p] - 1 >= graph->num_nodes)
-                iftError("Invalid label %d. It should be in [1,%d]", __func__, labels->val[p], graph->num_nodes);
-            img->val[p] = (int)((double)(Imax) * ((graph->nodes[labels->val[p] - 1].feats[b] - min) / (max - min)));
-            //img->val[p] = (int)((double)(Imax) * (graph->nodes[labels->val[p] - 1].feats[b] / max));
+            int label = labels->val[p] - 1;
+            if (label >= graph->num_nodes){
+                iftError("Invalid label %d. It should be in [1,%d]", __func__, label, graph->num_nodes);
+            }
+            if(label >= 0)
+            {
+                //img->val[p] = (int)((double)(Imax) * ((graph->nodes[label].feats[b] - min) / (max - min)));
+                img->val[p] = (int)((double)(Imax) * (graph->nodes[label].feats[b] / max));
+            }
         }
     }
 
@@ -2548,13 +2566,17 @@ iftMImage *iftGFLIMGraphToMImage(iftGFLIMGraph *graph, iftImage *labels)
         iftError("Labels image is NULL", __func__);
 
     iftMImage *img = iftCreateMImage(labels->xsize, labels->ysize, labels->zsize, graph->num_feats);
-    for (b = 0; b < img->m; b++)
+    for (p = 0; p < img->n; p++)
     {
-        for (p = 0; p < img->n; p++)
+        int spx_label = labels->val[p] - 1;
+        if (spx_label >= graph->num_nodes)
+            iftError("Invalid label %d %d ", __func__, spx_label, graph->num_nodes);
+        
+        if(spx_label >= 0)
         {
-            if (labels->val[p] - 1 < 0 || labels->val[p] - 1 >= graph->num_nodes)
-                iftError("Invalid label %d %d ", __func__, labels->val[p], graph->num_nodes);
-            img->val[p][b] = graph->nodes[labels->val[p] - 1].feats[b];
+            iftGFLIMGraphNode *node = &(graph->nodes[spx_label]);
+            for (b = 0; b < img->m; b++)
+                img->val[p][b] = node->feats[b];
         }
     }
 
@@ -4402,6 +4424,45 @@ iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
         free(feature_vector);
     }
     return matrix;
+}
+
+iftGFLIMAdjacencyList *iftGFLIMCreateAdjList(int num_nodes)
+{
+    iftGFLIMAdjacencyList *adj_list = (iftGFLIMAdjacencyList *)malloc(sizeof(iftGFLIMAdjacencyList));
+    adj_list->neighbors = (iftIntArray **)malloc(num_nodes * sizeof(iftIntArray *));
+    adj_list->num_nodes = num_nodes;
+    return adj_list;
+}
+
+iftGFLIMAdjacencyList *iftGFLIMComputeAdjacencyList(iftGFLIMGraph *graph)
+{
+    iftGFLIMAdjacencyList *adj_list = iftGFLIMCreateAdjList(graph->num_nodes);
+
+    iftGFLIMGraphNode *nodes = graph->nodes;
+    for (int i = 0; i < graph->num_nodes; i++)
+    {
+        adj_list->neighbors[i] = iftCreateIntArray((*nodes).numNeighbors);
+        iftSet *node = (*nodes).adj;
+        int j = 0;
+        while (node != NULL)
+        {
+            adj_list->neighbors[i]->val[j] = node->elem;
+            j++;
+            node = node->next;
+        }
+        nodes++;
+    }
+    nodes = NULL;
+    return adj_list;
+}
+
+void iftGFLIMDestroyAdjacencyList(iftGFLIMAdjacencyList **adj_list)
+{
+    for (int i = 0; i < (*adj_list)->num_nodes; i++)
+        iftDestroyIntArray(&(*adj_list)->neighbors[i]);
+    free((*adj_list)->neighbors);
+    free(*adj_list);
+    *adj_list = NULL;
 }
 
 /** @} */
