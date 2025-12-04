@@ -9,6 +9,8 @@
 # kadeploy3 ubuntu2404-nfs
 # oarsub -r now -l nodes=2,walltime=4:00
 # oarstat -fj 3357071 -> check job details
+# tar -zcvf folder.tar.gz folder -> compress folder
+# tar -xf folder.tar.gz -> unzip folder
 
 # chmod +x experiment.sh; oarsub -t deploy -r now "./experiment.sh"
 # oarsub -t deploy -r now -q p1 -n name -l walltime=6:00 "bash ~/LibIFT/Scripts/build.sh 1 1213"
@@ -58,13 +60,14 @@ python3 gflim_iterative_pipeline_050trainSVM_server.py \
     /home/iborlido/LibIFT/Datasets/intestinal-parasites/${ds_name} \
     ${split} ${random_state} ${arch_name} ${nlayers} --dataset_name ${ds_name} --nclass ${nclasses} \
     --stride ${stride} --init_seeds ${init_seeds} --final_spx ${final_spx} --node_feat ${node_feat} \
-    --spx_alg ${spx_alg} --nimages_final 5 --sorted_vector 1 >> \
+    --spx_alg ${spx_alg} --nimages_final 5 --sorted_vector 1 \
+    --init_img 1 >> \
     ${results_dir}/seed${random_state}_layer${nlayers}.log 2>&1
 
-nlayers=3
-python3 gflim_iterative_pipeline_050trainSVM_server.py \
-    /home/iborlido/LibIFT/Datasets/intestinal-parasites/${ds_name} \
-    ${split} ${random_state} ${arch_name} ${nlayers} --dataset_name ${ds_name} --nclass ${nclasses} \
-    --stride ${stride} --init_seeds ${init_seeds} --final_spx ${final_spx} --node_feat ${node_feat} \
-    --spx_alg ${spx_alg} --nimages_final 5 --sorted_vector 1 >> \
-    ${results_dir}/seed${random_state}_layer${nlayers}.log 2>&1
+#nlayers=3
+#python3 gflim_iterative_pipeline_050trainSVM_server.py \
+#    /home/iborlido/LibIFT/Datasets/intestinal-parasites/${ds_name} \
+#    ${split} ${random_state} ${arch_name} ${nlayers} --dataset_name ${ds_name} --nclass ${nclasses} \
+#    --stride ${stride} --init_seeds ${init_seeds} --final_spx ${final_spx} --node_feat ${node_feat} \
+#    --spx_alg ${spx_alg} --nimages_final 5 --sorted_vector 1 >> \
+#    ${results_dir}/seed${random_state}_layer${nlayers}.log 2>&1

@@ -41,6 +41,7 @@ def parse_args():
     
     # results
     parser.add_argument("--nimages_final", type=int, default=5, help="Final number of images to select per class")
+    parser.add_argument("--init_img", type=int, default=1, help="Initial number of images to select per class")
     parser.add_argument("--log_file", type=str, help="Log file to store the results", default=None)
 
     # svm parameters
@@ -279,7 +280,7 @@ def experiment_pipeline(args, results_path, results_file, random_state, nimages)
 
     # concatenate the lines and convert to float
     values = [float(value.strip()) for value in (lines[0]+lines[1]).split(';')]
-    values = [args.final_spx, nimages, random_state] + values + [nfeatures]
+    values = [args.final_spx, args.nlayers, nimages, random_state] + values + [nfeatures]
 
     best_result = [values[-3], values[-2], nimages]
 
@@ -317,15 +318,16 @@ def main():
     shutil.copytree(os.path.join(args.dataset_path, 'build'), 
                     os.path.join(results_path, 'build'), dirs_exist_ok=True)
 
-    if not os.path.exists(os.path.join(results_path, 'build', 'superpixels')):
-        os.symlink(os.path.join(args.dataset_path, 'superpixels'), 
-            os.path.join(results_path, 'build', 'superpixels'),
-            target_is_directory=True)
+    if not os.path.exists(os.path.join(results_path, 'build', 'superpixels', args.spx_alg, args.node_feat, f'{args.init_seeds}-{args.final_spx}')):
+        os.makedirs(os.path.join(results_path, 'build', 'superpixels', args.spx_alg, args.node_feat, f'{args.init_seeds}-{args.final_spx}'), exist_ok=True)
+        shutil.copytree(os.path.join(args.dataset_path, 'superpixels', args.spx_alg, args.node_feat, f'{args.init_seeds}-{args.final_spx}'), 
+                os.path.join(results_path, 'build', 'superpixels', args.spx_alg, args.node_feat, f'{args.init_seeds}-{args.final_spx}'),
+                dirs_exist_ok=True)
 
     # initialize results file
     results_file = os.path.join(results_path, f'results{args.split}.csv')
     if not os.path.isfile(results_file):
-        header = "superpixel,img_per_class,seed,"
+        header = "superpixel,nlayers,img_per_class,seed,"
         for c in range(1, args.nclass + 1):
             header += f'class{c}_accuracy,'
         header = header + "kappa,global_accuracy,nfeats\n"  
@@ -334,7 +336,7 @@ def main():
 
     best_result = [0.0, 0.0, 0]  # best kappa, global accuracy, nimages, random_state
     with tqdm(total=total_experiments, position=0, leave=True) as pbar:
-        for nimages in range(1,args.nimages_final + 1):
+        for nimages in range(args.init_img, args.nimages_final + 1):
             pbar.set_description_str(f"{nimages} Image(s)")
             pbar.refresh()
             

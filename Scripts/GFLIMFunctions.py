@@ -45,7 +45,7 @@ class GFLIMFunctions():
         if(msg is not None):
             sys.stdout.write(msg)
             sys.stdout.flush()
-        #print("Calling function: {} {}".format(function, " ".join([str(i) for i in args])))
+        print("Calling function: {} {}".format(function, " ".join([str(i) for i in args])))
         os.system("{} {}".format(function, " ".join([str(i) for i in args])))
 
     def create_graphs(self, images_path, final_spx : list, graphs_path_src, graph_feats, spx_alg, init_seeds=0, use_mask=0):
