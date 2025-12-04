@@ -4877,13 +4877,25 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
     }
 
     seeds = NULL;
+    int pixels[nmask_pixels];
+    for(int p_index = 0, i=0; p_index < mask_img->n; p_index++)
+    {
+      if(mask_img->val[p_index] > 0)
+          pixels[i++] = p_index;
+    }
+
     for(int p_index = 0; p_index < num_init_seeds; p_index++)
     {
-      int r = rand() % mimg->n;
-      if(mask_img->val[r] > 0 && seed_img->val[r] == 0)
+      int r = rand() % nmask_pixels;
+      int p = pixels[r];
+
+      if(mask_img->val[p] > 0 && seed_img->val[p] == 0)
       {
-        iftInsertSet(&seeds, r); 
-        seed_img->val[r] = 1;
+        iftInsertSet(&seeds, p); 
+        seed_img->val[p] = 1;
+        // swap selected pixel with the last in the array
+        pixels[r] = pixels[nmask_pixels - 1];
+        nmask_pixels--;
       }
       else
         p_index--;
