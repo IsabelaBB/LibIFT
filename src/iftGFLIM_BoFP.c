@@ -413,7 +413,7 @@ iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
             }
         }
         if (max_count > 0)
-            iftInsertLabeledSetMarkerAndHandicap(&graph_seeds, p, max_class, max_class, 0);
+            iftInsertLabeledSetMarkerAndHandicap(&graph_seeds, p, max_class+minclass, max_class+minclass, 0);
     }
 
     for (int i = 0; i < num_nodes; i++)
@@ -1789,7 +1789,6 @@ iftMImageArray *iftGFLIMConvLayerBatch(iftGFLIMGraphArray *graph, iftMatrix *ker
  * @param graph The input graph.
  * @param pool_type The pooling type.
  * @param pool_size The pooling size.
- * @param pool_stride The pooling stride.
  * @note The pooling is applied to the graph nodes.
  */
 void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph,
@@ -1813,7 +1812,7 @@ void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph
     for (int i = 0; i < activ_array->n; i++)
     {
         iftMImageToGFLIMGraphInplace(activ_array->val[i], graph->val[i]);
-        iftGFLIMPoolingLayer(graph->val[i], pool_type, pool_size, pool_stride);
+        iftGFLIMPoolingLayer(graph->val[i], pool_type, pool_size, 1);
     }
 }
 
@@ -2181,6 +2180,8 @@ void iftGFLIMEncodeLayerBatch_v2(iftGFLIMGraphArray *input,
     /* pooling */
     iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size, 1);
     iftDestroyMImageArray(&activ_relu);
+
+
 
     /* stride */
     iftGFLIMStrideBatch_v2(input, layer, labels_img, stride);
