@@ -3866,10 +3866,10 @@ iftMatrix *iftGFLIMGraphAttentionClassDominance(iftMatrix *H, iftGFLIMGraph *gra
         for (int j = 0; j < H->ncols; j++)
         {
             int label = kernel_labels[j] - minLabel;
-            if(label == 0){
+            /*if(label == 0){
                 iftMatrixElem(attention_vals, j, i) = 1;
                 continue;
-            }
+            }*/
             iftMatrixElem(attention_vals, j, i) = 0;
             iftSet *node = graph->nodes[i].adj;
             while (node != NULL)
