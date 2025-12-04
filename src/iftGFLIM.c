@@ -1209,11 +1209,88 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
         iftDestroyIntArray(&neighbors);
     }
 
-    if (stride > 1)
-        iftWarning("Stride > 1 not implemented yet", "iftGFLIMGraphMaxPooling");
-
     return pool;
 }
+
+
+/**
+ * @brief Compute the softmax pooling from a GFLIMGraph
+ * @param graph FLIMGraph 
+ * @param pool_size Size of the pooling
+ * @param atrous_factor Atrous factor for the pooling
+ */
+iftMImage *iftGFLIMGraphSoftMaxPool(iftGFLIMGraph *graph,
+                                        int pool_size,
+                                        int atrous_factor)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL) printf("\t graph: NULL \n");
+    else printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    printf("\t pool_size: %d \n", pool_size);
+    printf("\t atrous_factor: %d \n", atrous_factor);
+#endif
+    iftMImage *pool = iftCreateMImage(graph->num_nodes,1, 1, graph->num_feats);
+    
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        iftIntArray *neighbors = NULL;
+        /*if(pool_size > 0)
+        {
+            // find the k most similar neighbors of the node p
+            neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, pool_size,
+                                                           atrous_factor, true, 
+                                                           IFT_FLIMGRAPH_ATTENTION_NONE);
+        }else{*/
+            neighbors = iftCreateIntArray(graph->nodes[p].numNeighbors+1);
+            iftSet *neigh = graph->nodes[p].adj;
+            int idx = 0;
+            neighbors->val[idx++] = p; // include self
+            while(neigh != NULL){
+                neighbors->val[idx++] = neigh->elem;
+                neigh = neigh->next;
+            }
+        //}
+
+        // aggregate the features of the neighbors
+        double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors,
+                                                            graph, neighbors->n,
+                                                            IFT_GFLIM_AGGREGATION_CONCAT);
+
+        float sum_exp[graph->num_feats], max_feat[graph->num_feats];
+        for (int i = 0; i < graph->num_feats; i++){
+            sum_exp[i] = 0.0;
+            max_feat[i] = IFT_INFINITY_FLT_NEG;
+        }
+
+        for (int i = 0, j = 0; i < neighbors->n; i++)
+        {
+            for (int b = 0; b < graph->num_feats; b++, j++)
+                max_feat[b] = iftMax(max_feat[b], (float)feature_vector[j]);
+        }
+
+        float sigma = (float)pool_size / 10.0f;
+        //printf("Sigma: %f\n", sigma);
+
+        for (int i = 0, j = 0; i < neighbors->n; i++)
+        {
+            for (int b = 0; b < graph->num_feats; b++, j++)
+                sum_exp[b] += expf((float)feature_vector[j] / (max_feat[b] * sigma + 1e-5));
+        }
+        
+        for (int b = 0; b < graph->num_feats; b++)
+        {
+            //pool->val[p][b] = -log(expf((float)graph->nodes[p].feats[b] / (max_feat[b] + 1e-5)) / (sum_exp[b] + 1e-5));
+            pool->val[p][b] = expf((float)graph->nodes[p].feats[b] / (max_feat[b] * sigma + 1e-5)) / (sum_exp[b] + 1e-5);
+        }
+        
+        iftFree(feature_vector);
+        iftDestroyIntArray(&neighbors);
+    }
+    return pool;
+}
+
+
 
 /**
  * @fn iftGFLIMPoolingLayer
@@ -1258,6 +1335,12 @@ void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
                                                     pool_size,
                                                     1,
                                                     pool_stride);
+            }
+            else if (strcmp(pool_type, "softmax_pool") == 0)
+            {
+                pool = iftGFLIMGraphSoftMaxPool(graph,
+                                                pool_size,
+                                                1);
             }
             else
                 iftError("Invalid pooling %s", "pooling", pool_type);

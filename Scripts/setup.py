@@ -67,8 +67,15 @@ def copyGraphsAndLabels(src_dir, input_graphs_path, input_labels_path, model_dir
         raise ValueError("The files in input_graphs_path and input_labels_path do not match.")
 
     rel_src = CheckFilesRelation_dirOrCSV(src_dir, input_labels_path, same_extension = False)
+
+    files1 = read_dir_or_CSV(src_dir, read_extension = False)
+    files2 = read_dir_or_CSV(input_labels_path, read_extension = False)
+    for f in files1:
+        if f not in files2:
+            raise ValueError(f"The file {f} in {src_dir} does not exist in {input_labels_path}.")
+
     if(rel_src == 'diff' or rel_src == 'gt'):
-        raise ValueError("The files in src_dir and input_labels_path do not match.")
+        raise ValueError(f"The files in {src_dir} and {input_labels_path} do not match: {rel_src}.")
 
     # remove any existing layer and label directories in the model directory
     shutil.rmtree(os.path.join(model_dir, 'layer0'), ignore_errors=True)

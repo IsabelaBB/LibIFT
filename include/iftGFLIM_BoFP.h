@@ -115,10 +115,6 @@ iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
 iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *nodes_map);
 
 // ============ FUNCTIONS TO ENCODE LAYER ============ //
-void iftGFLIMPoolingLayer(iftGFLIMGraph *graph, 
-                        char *pool_type, 
-                        int pool_size, 
-                        float pool_stride);
 iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, 
                                                 float *bias, bool inplace);
 iftMImage *iftGFLIMConvLayer(iftGFLIMGraph *graph, iftMatrix *kernels,
