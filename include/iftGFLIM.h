@@ -86,8 +86,12 @@ void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list,
 
 void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
                         char *pool_type, 
-                        int pool_size, 
-                        float pool_stride);
+                        int pool_size);
+
+void iftGFLIMPoolingLayerV2(iftGFLIMGraph *graph,
+                        char *pool_type, 
+                        int pool_size,
+                        iftMatrix *neighbors);
 
 /* --------------------- GFLIM decoder ----------------------------- */
 

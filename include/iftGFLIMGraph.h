@@ -213,6 +213,10 @@ iftImage **iftGFLIMGraphToActivations(iftGFLIMGraph *graph, iftImage *labels);
 iftMatrix *iftGFLIMGraphToNodeFeaturesMatrix(iftGFLIMGraph *graph);
 iftGFLIMGraph *iftFeatureMatrixToGFLIMGraph(iftMatrix *matrix,
                                    iftGFLIMGraph *graph_ref);
+iftMatrix *iftGFLIMConstructGraphRelation(iftImage *orig_img,
+                                    iftImage *label_imgi,
+                                    iftGFLIMGraphNodeFeature graph_feat,
+                                    int num_neighbors);
 
 /* --------------------- GFLIMGraph attention ----------------------------- */
 double *iftGFLIMGraphAttentionRelNodeSize(iftGFLIMGraph *graph, iftIntArray *neighbors);
@@ -243,6 +247,7 @@ iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
 
 iftGFLIMAdjacencyList *iftGFLIMComputeAdjacencyList(iftGFLIMGraph *graph);
 void iftGFLIMDestroyAdjacencyList(iftGFLIMAdjacencyList **adj_list);
+iftMatrix *iftGFLIMGraphToNeighborhoodMatrix(iftGFLIMGraph *graph, int num_adj);
 
 #ifdef __cplusplus
 }

@@ -631,8 +631,7 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
         output_graph->val[i] = iftMImageToGFLIMGraph(activ, graph->val[i]);
         iftGFLIMPoolingLayer(output_graph->val[i],
                              arch->layer[layer].pool_type,
-                             arch->layer[layer].pool_size,
-                             arch->layer[layer].pool_stride);
+                             arch->layer[layer].pool_size);
 
         iftDestroyMImage(&activ);
     }
@@ -1100,12 +1099,10 @@ void iftGFLIMGraphExtractFeaturesFromLayer(char *orig_dir, char *graph_list,
  * @param graph FLIMGraph 
  * @param pool_size Size of the pooling
  * @param atrous_factor Atrous factor for the pooling
- * @param stride Stride of the pooling
  */
 iftMImage *iftGFLIMGraphAtrousAveragePooling(iftGFLIMGraph *graph,
                                             int pool_size, 
-                                            int atrous_factor, 
-                                            float stride)
+                                            int atrous_factor)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1143,8 +1140,41 @@ iftMImage *iftGFLIMGraphAtrousAveragePooling(iftGFLIMGraph *graph,
         
     }
 
-    if (stride > 1)
-        iftWarning("Stride > 1 not implemented yet", __func__);
+    return pool;
+}
+
+/**
+ * @brief Compute the average pooling from a FLIMGraph
+ * @param graph FLIMGraph 
+ * @param pool_size Size of the pooling
+ * @param neighbors Precomputed neighbors
+ */
+iftMImage *iftGFLIMGraphAtrousAveragePoolingV2(iftGFLIMGraph *graph,
+                                            int pool_size, 
+                                            iftMatrix *neighbors)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL) printf("\t graph: NULL \n");
+    else printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    printf("\t pool_size: %d \n", pool_size);
+    printf("\t neighbors: %ld x %ld \n", neighbors->ncols, neighbors->nrows);
+#endif
+    iftMImage *pool = iftCreateMImage(graph->num_nodes, 1, 1, graph->num_feats);
+
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        // get the k most similar neighbors of the node p
+        for(int i = 0; i < pool_size; i++)
+        {
+            double *feats = graph->nodes[(int)iftMatrixElem(neighbors, i, p)].feats;
+            for(int b = 0; b < graph->num_feats; b++)
+                pool->val[p][b] += feats[b];
+        }
+        
+        for (int b = 0; b < graph->num_feats; b++)
+            pool->val[p][b] /= (float)graph->num_feats;
+    }
 
     return pool;
 }
@@ -1154,12 +1184,10 @@ iftMImage *iftGFLIMGraphAtrousAveragePooling(iftGFLIMGraph *graph,
  * @param graph FLIMGraph 
  * @param pool_size Size of the pooling
  * @param atrous_factor Atrous factor for the pooling
- * @param stride Stride of the pooling
  */
 iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
                                         int pool_size,
-                                        int atrous_factor,
-                                        float stride)
+                                        int atrous_factor)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1167,11 +1195,11 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
     else printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
     printf("\t pool_size: %d \n", pool_size);
     printf("\t atrous_factor: %d \n", atrous_factor);
-    printf("\t stride: %f\n", stride);
 #endif
     iftMImage *pool = iftCreateMImage(graph->num_nodes,1, 1, graph->num_feats);
     iftSetMImage(pool, IFT_INFINITY_FLT_NEG);
 
+#pragma omp parallel for
     for (int p = 0; p < graph->num_nodes; p++)
     {
         // find the k most similar neighbors of the node p
@@ -1184,22 +1212,6 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
                                                             graph, pool_size,
                                                             IFT_GFLIM_AGGREGATION_CONCAT);
         
-        /*float strength[neighbors->n], total_strength = IFT_EPSILON; 
-        for (int j = 0; j < neighbors->n; j++){
-            float dist=0.0;
-            int i;
-            double *A = graph->nodes[p].feats;
-            double *B = graph->nodes[neighbors->val[j]].feats;
-            for (i=0; i < graph->num_feats; i++)
-                dist += (A[i]-B[i])*(A[i]-B[i]);
-            strength[j] = dist;
-            total_strength += strength[j];
-        }
-        for (int i = 0, j = 0; i < pool_size; i++){
-            for (int b = 0; b < graph->num_feats; b++, j++)
-                pool->val[p][b] = iftMax(pool->val[p][b], (float)feature_vector[j] * (1.0f - strength[i] / total_strength));
-        }*/
-
         for (int i = 0, j = 0; i < pool_size; i++)
         {
             for (int b = 0; b < graph->num_feats; b++, j++)
@@ -1207,6 +1219,42 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
         }
         iftFree(feature_vector);
         iftDestroyIntArray(&neighbors);
+    }
+
+    return pool;
+}
+
+/**
+ * @brief Compute the max pooling from a FLIMGraph
+ * @param graph FLIMGraph 
+ * @param pool_size Size of the pooling
+ * @param atrous_factor Atrous factor for the pooling
+ * @param neighbors Precomputed neighbors
+ */
+iftMImage *iftGFLIMGraphAtrousMaxPoolingV2(iftGFLIMGraph *graph,
+                                        int pool_size,
+                                        iftMatrix *neighbors)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL) printf("\t graph: NULL \n");
+    else printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    printf("\t pool_size: %d \n", pool_size);
+    printf("\t atrous_factor: %d \n", atrous_factor);
+    printf("\t neighbors: %ld x %ld \n", neighbors->ncols, neighbors->nrows);
+#endif
+    iftMImage *pool = iftCreateMImage(graph->num_nodes,1, 1, graph->num_feats);
+    iftSetMImage(pool, IFT_INFINITY_FLT_NEG);
+
+#pragma omp parallel for
+    for (int p = 0; p < graph->num_nodes; p++)
+    {
+        for(int i = 0; i < pool_size; i++)
+        {
+            double *feats = graph->nodes[(int)iftMatrixElem(neighbors, i, p)].feats;
+            for(int b = 0; b < graph->num_feats; b++)
+                pool->val[p][b] = iftMax(pool->val[p][b], (float)feats[b]); 
+        }
     }
 
     return pool;
@@ -1291,6 +1339,59 @@ iftMImage *iftGFLIMGraphSoftMaxPool(iftGFLIMGraph *graph,
 }
 
 
+/**
+ * @fn iftGFLIMPoolingLayer
+ * @brief Pooling layer.
+ * @param graph Graph in which the pooling is applied.
+ * @param pool_type The pooling type (no_pool, avg_pool, max_pool)
+ * @param pool_size The pooling size (number of neighbors to apply pooling)
+ */
+void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
+                          char *pool_type, 
+                          int pool_size)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL)
+        printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", graph->num_nodes, graph->num_feats, graph->num_edges);
+    printf("\t pool_type: %s\n", pool_type);
+    printf("\t pool_size: %d \n", pool_size);
+#endif
+
+    iftMImage *pool = NULL;
+
+    if (strcmp(pool_type, "no_pool") != 0)
+    {
+        if (strcmp(pool_type, "avg_pool") == 0)
+        {
+            pool = iftGFLIMGraphAtrousAveragePooling(graph,
+                                                    pool_size,
+                                                    1);
+        }
+        else
+        {
+            if (strcmp(pool_type, "max_pool") == 0)
+            {
+                pool = iftGFLIMGraphAtrousMaxPooling(graph,
+                                                    pool_size,
+                                                    1);
+            }
+            else if (strcmp(pool_type, "softmax_pool") == 0)
+            {
+                pool = iftGFLIMGraphSoftMaxPool(graph,
+                                                pool_size,
+                                                1);
+            }
+            else
+                iftError("Invalid pooling %s", "pooling", pool_type);
+        }
+
+        iftMImageToGFLIMGraphInplace(pool, graph);
+        iftDestroyMImage(&pool);
+    }
+}
 
 /**
  * @fn iftGFLIMPoolingLayer
@@ -1298,12 +1399,12 @@ iftMImage *iftGFLIMGraphSoftMaxPool(iftGFLIMGraph *graph,
  * @param graph Graph in which the pooling is applied.
  * @param pool_type The pooling type (no_pool, avg_pool, max_pool)
  * @param pool_size The pooling size (number of neighbors to apply pooling)
- * @param pool_stride The pooling stride (not implemented yet).
+ * @param neighbors Precomputed neighbors
  */
-void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
+void iftGFLIMPoolingLayerV2(iftGFLIMGraph *graph,
                           char *pool_type, 
                           int pool_size, 
-                          float pool_stride)
+                          iftMatrix *neighbors)
 {
 #ifdef IFT_DEBUG
     printf("%s \n", __func__);
@@ -1322,27 +1423,18 @@ void iftGFLIMPoolingLayer(iftGFLIMGraph *graph,
     {
         if (strcmp(pool_type, "avg_pool") == 0)
         {
-            pool = iftGFLIMGraphAtrousAveragePooling(graph,
+            pool = iftGFLIMGraphAtrousAveragePoolingV2(graph,
                                                     pool_size,
-                                                    1,
-                                                    pool_stride);
+                                                    neighbors);
         }
         else
         {
             if (strcmp(pool_type, "max_pool") == 0)
             {
-                pool = iftGFLIMGraphAtrousMaxPooling(graph,
+                pool = iftGFLIMGraphAtrousMaxPoolingV2(graph,
                                                     pool_size,
-                                                    1,
-                                                    pool_stride);
-            }
-            else if (strcmp(pool_type, "softmax_pool") == 0)
-            {
-                pool = iftGFLIMGraphSoftMaxPool(graph,
-                                                pool_size,
-                                                1);
-            }
-            else
+                                                    neighbors);
+            }else
                 iftError("Invalid pooling %s", "pooling", pool_type);
         }
 
