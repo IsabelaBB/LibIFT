@@ -279,7 +279,6 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
     else
         printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", 
             graph->num_nodes, graph->num_feats, graph->num_edges);
-    }
     if (S == NULL) printf("\t S: NULL \n");
     else printf("\t S size: %d \n", iftLabeledSetSize(S));
     printf("\t kernel_size: %d\n", kernel_size);
@@ -289,7 +288,11 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
 
     int nsamples = iftLabeledSetSize(S);
     int kernel_neighbors = iftMin(graph->num_nodes, kernel_size);
-    int tensor_size = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) ? graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
+    int tensor_size = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || 
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) || 
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT) || 
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT_V2) ? 
+                    graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
     iftDataSet *Z = iftCreateDataSet(nsamples, tensor_size);
 
     iftLabeledSet *seed = S;
@@ -321,7 +324,7 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
                                                            1, true, attention_opt);
 
         // aggregate the features of the neighbors and fill missing neighbors with the values in band_filling
-        double *feature_vector = iftGFLIMGraphAggregateFeatures(seed->elem, neighbors,
+        double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors,
                                                                graph, kernel_size,
                                                                aggregation_opt);
 
@@ -331,6 +334,93 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
         iftFree(feature_vector);
         iftDestroyIntArray(&neighbors);
 
+        s++;
+        seed = seed->next;
+    }
+
+    iftSetStatus(Z, IFT_TRAIN);
+    iftAddStatus(Z, IFT_SUPERVISED);
+    return (Z);
+}
+
+
+/**
+ * @fn iftGFLIMExtractLabelDataSetV3
+ * @brief Compute a dataset from the labeled nodes in the graph,
+ * agreggating features from their neighbors.
+ * @param graph Graph with the nodes and their weights.
+ * @param S set of labeled graph nodes.
+ * @param kernel_size Number of neighbors to compose a kernel.
+ * @param neighbors Precomputed neighbors matrix.
+ * @return iftDataSet* kernel bank
+ * @note The truelabel in the dataset is the label from the seeds.
+ */
+iftDataSet *iftGFLIMExtractLabelDataSetV3(iftGFLIMGraph *graph,
+                                        iftLabeledSet *S,
+                                        int kernel_size,
+                                        iftMatrix *neighbors,
+                                        iftGFLIMAggregation aggregation_opt)
+{
+#ifdef IFT_DEBUG
+    printf("%s \n", __func__);
+    if (graph == NULL) printf("\t graph: NULL \n");
+    else
+        printf("\t graph nodes: %ld, feats: %ld, edges: %ld \n", 
+            graph->num_nodes, graph->num_feats, graph->num_edges);
+    if (S == NULL) printf("\t S: NULL \n");
+    else printf("\t S size: %d \n", iftLabeledSetSize(S));
+    printf("\t kernel_size: %d\n", kernel_size);
+    printf("\t neighbors: %s \n", neighbors == NULL ? "NULL" : "not NULL");
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+#endif
+
+    int nsamples = iftLabeledSetSize(S);
+    int kernel_neighbors = iftMin(graph->num_nodes, kernel_size);
+    int tensor_size = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || 
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) || 
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT) ||
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT_V2) ? 
+                    graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
+    iftDataSet *Z = iftCreateDataSet(nsamples, tensor_size);
+
+    iftLabeledSet *seed = S;
+    int incr = 0;
+    while (seed != NULL)
+    {
+        int l = seed->label;
+        if (l == 0)
+        {
+            incr = 1;
+            break;
+        }
+        seed = seed->next;
+    }
+
+    Z->nclasses = 0;
+    int s = 0;
+    seed = S;
+    while (seed != NULL)
+    {
+        int p = seed->elem;
+        Z->sample[s].id = s;
+        Z->sample[s].truelabel = seed->label + incr; /* vary from 1 to c */
+        if (Z->sample[s].truelabel > Z->nclasses)
+            Z->nclasses = Z->sample[s].truelabel;
+
+        iftIntArray *neighbors_arr = iftCreateIntArray(kernel_neighbors);
+        for(int i = 0; i < kernel_size; i++)
+        {
+            neighbors_arr->val[i] = (int)iftMatrixElem(neighbors, i, p);
+            //double *feats = graph->nodes[(int)iftMatrixElem(neighbors, i, p)].feats;
+            //for (int f = 0; f < graph->num_feats; f++)
+            //    Z->sample[s].feat[i * graph->num_feats + f] = (float)feats[f];
+        }
+        double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors_arr, graph, kernel_size, aggregation_opt);
+        for (int i = 0; i < tensor_size; i++)
+            Z->sample[s].feat[i] = (float)feature_vector[i];
+
+        iftFree(feature_vector);
+        iftDestroyIntArray(&neighbors_arr);
         s++;
         seed = seed->next;
     }
@@ -620,7 +710,7 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
 
         // activation and bias
         if (arch->layer[layer].relu)
-            iftMReLU(activ, bias, true);
+            iftMLeakyReLU(activ, bias, true, 0.01f);
         else
         {
             if (bias != NULL)
@@ -1199,7 +1289,7 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
     iftMImage *pool = iftCreateMImage(graph->num_nodes,1, 1, graph->num_feats);
     iftSetMImage(pool, IFT_INFINITY_FLT_NEG);
 
-#pragma omp parallel for
+//#pragma omp parallel for
     for (int p = 0; p < graph->num_nodes; p++)
     {
         // find the k most similar neighbors of the node p
@@ -1246,15 +1336,19 @@ iftMImage *iftGFLIMGraphAtrousMaxPoolingV2(iftGFLIMGraph *graph,
     iftMImage *pool = iftCreateMImage(graph->num_nodes,1, 1, graph->num_feats);
     iftSetMImage(pool, IFT_INFINITY_FLT_NEG);
 
-#pragma omp parallel for
+//#pragma omp parallel for
     for (int p = 0; p < graph->num_nodes; p++)
     {
+        //printf("Processing node %d of %d -- neighbors: ", p, graph->num_nodes);
         for(int i = 0; i < pool_size; i++)
         {
+            //printf("%d ", (int)iftMatrixElem(neighbors, i, p));
             double *feats = graph->nodes[(int)iftMatrixElem(neighbors, i, p)].feats;
             for(int b = 0; b < graph->num_feats; b++)
                 pool->val[p][b] = iftMax(pool->val[p][b], (float)feats[b]); 
+            feats = NULL;
         }
+        //printf("\n");
     }
 
     return pool;

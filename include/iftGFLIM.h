@@ -69,6 +69,12 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
         int kernel_size,
         iftGFLIMGraphAttention attention_opt,
         iftGFLIMAggregation aggregation_opt);
+        
+iftDataSet *iftGFLIMExtractLabelDataSetV3(iftGFLIMGraph *graph,
+                                        iftLabeledSet *S,
+                                        int kernel_size,
+                                        iftMatrix *neighbors,
+                                        iftGFLIMAggregation aggregation_opt);  
 
 /* --------------------- GFLIM training ----------------------------- */
 

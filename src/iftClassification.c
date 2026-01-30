@@ -980,7 +980,7 @@ iftCplGraph *iftReadCplGraph(const char* pathname) {
         iftError("Input Pathname must not be NULL", "iftReadCplGraph");
 
     if(!iftFileExists(pathname))
-        iftError("Input Pathname does not refer to a valid file", "iftReadCplGraph", pathname);
+        iftError("Input Pathname does not refer to a valid file: %s", "iftReadCplGraph", pathname);
 
     if(!iftCompareStrings(iftFileExt(pathname), ".zip"))
         iftError("Input Pathname for the complete graph must end with a \".zip\" file extension", "iftReadCplGraph");

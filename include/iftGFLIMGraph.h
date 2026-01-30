@@ -37,7 +37,7 @@ typedef struct iftGFLIMGraphNode{
     double  *feats;             // Features of the node
     int numNeighbors; // Number of neighbors
     int numPixels;    // Number of pixels in the node (considering its a superpixel)
-    iftSet *adj;                // Adjacency list of the node, in which each element contains the index of a neighbor node
+    iftSet *adj;      // Adjacency list of the node, in which each element contains the index of a neighbor node
 }iftGFLIMGraphNode;
 
 /**
@@ -108,7 +108,8 @@ typedef enum {
     IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK,     // concatenate the mean color with (superpixel size / neighborhood size) and with haralick features
     IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK, // sum of color multiplied by 1 + (superpixel size / image size) and concatenated with haralick features
     IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK,              // concatenated sum of color with haralick features
-    IFT_FLIMGRAPH_FEATURE_RBD                               // RBD descriptor 
+    IFT_FLIMGRAPH_FEATURE_RBD,                               // RBD descriptor 
+    IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_STD_SIZE              // concatenate the mean color with standard deviation of color and superpixel size
 } iftGFLIMGraphNodeFeature;
 
 /**
@@ -131,8 +132,10 @@ typedef enum {
     IFT_GFLIM_AGGREGATION_CONCAT,   // Concatenate the features of the nodes
     IFT_GFLIM_AGGREGATION_WCONCAT,  // Concatenate the features of the nodes and weight by the similarity with the initial node
     IFT_GFLIM_AGGREGATION_MEAN,     // Average the features of the nodes
-    IFT_GFLIM_AGGREGATION_WMEAN     // Weighted mean of the features of the nodes
-  } iftGFLIMAggregation;
+    IFT_GFLIM_AGGREGATION_WMEAN,     // Weighted mean of the features of the nodes
+    IFT_GFLIM_AGGREGATION_SORTFEAT, // Sort the features of the nodes in decreasing order
+    IFT_GFLIM_AGGREGATION_SORTFEAT_V2 // Concatenate the initial node with the features of its neighbors sorted in decreasing order
+} iftGFLIMAggregation;
 
 /* --------------------- GraphArray functions ----------------------------- */
 iftGFLIMGraphArray *iftCreateGFLIMGraphArray(int n);
@@ -149,7 +152,7 @@ bool iftIsValidGFLIMGraph(iftGFLIMGraph *graph);
 iftGFLIMGraphNodeFeature iftGFLIMGraphGetNodeFeature(const char *name);
 iftGFLIMGraphSpxMethod iftGFLIMGraphGetSpxMethod(const char *name);
 iftGFLIMGraphAttention iftGLIMGraphGetAttention(char *arg);
-iftGFLIMAggregation iftGLIMGraphGetAggregation(char *arg);
+iftGFLIMAggregation iftGFLIMGraphGetAggregation(char *arg);
 
 /* --------------------- GFLIMGraph read and write ----------------------------- */
 iftGFLIMGraph *iftReadGFLIMGraph(char *filename);
@@ -197,6 +200,10 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
     iftMImage *oiginal_img, iftImage *labeled_img,
     iftGFLIMGraphNodeFeature feat_type,
     iftImage *gray_img);
+iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatStdSize(
+                    int num_superpixels, 
+                    iftAdjRel *A, iftMImage *original_img, 
+                    iftImage *labeled_img);
 
 iftGFLIMGraph *iftImageToGFLIMGraph(iftImage *img, 
     int num_superpixels, int param,

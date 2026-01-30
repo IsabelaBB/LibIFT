@@ -21,6 +21,7 @@ find_file(CBLAS_LIBRARIES
         /usr/local/lib
 		/usr/local/opt/openblas/lib
 	/usr/lib/x86_64-linux-gnu
+	/usr/lib/x86_64-linux-gnu/openblas-pthread/
         $ENV{CBLASDIR}/lib
         ${LIB_INSTALL_DIR}
         )

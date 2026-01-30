@@ -424,7 +424,7 @@ float iftTruePositives(iftDataSet *Z) {
       if (iftHasSampleStatus(Z->sample[i], IFT_TEST)) {
         ntestsamples++;
         if (Z->sample[i].truelabel == Z->sample[i].label) {
-          ncorrectsamples++;
+            ncorrectsamples++;
         }
       }
     }
@@ -644,15 +644,22 @@ float iftOPFAccuracy(iftDataSet *Z, bool printAccByClass) {
 iftFloatArray *iftTruePositivesByClass(iftDataSet *Z)
 {
     iftMatrix* confusion = iftComputeConfusionMatrix(Z, false);
-    iftIntArray *nclass = iftCreateIntArray(Z->nclasses + 1);
-    iftFloatArray *acc = iftCreateFloatArray(Z->nclasses + 1);
+    iftIntArray *nclass = iftCreateIntArray(Z->nclasses);
+    iftFloatArray *acc = iftCreateFloatArray(Z->nclasses);
+
+    int min_class = IFT_INFINITY_INT;
+    for(int i = 0; i < Z->nsamples; ++i) {
+        if(Z->sample[i].truelabel < min_class) {
+            min_class = Z->sample[i].truelabel;
+        }
+    }
 
     for (int i = 0; i < Z->nsamples; i++)
         if (!iftHasSampleStatus(Z->sample[i], IFT_TRAIN))
-            nclass->val[Z->sample[i].truelabel]++;
+            nclass->val[Z->sample[i].truelabel - min_class]++;
 
-    for (int c = 1; c < Z->nclasses+1; c++)
-        acc->val[c] = iftMatrixElem(confusion, c-1, c-1) / (float)nclass->val[c];
+    for (int c = 0; c < Z->nclasses; c++)
+        acc->val[c] = iftMatrixElem(confusion, c, c) / (float)nclass->val[c];
 
     return acc;
 }

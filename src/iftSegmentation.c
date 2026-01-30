@@ -4846,7 +4846,6 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
     iftSet *seeds;
     float decrement_rate = (float) num_superpixels / (float) num_init_seeds;
     
-
     // INIT =======================================================================
     label_img = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
     root_map = (int*)calloc(mimg->n, sizeof(int));
@@ -4858,49 +4857,92 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
 
     // RANDOM SAMPLING ==============================================================
     iftImage *seed_img = iftCreateImage(mimg->xsize, mimg->ysize, mimg->zsize);
+    
+    /*
+    Compute the number of components in the mask:
+      Create a bit array with the same size as the mask image.
+      Iterate over the mask fill the cost_mask, to cont the number of pixels in the mask, and to count the number of components.
+      At each pixel in the mask, check the label in the pred_mask image. 
+      If the bit corresponding to that label is not set, set it and increment the component count.
 
-    int nmask_pixels = 0;
-    for(int p = 0; p < mask_img->n; p++)
+      If there are more than one component, we may want to sample seeds proportionally to the size of each component.
+      To do so, we would need to first count the number of pixels in each component, then sample seeds from each component according to its size.
+    */
+
+    int nmask_pixels = mask_img->n, ncomponents = 1;
+    int components_roots[mask_img->n];
+    
+    iftImage *pred_mask = iftLabelComp(mask_img, A);
+    if(mask != NULL)
     {
-      if(mask_img->val[p] == 0)
-          cost_map[p] = IFT_INFINITY_DBL_NEG;
-      else
-          nmask_pixels++;
-    }
-
+      ncomponents = nmask_pixels = 0;
+      iftBMap *components_bitmap = iftCreateBMap(mask_img->n);
+      for(int p = 0; p < mask_img->n; p++)
+      {
+        if(mask_img->val[p] > 0)
+        {
+            int label = pred_mask->val[p];
+            if(!iftBMapValue(components_bitmap, label))
+            {
+                iftBMapSet1(components_bitmap, label);
+                components_roots[ncomponents++] = label;
+            }
+            nmask_pixels++;
+        }else{
+            cost_map[p] = IFT_INFINITY_DBL_NEG;
+        }
+      }
+      iftDestroyBMap(&components_bitmap);
+    }else 
+        components_roots[pred_mask->val[0]] = mask_img->n; // whole image is one component
+    
+    //printf("Number of components in the mask: %d\n", ncomponents);
+    //printf("Number of pixels in the mask: %d\n", nmask_pixels);
+    
     if(nmask_pixels < num_superpixels)
-        iftError("Number of superpixels %d is greater than number of valid pixels in the mask %d.", __func__, num_superpixels, nmask_pixels);
+        iftError("Number of superpixels %d is greater than number of valid pixels in the mask %d.",
+           __func__, num_superpixels, nmask_pixels);
     
     if(nmask_pixels < num_init_seeds){
-      iftWarning("Number of initial seeds %d is greater than number of valid pixels in the mask %d.", __func__, num_init_seeds, nmask_pixels);
+      iftWarning("Number of initial seeds %d is greater than number of valid pixels in the mask %d.", 
+        __func__, num_init_seeds, nmask_pixels);
       num_init_seeds = iftMax(num_superpixels, nmask_pixels / 1.9);
     }
 
     seeds = NULL;
-    int pixels[nmask_pixels];
-    for(int p_index = 0, i=0; p_index < mask_img->n; p_index++)
-    {
-      if(mask_img->val[p_index] > 0)
-          pixels[i++] = p_index;
-    }
+    int remaining_seeds = num_init_seeds;
+    //printf("Seeds: ");
+    for(int c = 0; c < ncomponents; c++){
+        int *pixels = (int*)iftAlloc(mask_img->n, sizeof(int)); // armazena os pixels de um componente
+        int ncomp_pixels = 0;
+        for(int p_index = 0; p_index < mask_img->n; p_index++)
+        {
+          if(mask_img->val[p_index] > 0 && 
+            pred_mask->val[p_index] == components_roots[c])
+              pixels[ncomp_pixels++] = p_index;
+        }
+        int nseeds_comp = (int)round(( (float)ncomp_pixels / (float)nmask_pixels) * (float)num_init_seeds);
+        nseeds_comp = iftMax(1, nseeds_comp); // at least one seed per component
+        nseeds_comp = iftMin(nseeds_comp, remaining_seeds);
+        remaining_seeds -= nseeds_comp;
+        //printf("Component %d: size=%d, seeds=%d\n", c, ncomp_pixels, nseeds_comp);
+        for(int p_index = 0; p_index < nseeds_comp; p_index++)
+        {
+          int r = rand() % ncomp_pixels;
+          int p = pixels[r];
 
-    for(int p_index = 0; p_index < num_init_seeds; p_index++)
-    {
-      int r = rand() % nmask_pixels;
-      int p = pixels[r];
-
-      if(mask_img->val[p] > 0 && seed_img->val[p] == 0)
-      {
-        iftInsertSet(&seeds, p); 
-        seed_img->val[p] = 1;
-        // swap selected pixel with the last in the array
-        pixels[r] = pixels[nmask_pixels - 1];
-        nmask_pixels--;
-      }
-      else
-        p_index--;
+          iftInsertSet(&seeds, p); 
+          seed_img->val[p] = 1;
+          // swap selected pixel with the last in the array
+          pixels[r] = pixels[ncomp_pixels - 1];
+          ncomp_pixels--;
+          //printf("%d ", p);
+        }
+        //printf("\n");
+        free(pixels);
     }
     
+    iftDestroyImage(&pred_mask);
     iftDestroyImage(&seed_img);
     if(mask == NULL) iftDestroyImage(&mask_img);
 

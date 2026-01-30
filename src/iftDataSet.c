@@ -4393,11 +4393,19 @@ iftMatrix* iftComputeConfusionMatrix(iftDataSet *dataset, bool normalized) {
     int* countPerClass = iftAllocIntArray(dataset->nclasses);
     int col=0;
     int row=0;
+
+    int min_class = IFT_INFINITY_INT;
+    for(int i = 0; i < dataset->nsamples; ++i) {
+        if(dataset->sample[i].truelabel < min_class) {
+            min_class = dataset->sample[i].truelabel;
+        }
+    }
+    
     for (int sampleIndex = 0; sampleIndex < dataset->nsamples; ++sampleIndex) {
 
         if(iftHasSampleStatus(dataset->sample[sampleIndex], IFT_TEST)) {
-            col = dataset->sample[sampleIndex].label - 1;
-            row = dataset->sample[sampleIndex].truelabel - 1;
+            col = dataset->sample[sampleIndex].label - min_class;
+            row = dataset->sample[sampleIndex].truelabel - min_class;
             iftMatrixElem(confusionMatrix, col, row) += 1;
             countPerClass[row]++;
         }
@@ -8051,11 +8059,18 @@ void iftUpdateNumbTrainSamples(iftDataSet *Z)
 
 int* iftCountSamplesPerClassDataSet(iftDataSet *Z)
 {
-    int *sampPerClass = iftAllocIntArray(Z->nclasses+1);
+    int *sampPerClass = iftAllocIntArray(Z->nclasses);
+
+    int min_class = IFT_INFINITY_INT;
+    for(int i = 0; i < Z->nsamples; ++i) {
+        if(Z->sample[i].truelabel < min_class) {
+            min_class = Z->sample[i].truelabel;
+        }
+    }
 
     for(int p=0; p<Z->nsamples; p++) {
-      if (Z->sample[p].truelabel>0)
-	sampPerClass[Z->sample[p].truelabel]++;
+      if (Z->sample[p].truelabel - min_class >= 0)
+	    sampPerClass[Z->sample[p].truelabel - min_class]++;
     }
 
     return sampPerClass;

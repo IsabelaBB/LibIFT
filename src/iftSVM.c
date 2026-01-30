@@ -347,7 +347,7 @@ iftSVM *iftReadSVM( char *pathname) {
         iftError("Input Pathname must not be NULL", "iftReadSVM");
 
     if(!iftFileExists(pathname))
-        iftError("Input Pathname does not refer to a valid file", "iftReadSVM", pathname);
+        iftError("Input Pathname does not refer to a valid file: %s", "iftReadSVM", pathname);
 
     if(!iftCompareStrings(iftFileExt(pathname), ".zip"))
         iftError("Input Pathname for the SVM must end with a \".zip\" file extension", "iftReadSVM");
@@ -551,7 +551,6 @@ bool iftReadSVMModelTrainingParams(FILE *fin, svmModel *model) {/* Training para
                 sscanf(node->elem, "%d", &model->param.weight_label[i]);
                 i++;
             }
-
             iftDestroySList(&list);
         }
 
@@ -571,7 +570,7 @@ bool iftReadSVMModelTrainingParams(FILE *fin, svmModel *model) {/* Training para
                 sscanf(node->elem, "%lf", &model->param.weight[i]);
                 i++;
             }
-            fgetc(fin);
+            //fgetc(fin);
 
             iftDestroySList(&list);
         }
@@ -584,9 +583,7 @@ bool iftReadSVMModelTrainingParams(FILE *fin, svmModel *model) {/* Training para
             iftError("Error when reading SVM 9\n", "iftReadSVMModelTrainingParams");
         if(fscanf(fin, "PROBABILITY %d\n", &model->param.probability) != 1)
             iftError("Error when reading SVM 10\n", "iftReadSVMModelTrainingParams");
-
         iftFree(line);
-
         success = true;
     }
 
@@ -865,22 +862,21 @@ void iftSVMClassify(iftSVM* svm, iftDataSet* Z, uchar status) {
     if (svm->multiClass == IFT_OVA) {
         if (svm->params->kernel_type == IFT_LINEAR || svm->params->kernel_type == IFT_PRECOMPUTED) {
             iftSVMLinearClassifyOVA(svm, Z, status, NULL);
+            printf("Classified using linear OVA SVM\n");
         }
         else {
             iftSVMClassifyOVA(svm, Z, status);
+            printf("Classified using non-linear OVA SVM\n");
         }
     } else {
-        printf("Classifying with OVO SVM\n");
         if(svm->params->probability==1){
-            printf("Using probability estimates\n");
             iftSVMClassifyOVO_Probability(svm, Z, status);
+            printf("Classified using OVO SVM with probability estimates\n");
         } else {
-            printf("Not using probability estimates\n");
             iftSVMClassifyOVO(svm, Z, status);
+            printf("Classified using OVO SVM\n");
         }
     }
-
-    printf("Classification done.\n");
 }
 
 
@@ -1037,7 +1033,6 @@ int iftSVMClassifyOVO_Probability(  iftSVM *svm, iftDataSet *Z, uchar sample_sta
 
     for (s=0; s < nsamples; s++){
 
-
         if (Z->sample[s].status & sample_status) {
 
             iftSampleToSvmSample(Z->sample[s], x, s, nfeats, precomp);
@@ -1048,10 +1043,8 @@ int iftSVMClassifyOVO_Probability(  iftSVM *svm, iftDataSet *Z, uchar sample_sta
                 nerrors++;
             }
 
-            Z->sample[s].weight = prob_estimates[Z->sample[s].label-1];
+            Z->sample[s].weight = prob_estimates[Z->sample[s].label];
         }
-
-        
     }
 
     free(prob_estimates);

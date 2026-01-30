@@ -33,7 +33,8 @@ extern "C" {
 typedef enum { 
   IFT_GFLIM_NOSTRIDE,     // No stride option.
   IFT_GFLIM_IMAGESTRIDE,  // Stride based on the image size. It reduces the image-graph mapping by a factor of the image size and reconstructs the graph from it. @see iftGFLIMImageStride()
-  IFT_GFLIM_GRAPHSTRIDE   // Stride based on the graph size. It reduces the graph nodes by edge contraction based on a nodes set size faction. @see iftGFLIMGraphStride()
+  IFT_GFLIM_GRAPHSTRIDE,   // Stride based on the graph size. It reduces the graph nodes by edge contraction based on a nodes set size faction. @see iftGFLIMGraphStride()
+  IFT_GFLIM_PRECOMPUTED_GRAPH
 } iftGFLIMStrideType;
 
 /**
@@ -79,7 +80,10 @@ iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
 void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, 
                                         iftImage *label_img, 
                                         iftImage *label_img0);
-
+void iftGFLIMUpdateMarkersFromPrecomputedGraphs(iftLabeledSet **T,
+                                        iftGFLIMLayer layer,
+                                        iftImage *label_img,
+                                        iftImage *label_img0);
 // ============ CONVERT FROM SEEDS/GRAPH TO DATASET ============ //
 iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph, 
                                             iftLabeledSet *S, 
@@ -94,7 +98,12 @@ iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
                                               int kernel_size,
                                               iftGFLIMGraphAttention attention_opt,
                                               iftGFLIMAggregation aggregation_opt);
-          
+iftLabeledSet *iftGFLIMSelectClusterCentersV3(iftGFLIMGraph *graph,
+                                            iftLabeledSet *S,
+                                            int kernel_size,
+                                            int nclusters_per_marker,
+                                            iftMatrix *neighbors,
+                                            iftGFLIMAggregation aggregation_opt);
 // ============ FUNCTIONS TO CREATE A LAYER ============ //
 iftMatrix *iftGFLIMComputeKernelsAndTrueLabels(iftDataSet *Z, int *truelabel);
 float *iftGFLIMComputeBias(iftMatrix *kernels, iftDataSet *Z);
@@ -106,13 +115,20 @@ iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph,
                                     float **bias, int **truelabel,
                                     iftGFLIMGraphAttention attention_opt,
                                     iftGFLIMAggregation aggregation_opt);
-
+iftMatrix *iftGFLIMCreateLayerModelV3(iftGFLIMGraph *graph, iftLabeledSet *S,
+                                    iftGFLIMLayer layer, float stdev_factor,
+                                    float **bias, int **truelabel,
+                                    iftMatrix *neighbors,
+                                    char *kernel_neighbors,
+                                    iftGFLIMAggregation aggregation_opt);
 // ============ FUNCTIONS FOR STRIDE ============ //
 iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph, 
                                   iftImage *input_labels, 
                                   iftImage *output_labels, 
                                   int stride);
-iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *nodes_map);
+iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, 
+                                  float stride, 
+                                  int *nodes_map);
 
 // ============ FUNCTIONS TO ENCODE LAYER ============ //
 iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, 
@@ -124,7 +140,8 @@ iftMImage *iftGFLIMConvLayer(iftGFLIMGraph *graph, iftMatrix *kernels,
 iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph, iftMatrix *kernels,
                               iftGFLIMGraphAttention attention_opt,
                               int *kernel_labels, int kernel_size,
-                              iftMatrix *neighbors);
+                              iftMatrix *neighbors,
+                              iftGFLIMAggregation aggregation_opt);
 iftMImageArray *iftGFLIMConvLayerBatch(iftGFLIMGraphArray *graph, 
                                       iftMatrix *kernels, 
                                       int kernel_size, 
@@ -136,7 +153,8 @@ iftMImageArray *iftGFLIMConvLayerBatchV2(iftGFLIMGraphArray *graph,
                                       iftMatrix *kernels, 
                                       iftGFLIMGraphAttention attention_opt, 
                                       int *kernel_labels, int kernel_size,
-                                      iftMatrix **neighbors);
+                                      iftMatrix **neighbors,
+                                      iftGFLIMAggregation aggregation_opt);
 void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph, 
                           char *pool_type, int pool_size);
 void iftGFLIMPoolingArrayV2(iftMImageArray *activ_array, iftGFLIMGraphArray *graph,
@@ -151,12 +169,12 @@ iftGFLIMGraph *iftGFLIMEncodeLayerV2(iftGFLIMGraph *graph,
                                   iftMatrix *Kernels, 
                                   float *bias,
                                   iftGFLIMLayer layer, 
-                                  iftGFLIMStrideType stride,
-                                  iftImage *input_labels, 
-                                  iftImage **output_labels,
                                   iftGFLIMGraphAttention attention_opt, 
                                   int *kernel_labels,
-                                  iftMatrix *neighbors);
+                                  iftMatrix *neighbors,
+                                  char *kernel_neighbors,
+                                  char *pool_neighbors,
+                                  iftGFLIMAggregation aggregation_opt);
 void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
                                  iftMatrix *Kmerged, iftGFLIMLayer layer,
                                  iftImageArray *labels_img,
@@ -167,12 +185,20 @@ void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
 void iftGFLIMEncodeLayerBatchV2(iftGFLIMGraphArray *input,
                                  iftMatrix *Kmerged, 
                                  iftGFLIMLayer layer,
-                                 iftImageArray *labels_img,
                                  float *bias_merged,
-                                 iftGFLIMStrideType stride,
                                  iftGFLIMGraphAttention attention_opt, 
                                  int *kernel_labels,
-                                 iftMatrix **neighbors);
+                                 iftMatrix **neighbors,
+                                 char *kernel_neighbors,
+                                 char *pool_neighbors,
+                                  iftGFLIMAggregation aggregation_opt);
+void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftGFLIMLayer layer,
+                            iftImageArray *labels_img, iftGFLIMStrideType stride);
+void iftGFLIMStridePrecomputed(iftGFLIMGraph *graph,
+                            iftGFLIMGraph *graph_resized,
+                            iftImage *label_img,
+                            iftImage *label_img_resized,
+                            float *scale);
 // ============ FUNCTIONS TO DECODE FEATURES ============ //
 iftImageArray *iftGFLIMDecodeLayer(iftGFLIMGraph *graph, 
                                   iftImage *label_img, 

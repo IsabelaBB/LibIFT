@@ -299,6 +299,38 @@ iftMImageArray *iftMMinPoolingArray(iftMImageArray *mimgArray, float radius, int
   iftMImageArray *iftMReLUArray(iftMImageArray *mimg, float *bias,
 				bool inplace);
 
+/**
+ * @brief Applies ReLU to a multichannel image.
+ * 
+ * @param mimg: Multichannel image
+ * @param bias: Bias vector
+ * @param inplace: boolean value for the inplace computation
+ * @param alpha: slope of the negative part of the function
+ * 
+ * @return activation image  
+ * 
+ * @author Cesar Castelo
+ * @date Apr 22, 2019
+ */
+//! swig(newobject, stable)
+  iftMImage *iftMLeakyReLU(iftMImage *mimg, float *bias, bool inplace, float alpha);
+
+/**
+ * @brief Applies ReLU to an array of multichannel images.
+ * 
+ * @param mimg: Multichannel image array (batch)
+ * @param bias: Bias vector
+ * @param inplace: boolean value for the inplace computation
+ * @param alpha: slope of the negative part of the function
+ * 
+ * @return activation image  
+ * 
+ * @author Cesar Castelo
+ * @date Apr 26, 2019
+ */
+//! swig(newobject, stable)
+  iftMImageArray *iftMLeakyReLUArray(iftMImageArray *mimg, float *bias,
+				bool inplace, float alpha);
 
 
 /**

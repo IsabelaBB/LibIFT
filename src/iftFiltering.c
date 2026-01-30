@@ -1991,6 +1991,66 @@ iftMImageArray *iftMReLUArray(iftMImageArray *mimgArray, float *bias,
   return mimgArrayOut;
 }
 
+iftMImage *iftMLeakyReLU(iftMImage *mimg, float *bias, bool inplace, float alpha)
+{
+  iftMImage *relu=NULL;
+  
+  if (inplace) {
+    if (bias == NULL){
+#pragma omp parallel for
+      for (int p = 0; p < mimg->n; p++) {
+	for (int b = 0; b < mimg->m; b++) {
+	  mimg->val[p][b] = iftMax(alpha * mimg->val[p][b], mimg->val[p][b]);
+	}
+      }
+    } else {
+#pragma omp parallel for
+      for (int p = 0; p < mimg->n; p++) {
+	for (int b = 0; b < mimg->m; b++) {
+	  mimg->val[p][b] = iftMax(alpha * (mimg->val[p][b]+bias[b]), mimg->val[p][b]+bias[b]);
+	}
+      }
+    }
+    relu = mimg;
+  } else { 
+    relu = iftCreateMImage(mimg->xsize, mimg->ysize, mimg->zsize, mimg->m);
+    if (bias == NULL){    
+#pragma omp parallel for
+      for (int p = 0; p < mimg->n; p++){
+	for (int b = 0; b < mimg->m; b++){
+	  relu->val[p][b] = iftMax(alpha * mimg->val[p][b], mimg->val[p][b]);
+	}
+      }
+    } else {
+#pragma omp parallel for
+      for (int p = 0; p < mimg->n; p++){
+	for (int b = 0; b < mimg->m; b++){
+	  relu->val[p][b] = iftMax(alpha * (mimg->val[p][b]+bias[b]), mimg->val[p][b]+bias[b]);
+	}
+      }
+    }
+  }
+  
+  return(relu);
+}
+
+iftMImageArray *iftMLeakyReLUArray(iftMImageArray *mimgArray, float *bias,
+			      bool inplace, float alpha)
+{
+  iftMImageArray *mimgArrayOut = mimgArray;
+
+  if (!inplace)
+    mimgArrayOut = iftCreateMImageArray(mimgArray->n);
+  
+  for(int i = 0; i < mimgArray->n; i++){
+    mimgArrayOut->val[i] = iftMLeakyReLU(mimgArray->val[i], bias, inplace, alpha);
+  }
+    
+  return mimgArrayOut;
+}
+
+
+
 iftMImage *iftMPooling(iftMImage *mimg, char *pool_type,
 		       iftAdjRel *A, int stride)
 {

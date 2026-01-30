@@ -223,12 +223,12 @@ bool iftIsValidGFLIMGraph(iftGFLIMGraph *graph)
  */
 
 /**
- * @fn iftGLIMGraphGetAggregation
+ * @fn iftGFLIMGraphGetAggregation
  * @brief Get the graph aggregation type from a string
  * @param arg aggregation type as string
  * @return iftGFLIMGraphAggregation
  */
-iftGFLIMAggregation iftGLIMGraphGetAggregation(char *arg)
+iftGFLIMAggregation iftGFLIMGraphGetAggregation(char *arg)
 {
     if (strcmp(arg, "CONCAT") == 0)
         return IFT_GFLIM_AGGREGATION_CONCAT;
@@ -238,6 +238,10 @@ iftGFLIMAggregation iftGLIMGraphGetAggregation(char *arg)
         return IFT_GFLIM_AGGREGATION_WMEAN;
     else if (strcmp(arg, "WCONCAT") == 0)
         return IFT_GFLIM_AGGREGATION_WCONCAT;
+    else if (strcmp(arg, "SORTFEAT") == 0)
+        return IFT_GFLIM_AGGREGATION_SORTFEAT;
+    else if (strcmp(arg, "SORTFEAT_V2") == 0)
+        return IFT_GFLIM_AGGREGATION_SORTFEAT_V2;
     else
         iftError("Invalid aggregation type %s", __func__, arg);
     return IFT_GFLIM_AGGREGATION_CONCAT;
@@ -302,6 +306,8 @@ iftGFLIMGraphNodeFeature iftGFLIMGraphGetNodeFeature(const char *name)
         return IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK;
     if (strcmp(name, "SUM_CONCAT_HARALICK") == 0)
         return IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK;
+    if (strcmp(name, "MEAN_CONCAT_STD_SIZE") == 0)
+        return IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_STD_SIZE;
     iftError("Invalid iftGFLIMGraphNodeFeature name %s", __func__, name);
     return IFT_FLIMGRAPH_FEATURE_MEAN;
 }
@@ -2157,6 +2163,97 @@ iftGFLIMGraph *iftComputeGFLIMGraphFeaturesSumConcatHaralick(
     return graph;
 }
 
+typedef struct spx_info {
+    float *sumSqr;
+    float *sum;
+} SPX_INFO;
+
+iftGFLIMGraph *iftComputeGFLIMGraphFeaturesMeanConcatStdSize(
+                    int num_superpixels, 
+                    iftAdjRel *A, iftMImage *original_img, 
+                    iftImage *labeled_img)
+{
+    if (num_superpixels < 1)
+        iftError("Number of superpixels must be positive", __func__);
+    
+    iftBMap *neighbors[num_superpixels];
+    SPX_INFO spx_info[num_superpixels];
+
+    iftGFLIMGraph *graph = iftCreateGFLIMGraph(2 * original_img->m + 1, num_superpixels);
+
+    for (int i = 0; i < num_superpixels; i++){
+        spx_info[i].sumSqr = (float *)calloc(original_img->m, sizeof(float));
+        spx_info[i].sum = (float *)calloc(original_img->m, sizeof(float));
+        neighbors[i] = iftCreateBMap(num_superpixels);
+    }
+
+    // for each pixel
+    for (int p_index = 0; p_index < labeled_img->n; p_index++)
+    {
+        // get its label
+        int label = labeled_img->val[p_index] - 1;
+        if(label < 0) continue; // ignore values outside the mask
+        
+        iftGFLIMGraphNode *node = &(graph->nodes[label]); // get the node in the graph
+        node->numPixels++;
+        float *pixel = original_img->val[p_index];
+
+        // increase the features (all feature types involve the mean or sum of the original image color values)
+        for (int band_index = 0; band_index < original_img->m; band_index++){
+            spx_info[label].sum[band_index] += pixel[band_index];
+            spx_info[label].sumSqr[band_index] += (pixel[band_index] * pixel[band_index]);
+        }
+
+        // look at neighbor pixels
+        iftVoxel p_voxel = iftMGetVoxelCoord(original_img, p_index);
+        for (int i = 1; i < A->n; i++)
+        {
+            iftVoxel q_voxel = iftGetAdjacentVoxel(A, p_voxel, i);
+            if (iftMValidVoxel(original_img, q_voxel))
+            {
+                // get the label of the neighbor pixel
+                int q_label = (int)(labeled_img->val[iftMGetVoxelIndex(original_img, q_voxel)] - 1);
+
+                // check if neighbor relationship (the edge) is already in the graph
+                // since the graph is undirected, we check only one side and add both
+                if (q_label >= 0 && label > q_label && !iftBMapValue(neighbors[label], q_label))
+                {
+                    iftGFLIMGraphInsertNeighborNode(node, q_label);
+                    iftGFLIMGraphInsertNeighborNode(&(graph->nodes[q_label]), label);
+                    iftBMapSet1(neighbors[label], q_label);
+                    graph->num_edges++;
+                }
+            }
+        }
+    }
+
+    // compute mean, std and size
+    iftGFLIMGraphNode *node = graph->nodes;
+    for (int spx_index = 0; spx_index < num_superpixels; spx_index++)
+    {   
+        for (int band_index = 0; band_index < original_img->m; band_index++){
+            double mean = (spx_info[spx_index].sum[band_index] / (double)node->numPixels);
+            node->feats[band_index] = mean;
+            node->feats[original_img->m + band_index] = (spx_info[spx_index].sumSqr[band_index] / (double)node->numPixels) - (mean * mean);
+
+            if(node->feats[original_img->m + band_index] < 0) 
+                node->feats[original_img->m + band_index] *= -1.0;
+
+            if((node->feats[original_img->m + band_index] < 1e-4) || 
+                    node->numPixels == 1)
+                node->feats[original_img->m + band_index] = 0.0;
+            else 
+                node->feats[original_img->m + band_index] = sqrt(node->feats[original_img->m + band_index]);    
+        }
+        node->feats[2 * original_img->m] = (double)node->numPixels / (double)original_img->n;
+        node++;
+        iftDestroyBMap(&neighbors[spx_index]);
+        free(spx_info[spx_index].sumSqr);
+        free(spx_info[spx_index].sum);
+    }
+    node = NULL;
+    return graph;
+}
 
 /**
  * @fn iftSuperpixelImageToFLIMGraph
@@ -2477,6 +2574,11 @@ iftGFLIMGraph *iftImageToGFLIMGraph(iftImage *img,
         graph = iftComputeGFLIMGraphFeaturesSumConcatHaralick(
                     num_superpixels, A, mimg,
                     label_img_tmp, graph_feat, NULL);
+        break;
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_STD_SIZE:
+        graph = iftComputeGFLIMGraphFeaturesMeanConcatStdSize(
+                        num_superpixels, A, mimg,
+                        label_img_tmp);
         break;
     default:
         iftError("Invalid graph feature type %d", __func__, graph_feat);
@@ -2834,6 +2936,11 @@ iftMatrix *iftGFLIMConstructGraphRelation(iftImage *orig_img,
                     num_superpixels, A, mimg,
                     label_imgi, graph_feat, NULL);
         break;
+    case IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_STD_SIZE:
+        graph = iftComputeGFLIMGraphFeaturesMeanConcatStdSize(
+                        num_superpixels, A, mimg,
+                        label_imgi);
+        break;
     default:
         iftError("Invalid graph feature type %d", __func__, graph_feat);
     }
@@ -2856,9 +2963,14 @@ iftMatrix *iftGFLIMConstructGraphRelation(iftImage *orig_img,
         iftDestroyIntArray(&neighbors);
     }
 
-    iftDestroyGFLIMGraph(&graph);
+    /*printf("Neighbors of first graph: ");
+    for(int n = 0; n < neighbors_matrix->ncols; n++)
+    {
+        printf("%f ", iftMatrixElem(neighbors_matrix, n, 0));
+    }
+    printf("\n");*/
 
-    //printf("Done constructing graph relation. Matrix size: %d x %d\n", neighbors_matrix->nrows, neighbors_matrix->ncols);
+    iftDestroyGFLIMGraph(&graph);
 
     return neighbors_matrix;
 }
@@ -3229,8 +3341,8 @@ iftMatrix *iftGFLIMGraphAttentionClassDominance_test(iftMatrix *H, iftGFLIMGraph
                 k++;
                 node = node->next;
             }
-
-            iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
+            if(graph->nodes[i].numNeighbors > 0)
+                iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
             /*if(i == 0)
             {
                 printf("H'[%d][%d] = %f * (%f + %f) = %f * %f = %f \n", j, i,
@@ -3490,8 +3602,11 @@ iftMatrix *iftGFLIMGraphAttentionClassDominancePower2_bkp(iftMatrix *H, iftGFLIM
                 iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
                 node = node->next;
             }
-            iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
-            iftMatrixElem(attention_vals, j, i) = pow(iftMatrixElem(attention_vals, j, i), 2);
+            if(graph->nodes[i].numNeighbors > 0)
+            {
+                iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
+                iftMatrixElem(attention_vals, j, i) = pow(iftMatrixElem(attention_vals, j, i), 2);
+            }
             iftMatrixElem(attention_vals, j, i) += pow(iftMatrixElem(H_norm, j, i), 2);
         }
     }
@@ -3892,8 +4007,8 @@ iftMatrix *iftGFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftGFLIMGraph *
                 iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
                 node = node->next;
             }
-
-            iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
+            if(graph->nodes[i].numNeighbors > 0)
+                iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
             iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
         }
     }
@@ -3994,8 +4109,8 @@ iftMatrix *iftGFLIMGraphAttentionClassDominance(iftMatrix *H, iftGFLIMGraph *gra
                 iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
                 node = node->next;
             }
-
-            iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
+            if(graph->nodes[i].numNeighbors > 0)
+                iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
             iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, i);
         }
     }
@@ -4096,9 +4211,12 @@ iftMatrix *iftGFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftGFLIMGrap
                 iftMatrixElem(attention_vals, j, i) += iftMatrixElem(H_norm, j, node->elem);
                 node = node->next;
             }
-
-            iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
-            iftMatrixElem(attention_vals, j, i) = powf(iftMatrixElem(attention_vals, j, i),2) + powf(iftMatrixElem(H_norm, j, i),2);
+            if(graph->nodes[i].numNeighbors > 0)
+            {
+                iftMatrixElem(attention_vals, j, i) /= graph->nodes[i].numNeighbors;
+                iftMatrixElem(attention_vals, j, i) = powf(iftMatrixElem(attention_vals, j, i),2);
+            }
+            iftMatrixElem(attention_vals, j, i) += powf(iftMatrixElem(H_norm, j, i),2);
         }
     }
     iftDestroyMatrix(&H_norm);
@@ -4217,10 +4335,12 @@ void iftGetNeighborsGFLIMGraph(iftGFLIMGraph *graph, int *roots, int num_roots,
     for (int r = 0; r < num_roots; r++)
     {
         iftSet *neigh = graph->nodes[*root_ptr].adj;
+        //printf("Getting neighbors for root %d, nadj: %d\n", *root_ptr, graph->nodes[*root_ptr].numNeighbors);
         while (neigh != NULL)
         {
             if (heap->color[neigh->elem] == IFT_WHITE)
             {
+                // compute the distance between the features
                 double dist = 0;
                 double *feats = graph->nodes[neigh->elem].feats;
                 for (int i = 0; i < graph->num_feats; i++)
@@ -4228,6 +4348,8 @@ void iftGetNeighborsGFLIMGraph(iftGFLIMGraph *graph, int *roots, int num_roots,
                     double feat_val = feature_reference[i] - feats[i];
                     dist += feat_val * feat_val;
                 }
+
+                //printf("  Considering neighbor %d, distance: %f\n", neigh->elem, dist);
 
                 // if te heap already has k elements
                 // keep the most similar (or less similar) elements
@@ -4277,29 +4399,41 @@ iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index,
     if(graph->num_nodes < 1)
         iftError("Graph has no nodes: %d", __func__, graph->num_nodes);
 
+    //printf("Getting %d neighbors for node %d with dilation %d (most_similar=%d)\n", k, node_index, dilation, most_similar);
     double *dissimilarity = (double *)malloc(graph->num_nodes * sizeof(double));
+    //printf("Number of nodes: %d\n", graph->num_nodes);
     iftIntArray *neighbors = iftCreateIntArray(k);
+    //printf("Neighbors array created with size %d\n", k);
+
+    for(int i = 0; i < graph->num_nodes; i++)
+        dissimilarity[i] = IFT_INFINITY_DBL_NEG;
+    //printf("Dissimilarity array initialized\n");
 
     // MaxHeap para armazenar até k vizinhos mais similares.
     // Se a quantidade de vizinhos for maior que k, remove o menos similar
     // do heap (que está no topo) usando "pop" e verifica quem é o mais similar
     // para nova inserção.
     iftDHeap *auxiliaryHeap = iftCreateDHeap(graph->num_nodes, dissimilarity);
+    //printf("Auxiliary heap created\n");
     iftDHeap *heap = iftCreateDHeap(graph->num_nodes, dissimilarity);
+    //printf("Heap created\n");
     if (most_similar)
         auxiliaryHeap->removal_policy = MAXVALUE;
     else
         heap->removal_policy = MAXVALUE;
+    //printf("Heaps removal policy set\n");
 
     if(node_index < 0 || node_index >= graph->num_nodes)
         iftError("Node index out of bounds: %d", __func__, node_index);
 
+    //printf("  Initializing dissimilarity for node %d\n", node_index);
     dissimilarity[node_index] = 0.0;
     iftInsertDHeap(auxiliaryHeap, node_index);
     iftRemoveDHeap(auxiliaryHeap);
-    // neighbors->val[0] = node_index;
+    neighbors->val[0] = node_index;
     neighbors->n = 1;
     iftInsertDHeap(heap, node_index);
+    //printf("  Starting neighbor search loop\n");
 
     int skips_performed = 1;
     int roots[k];
@@ -4307,9 +4441,11 @@ iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index,
     roots[0] = node_index;
     int i = 1; // number of values in root
 
+    //printf("  Starting neighbor search loop\n");
     while (neighbors->n < k)
     {
         int miss_neighbors = k - neighbors->n;
+        //printf("    Getting up to %d neighbors (skips performed: %d)\n", miss_neighbors, skips_performed);
         iftGetNeighborsGFLIMGraph(graph, roots, i,
                                  miss_neighbors,
                                  dissimilarity,
@@ -4322,45 +4458,62 @@ iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index,
 
         i = 0;
         int found_neighbors = auxiliaryHeap->last + 1;
+        //printf("    Found %d neighbors\n", found_neighbors);
         // adiciona os k vizinhos selecionados (no auxiliaryHeap) em um minHeap
         while (!iftEmptyDHeap(auxiliaryHeap))
         {
-            int node_index = iftRemoveDHeap(auxiliaryHeap);
+            int id = iftRemoveDHeap(auxiliaryHeap);
             if (skips_performed == dilation)
             {
-                roots[i] = node_index;
-                iftInsertDHeap(heap, node_index);
+                roots[i] = id;
+                //printf("      Adding neighbor %d to roots for next iteration\n", id);
+                iftInsertDHeap(heap, id);
                 i++;
             }
         }
         neighbors->n += found_neighbors;
+        //printf("    Total neighbors found: %ld\n", neighbors->n);
         if (skips_performed != dilation)
             skips_performed++;
         else
             skips_performed = 1;
     }
 
+    //printf("  Finalizing neighbor selection\n");
     i = 0;
     while (i < neighbors->n)
     {
         neighbors->val[i] = iftRemoveDHeap(heap);
+        //printf("    Neighbor %d: %d\n", i, neighbors->val[i]);
         i++;
     }
-
+    while(i < k){
+        neighbors->val[i] = node_index;
+        //printf("    Neighbor %d: %d (filled)\n", i, neighbors->val[i]);
+        i++;
+    }
+    neighbors->n = k;
+    
+    //printf("  Cleaning up\n");
     free(dissimilarity);
     iftDestroyDHeap(&auxiliaryHeap);
     iftDestroyDHeap(&heap);
-
-    double *attention_vals = iftGFLIMGraphGetAttentionValues(neighbors, graph, &attention_opt);
-    if (attention_opt != IFT_FLIMGRAPH_ATTENTION_NONE)
+    
+    //printf("Applying attention mechanism: %d\n", attention_opt);
+    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE ||
+        attention_opt == IFT_FLIMGRAPH_ATTENTION_NODE_SIZE ||
+        attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE ||
+        attention_opt == IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY)
     {
+        double *attention_vals = iftGFLIMGraphGetAttentionValues(neighbors, graph, &attention_opt);
         for (int i = 0; i < neighbors->n; i++)
             neighbors->val[i] *= attention_vals[i];
+        
+        if (attention_vals != NULL)
+            iftFree(attention_vals);
     }
 
-    if (attention_vals != NULL)
-        iftFree(attention_vals);
-
+    //printf("Finished getting neighbors for node %d\n", node_index);
     return neighbors;
 }
 
@@ -4383,14 +4536,14 @@ double *iftGFLIMGraphAggregateFeatures(int p,
     double *output_features = NULL;
     int i = 0;
     double w[neighbors->n];
+    float *ch_feat = NULL;
+    int *index = NULL;
 
     if (neighbors->val[0] != p)
         iftError("Neighbor of %d is %d", __func__, p, neighbors->val[0]);
 
-    switch (aggregation_opt)
+    if(aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT)
     {
-    case IFT_GFLIM_AGGREGATION_CONCAT:
-
         output_features = iftAllocDoubleArray(num_adj * graph->num_feats);
 
         while (i < neighbors->n)
@@ -4398,11 +4551,10 @@ double *iftGFLIMGraphAggregateFeatures(int p,
             memcpy(output_features + i * graph->num_feats, graph->nodes[neighbors->val[i]].feats, graph->num_feats * sizeof(double));
             i++;
         }
+    }
 
-        break;
-
-    case IFT_GFLIM_AGGREGATION_WCONCAT:
-
+    if(aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT)
+    {
         output_features = iftAllocDoubleArray(num_adj * graph->num_feats);
         double *node_feats = graph->nodes[p].feats;
         double total_strength = 0.0; 
@@ -4426,11 +4578,10 @@ double *iftGFLIMGraphAggregateFeatures(int p,
             for (int b = 0; b < graph->num_feats; b++)
                 output_features[i * graph->num_feats + b] *= (1.0f - w[i] / total_strength);
         }
+    }
 
-        break;
-
-    case IFT_GFLIM_AGGREGATION_MEAN:
-
+    if(aggregation_opt == IFT_GFLIM_AGGREGATION_MEAN)
+    {
         output_features = iftAllocDoubleArray(2 * graph->num_feats);
 
         memcpy(output_features, graph->nodes[p].feats, graph->num_feats * sizeof(double));
@@ -4446,11 +4597,10 @@ double *iftGFLIMGraphAggregateFeatures(int p,
 
         for (int b = graph->num_feats; b < 2 * graph->num_feats; b++)
             output_features[b] /= (float)(neighbors->n - 1);
+    }
 
-        break;
-
-    case IFT_GFLIM_AGGREGATION_WMEAN:
-
+    if(aggregation_opt == IFT_GFLIM_AGGREGATION_WMEAN)
+    {
         output_features = iftAllocDoubleArray(2 * graph->num_feats);
 
         double size = (double)graph->nodes[p].numPixels;
@@ -4484,13 +4634,72 @@ double *iftGFLIMGraphAggregateFeatures(int p,
                 output_features[graph->num_feats + b] += (float)((w[i - 1] / sum) * graph->nodes[neighbors->val[i]].feats[b]);
             i++;
         }
-        break;
-
-    default:
-        iftError("Invalid aggregation option", __func__);
-        break;
     }
 
+    if(aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT)
+    {
+        //printf("IFT_GFLIM_AGGREGATION_SORTFEAT: %d features \n", num_adj * graph->num_feats);
+        output_features = iftAllocDoubleArray(num_adj * graph->num_feats);
+
+        //printf("p: %d, num_adj: %d, num_feats: %d \n", p, num_adj, graph->num_feats);
+        ch_feat = iftAllocFloatArray(num_adj);
+        index = iftAllocIntArray(num_adj);
+
+        //printf("Sorting features... \n");
+        for (int b = 0, j = 0; b < graph->num_feats; b++)
+        {
+            //printf("  Feature %d \n", b);
+            for (int k=0; k < num_adj; k++){
+                ch_feat[k]=graph->nodes[neighbors->val[k]].feats[b]; 
+                index[k]=k; 
+                //printf("    Neighbor %d: feat value: %f index: %d \n", neighbors->val[k], ch_feat[k], k);
+            }
+            
+            //printf("  Before sort: ");
+            /* Sort the values */
+            iftFHeapSort(ch_feat, index, num_adj, IFT_DECREASING);
+
+            //printf("  After sort: \n");
+            for (int k = 0; k < num_adj; k++, j++)
+            {
+                //printf("output_features[%d + %d] = ch_feat[%d] = %f \n", j, k, k, ch_feat[k]);
+                output_features[j] = ch_feat[k];
+            }
+        }
+        //printf("Done sorting features. \n");
+    }
+
+    if(aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT_V2)
+    {
+        output_features = iftAllocDoubleArray(num_adj * graph->num_feats);
+
+        ch_feat = iftAllocFloatArray(num_adj-1);
+        index = iftAllocIntArray(num_adj-1);
+
+        // the first node is always the initial node
+        for (int b = 0, j = 0; b < graph->num_feats; b++)
+            output_features[j++] = graph->nodes[neighbors->val[0]].feats[b];
+
+        for (int b = 0, j = graph->num_feats; b < graph->num_feats; b++)
+        {
+            for (int k=1; k < num_adj; k++){
+                ch_feat[k-1]=graph->nodes[neighbors->val[k]].feats[b]; 
+                index[k-1]=k-1; 
+            }
+            
+            /* Sort the values */
+            iftFHeapSort(ch_feat, index, num_adj-1, IFT_DECREASING);
+
+            for (int k = 0; k < num_adj-1; k++, j++)
+            {
+                output_features[j] = ch_feat[k];
+            }
+        }
+    }
+
+    if(ch_feat != NULL) iftFree(ch_feat);
+    if(index != NULL) iftFree(index);
+    //printf("returning aggregated features. \n");
     return output_features;
 }
 
@@ -4509,6 +4718,8 @@ double *iftGFLIMGraphAggregateFeatures(int p,
  * - IFT_GFLIM_AGGREGATION_CONCAT: num_adj * graph->num_feats
  * - IFT_GFLIM_AGGREGATION_MEAN: 2 * graph->num_feats
  * - IFT_GFLIM_AGGREGATION_WMEAN: 2 * graph->num_feats
+ * - IFT_GFLIM_AGGREGATION_WCONCAT: num_adj * graph->num_feats
+ * - IFT_GFLIM_AGGREGATION_SORTFEAT: num_adj * graph->num_feats
  * @note `neighbors_all` is used to store the neighbors of each node when the attention option is IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL.
  */
 iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
@@ -4520,10 +4731,16 @@ iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
     if (num_adj < 1)
         iftError("Number of neighbors must be positive", __func__);
 
+    int kernel_neighbors = iftMin(graph->num_nodes, num_adj);
     // cria a matriz de saída
-    int out_num_feats = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) ? num_adj * graph->num_feats : 2 * graph->num_feats;
+    int out_num_feats = (aggregation_opt == IFT_GFLIM_AGGREGATION_CONCAT) || 
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_WCONCAT) || 
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT) ||
+                    (aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT_V2) ? 
+                    graph->num_feats * kernel_neighbors : 2 * graph->num_feats;
     iftMatrix *matrix = iftCreateMatrix(out_num_feats, graph->num_nodes);
 
+    //printf("iftGFLIMGraphToNeighborhoodFeatureMatrix \n");
     for (int p = 0; p < graph->num_nodes; p++)
     {
         iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, num_adj, 1, true, attention_opt);
