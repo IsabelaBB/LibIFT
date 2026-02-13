@@ -6,8 +6,8 @@ import numpy as np
 def parse_args():
     parser = argparse.ArgumentParser("Create Seeds From All Superpixels")
     parser.add_argument("train_file", type=str, help="Path to the training file.")
-    parser.add_argument("mask_dir", type=str, help="Path to the mask directory.")
     parser.add_argument("output_path", type=str, help="Path to the output directory.")
+    parser.add_argument("--mask_dir", type=str, help="Path to the mask directory.", default=None)
     return parser.parse_args()
 
 def get_train_filenames(path):

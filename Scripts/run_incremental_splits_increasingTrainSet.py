@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import pandas as pd
 import numpy as np
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, recall_score
 
 tmp_file = "/tmp/run_incremental_splits_increasingTrainSet_log.txt"
 IFT_dir="/home/isabela/Codes/LibIFT"
@@ -98,8 +98,8 @@ class Model():
         os.makedirs(markers_folder, exist_ok=True)
         run_script(f"python3 {IFT_dir}/Scripts/CreateSeedsFromAllPix_TrainSet.py \
             {train_path} \
-            {self.dataset_path}/masks/ \
-            {markers_folder}")
+            {markers_folder} \
+            --mask_dir {self.dataset_path}/masks")
 
         # create initial graph seeds
         if self.kernel_neighbors == "color": 
@@ -148,7 +148,7 @@ class Model():
             #run_script(f"{IFT_dir}/bin/iftGFLIMWriteActivations \
             #    {self.model_dir} {layer} {self.batch_size}")
 
-    def train_svm(self, layer, train_path, imgSetName):
+    def train_svm(self, layer, train_path, imgSetName, C):
         activations_dir=f"{self.model_dir}/layer{layer}_{imgSetName}"
         self.svm_file=f"{self.model_dir}/svm_{layer}_{imgSetName}.zip"
         
@@ -164,16 +164,18 @@ class Model():
             {train_path} 1 1")
 
         run_script(f"{IFT_dir}/bin/iftSupTrainBySVM \
-            {activations_dir}.zip 0 0 1e2 0 {self.svm_file}")
+            {activations_dir}.zip 0 0 {C} 0 {self.svm_file}")
         
     def extract_features(self, extract_path):
         # extracts features from the train-val set
         run_script(f"{IFT_dir}/bin/iftGFLIMExtractV3 \
-            {extract_path} \
-            {self.model_dir} 1 {self.spx} {self.initial_seeds} {self.fixed_spx} {self.graph_feat} \
-            {self.arch_file} {self.nlayers} {self.batch_size} {self.attention} {self.aggregation_opt} \
+            {extract_path} {self.model_dir} {self.arch_file} \
+            {self.nlayers} {self.batch_size} \
+            {self.attention} {self.aggregation_opt} \
+            {self.graph_feat} DISF {self.spx} {self.fixed_spx} \
             1 -1 -1 graph-adaptive \
-            {self.kernel_neighbors} {self.pool_neighbors} {self.stride_neighbors}")
+            {self.kernel_neighbors} {self.pool_neighbors} {self.stride_neighbors} \
+            {self.initial_seeds} 1")
 
     def clean_extracted_features(self, layer):
         # clean up activations and layer models to save space
@@ -192,10 +194,10 @@ class Model():
         activations_dir=f"{self.model_dir}/layer{layer}_{imgSetName}"
         if os.path.exists(f"{self.model_dir}/layer{layer}"):
             shutil.rmtree(activations_dir, ignore_errors=True)
-            run_script(f"cp -r {self.model_dir}/layer{layer} {activations_dir}")
+        run_script(f"cp -r {self.model_dir}/layer{layer} {activations_dir}")
 
         if os.path.exists(activations_dir) == False:
-            raise ValueError(f"Activations directory {activations_dir} does not exist. Cannot train SVM.")
+            raise ValueError(f"Activations directory {activations_dir} does not exist. Cannot classify with SVM.")
 
         run_script(f"{IFT_dir}/bin/iftGFLIMActivDataSet \
             {activations_dir} \
@@ -210,6 +212,10 @@ class Model():
             f.write(classification_output)
 
     def get_new_train_images(self, layer, imgSetName):
+        """
+        Select one image per class among the missclassified images in the training set, 
+        by choosing the image closest to the centroid of the graph feature vectors of the missclassified images of that class.
+        """
         with open(f"{self.model_dir}/results_layer{layer}_{imgSetName}/layer{layer}_{imgSetName}-classified-images.csv", "r") as f:
             df = pd.read_csv(f, header=None, sep=";")
         # assign a header to the dataframe
@@ -244,6 +250,10 @@ class Model():
         return new_train_images
  
     def get_new_train_images_class(self, layer, imgSetNameTrain, imgSetNameVal):
+        """
+        Select one image among the missclassified images in the training set that belong to the class with worse accuracy in the validation set, 
+        by choosing the image closest to the centroid of the graph feature vectors of the missclassified images of that class.
+        """
 
         with open(f"{self.model_dir}/results_layer{layer}_{imgSetNameVal}/layer{layer}_{imgSetNameVal}-classified-images.csv", "r") as f:
             df = pd.read_csv(f, header=None, sep=";")
@@ -255,7 +265,7 @@ class Model():
         class_id = -1
         for c in range(1, self.num_classes + 1):
             df_c = df[df["true_label"] == c]
-            accuracy = accuracy_score(df_c["true_label"], df_c["predicted_label"])
+            accuracy = recall_score(df_c["true_label"], df_c["predicted_label"])
             if accuracy < min_acc:
                 min_acc = accuracy
                 class_id = c
@@ -289,6 +299,10 @@ class Model():
         return [images_names[closest_index]]
  
     def get_new_train_images_classes(self, layer, imgSetNameTrain, imgSetNameVal):
+        """
+        Select one image per class among the missclassified images in the training set that belong to the classes with worse accuracy in the validation set, 
+        by choosing the image closest to the centroid of the graph feature vectors of the missclassified images of those classes.
+        """
 
         # read classification results from validation and training sets
         with open(f"{self.model_dir}/results_layer{layer}_{imgSetNameVal}/layer{layer}_{imgSetNameVal}-classified-images.csv", "r") as f:
@@ -310,7 +324,7 @@ class Model():
             df_c = classification_val[classification_val["true_label"] == c]
             if df_c.empty:
                 continue
-            accuracy = accuracy_score(df_c["true_label"], df_c["predicted_label"])
+            accuracy = recall_score(df_c["true_label"], df_c["predicted_label"])
             if accuracy < min_acc:
                 min_acc = accuracy
                 class_ids = [c]
@@ -350,7 +364,6 @@ class Model():
         return new_train_images
  
 
-
 def read_image_names(csv_path):
     # Read image names from the CSV file and sort them
     with open(csv_path, "r") as f:
@@ -388,6 +401,55 @@ def copy_selected_images(selected_images, train_csv_GFLIM):
             for image in selected_images:
                 f.write(f"{image}\n")
 
+#def strToList(s):
+#    return s.split(',')
+
+
+def prepare_new_experiment(model_dir, dataset_path, 
+                           num_classes, random_state,
+                           train_csv, val_csv, test_csv):
+    
+    os.makedirs(model_dir, exist_ok=True)
+
+    # create csv files for train, validation and test
+    with open(train_csv, 'w') as f_train:
+        for item in data_descriptor['training']:
+            f_train.write(f"{dataset_path}/images/{item}\n")
+    with open(val_csv, 'w') as f_val:
+        for item in data_descriptor['validation']:
+            f_val.write(f"{dataset_path}/images/{item}\n")
+    with open(test_csv, 'w') as f_test:
+        for item in data_descriptor['test']:
+            f_test.write(f"{dataset_path}/images/{item}\n")
+
+    image_names = read_image_names(train_csv)
+    labels_to_images = group_images_by_label(image_names)
+    return select_images_it0(labels_to_images, num_classes, 1, random_state)
+
+def load_experiment(initial_it, model, split, val_csv):
+    if(os.path.exists(model.model_dir) == False):
+        raise ValueError(f"Model directory {model.model_dir} does not exist. \
+                         Cannot continue from iteration {initial_it}.")
+
+    filename = f"{model.model_dir}/train{split}-GFLIM.csv"
+    selected_images = read_image_names(filename)
+    
+    # Extract features from the validation set
+    model.extract_features(val_csv)
+
+    # Select new images to add to the GFLIM training set
+    new_train_images = model.get_new_train_images_classes(model.nlayers, f"trainIt", f"val")
+    selected_images.extend(new_train_images)
+
+    # clean up activations and layer models to save space
+    model.clean_extracted_features(0)
+    model.clean_svm_data(model.nlayers, 'val')
+    model.clean_svm_data(model.nlayers, "trainIt")
+    for layer in range(1, model.nlayers + 1):
+        model.clean_extracted_features(layer)
+
+    return selected_images
+
 
 def parse_args():
     parser = argparse.ArgumentParser("Train and extract GFLIM-BoFP model.")
@@ -410,13 +472,16 @@ def parse_args():
     parser.add_argument("graph_feat", help="Graph feature.", type=str) 
     parser.add_argument("aggregation_opt", help="Aggregation option.", type=str)
     parser.add_argument("attention", help="Attention.", type=str)
-    parser.add_argument("num_images_per_class", help="Number of images per class for GFLIM training.", type=int, default=1)
+    parser.add_argument("num_it", help="Number of iterations for GFLIM training.", type=int, default=1)
 
     # optional arguments
     parser.add_argument("--fixed_spx", help="Use fixed superpixels.", type=int, default=0)
     parser.add_argument("--random_state", help="Random state for reproducibility.", type=int, default=42)
     parser.add_argument("--nlayers", help="Number of layers in the GFLIM model.", type=int, default=3)
     parser.add_argument("--batch_size", help="Batch size for training.", type=int, default=64)
+    parser.add_argument("--C", help="SVM regularization parameter.", type=str, default="1e2")
+    parser.add_argument("--initial_it", help="Initial iteration to start from.", type=int, default=0)
+
     args = parser.parse_args()
     return args
 
@@ -456,9 +521,11 @@ if __name__ == "__main__":
     attention = args.attention
     fixed_spx = args.fixed_spx
     random_state = args.random_state
-    num_images_per_class = args.num_images_per_class
+    num_it = args.num_it
     nlayers = args.nlayers
     batch_size = args.batch_size
+    C_val = args.C
+    initial_it = args.initial_it
     
     split_files = [
         f for f in os.listdir(args.inc_split_file) if f.endswith(".json")
@@ -467,49 +534,52 @@ if __name__ == "__main__":
     for data_descriptor_file in split_files:
 
         perc = data_descriptor_file.split('_')[-1].replace('perc','').split('.')[0]
+        if perc != "75":
+            continue
 
         pre_descr = f"Split {split} with {perc}% data"
 
-        with tqdm(range(10*num_images_per_class), desc=f"{pre_descr} - Preparing data", unit="step", leave=False) as pbar:
+        with tqdm(range(10*(num_it-initial_it)), desc=f"{pre_descr} - Preparing data", unit="step", leave=False) as pbar:
         
             data_descriptor_path = os.path.join(args.inc_split_file, data_descriptor_file)
             with open(data_descriptor_path, 'r') as f:
                 data_descriptor = json.load(f)
 
             # set model directory
-            model_dir=f"{IFT_dir}/Results/helminth-eggs/gflimBoFP_incremental_splits_incTrainSet/split{split}/perc{perc}/{arch_name}/{initial_seeds}-{spx}spx_{kernel_neighbors}-kernel_{pool_neighbors}-pool_{stride_neighbors}-stride"
+            model_dir=f"{IFT_dir}/Results/helminth-eggs/gflimBoFP_incremental_splits_incTrainSet_{C_val}_rec/split{split}/perc{perc}/{arch_name}/{initial_seeds}-{spx}spx_{kernel_neighbors}-kernel_{pool_neighbors}-pool_{stride_neighbors}-stride"
             if fixed_spx == 1: 
                 model_dir=f"{model_dir}/fixedSPX_{graph_feat}_{aggregation_opt}_{attention}"
             else:
                 model_dir=f"{model_dir}/notFixedSPX_{graph_feat}_{aggregation_opt}_{attention}"
 
-            # create model directory if it does not exist
-            os.makedirs(model_dir, exist_ok=True)
-
-            # create csv files for train, validation and test
+            model_exists = False
+            selected_images = []
+            
             train_csv = f"{model_dir}/train{split}.csv"
             val_csv = f"{model_dir}/val{split}.csv"
             test_csv = f"{model_dir}/test{split}.csv"
-            with open(train_csv, 'w') as f_train:
-                for item in data_descriptor['training']:
-                    f_train.write(f"{dataset_path}/images/{item}\n")
-            with open(val_csv, 'w') as f_val:
-                for item in data_descriptor['validation']:
-                    f_val.write(f"{dataset_path}/images/{item}\n")
-            with open(test_csv, 'w') as f_test:
-                for item in data_descriptor['test']:
-                    f_test.write(f"{dataset_path}/images/{item}\n")
 
-            image_names = read_image_names(train_csv)
-            labels_to_images = group_images_by_label(image_names)
-            selected_images = select_images_it0(labels_to_images, num_classes, 1, random_state)
+            if(initial_it > 0):
+                model_dir_it = f"{model_dir}/{initial_it * num_classes}_images"
+                model = Model(model_dir_it, arch_file,
+                              dataset_path, num_classes,
+                              spx, initial_seeds, kernel_size, kernel_neighbors,
+                              pool_size, pool_neighbors, stride_size, stride_neighbors,
+                              n_kernels, graph_feat, aggregation_opt, attention,
+                              fixed_spx, nlayers, batch_size)
+                selected_images = load_experiment(initial_it, model, split, val_csv)
+                del model
+            else:
+                selected_images = prepare_new_experiment(model_dir, dataset_path, 
+                                                         num_classes, random_state,
+                                                         train_csv, val_csv, test_csv)
 
-            for it in range(num_images_per_class+1):
+            for it in range(initial_it, num_it+1):
 
                 pre_descr = f"Split {split} with {perc}% data - Iteration {it} - {len(selected_images)} images"
 
                 num_images = len(selected_images)
-                model_dir_it = f"{model_dir}/{num_images}_images_per_class"
+                model_dir_it = f"{model_dir}/{num_images}_images"
                 os.makedirs(model_dir_it, exist_ok=True)
                 
                 # create GFLIM train csv file
@@ -549,7 +619,7 @@ if __name__ == "__main__":
                 # train SVMs for each layer using the GFLIM training set
                 pbar.set_description_str(f"{pre_descr} - Train SVM with GFLIM training set")
                 pbar.update(1)
-                model.train_svm(nlayers, train_csv_GFLIM, f"trainGFLIM")
+                model.train_svm(nlayers, train_csv_GFLIM, f"trainGFLIM", C_val)
 
                 # clean up activations and layer models to save space
                 model.clean_extracted_features(0)
@@ -584,7 +654,7 @@ if __name__ == "__main__":
                 # train SVMs for each layer using the GFLwhole training set
                 pbar.set_description_str(f"{pre_descr} - Train SVM with the complete training set")
                 pbar.update(1)
-                model.train_svm(nlayers, train_csv, f"train")
+                model.train_svm(nlayers, train_csv, f"train", C_val)
 
                 # clean up activations and layer models to save space
                 model.clean_extracted_features(0)

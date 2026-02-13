@@ -253,6 +253,16 @@ iftMatrix *iftGFLIMUpsampleFeatureMatrix(iftMatrix *X,
 
 int getLayersToConcat(iftGFLIMArch *arch, int layer, int skip_layer, iftIntArray *layers_to_concat, int index);
 
+
+
+iftMatrix *iftGFLIMCreateReducedLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
+                                    iftImage *label_img0, iftImage *label_img,
+                                    iftGFLIMLayer layer, float stdev_factor,
+                                    iftGFLIMStrideType stride,
+                                    float **bias, int **truelabel,
+                                    iftGFLIMGraphAttention attention_opt,
+                                    iftGFLIMAggregation aggregation_opt);
+
 #ifdef __cplusplus
 }
 #endif

@@ -4638,35 +4638,26 @@ double *iftGFLIMGraphAggregateFeatures(int p,
 
     if(aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT)
     {
-        //printf("IFT_GFLIM_AGGREGATION_SORTFEAT: %d features \n", num_adj * graph->num_feats);
         output_features = iftAllocDoubleArray(num_adj * graph->num_feats);
 
-        //printf("p: %d, num_adj: %d, num_feats: %d \n", p, num_adj, graph->num_feats);
         ch_feat = iftAllocFloatArray(num_adj);
         index = iftAllocIntArray(num_adj);
 
-        //printf("Sorting features... \n");
         for (int b = 0, j = 0; b < graph->num_feats; b++)
         {
-            //printf("  Feature %d \n", b);
             for (int k=0; k < num_adj; k++){
                 ch_feat[k]=graph->nodes[neighbors->val[k]].feats[b]; 
                 index[k]=k; 
-                //printf("    Neighbor %d: feat value: %f index: %d \n", neighbors->val[k], ch_feat[k], k);
             }
             
-            //printf("  Before sort: ");
             /* Sort the values */
             iftFHeapSort(ch_feat, index, num_adj, IFT_DECREASING);
 
-            //printf("  After sort: \n");
             for (int k = 0; k < num_adj; k++, j++)
             {
-                //printf("output_features[%d + %d] = ch_feat[%d] = %f \n", j, k, k, ch_feat[k]);
                 output_features[j] = ch_feat[k];
             }
         }
-        //printf("Done sorting features. \n");
     }
 
     if(aggregation_opt == IFT_GFLIM_AGGREGATION_SORTFEAT_V2)
@@ -4699,7 +4690,6 @@ double *iftGFLIMGraphAggregateFeatures(int p,
 
     if(ch_feat != NULL) iftFree(ch_feat);
     if(index != NULL) iftFree(index);
-    //printf("returning aggregated features. \n");
     return output_features;
 }
 

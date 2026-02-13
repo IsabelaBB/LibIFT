@@ -117,8 +117,8 @@ def experiment_pipeline(args, random_state, technique, distance_flag):
     markers_folder = os.path.join(args.dataset_path, 'build', f'markers{args.split}')
     run_script('CreateSeedsFromAllPix_TrainSet.py', 
             f"{img_gflim_train_file} " \
-            f"{os.path.join(args.dataset_path, 'masks')} " \
-            f"{markers_folder}", 
+            f"{markers_folder} " \
+            f"--mask_dir {os.path.join(args.dataset_path, 'masks')}",
             "Creating marker files", type="python")
 
     while nimages <= args.nimages_final:
@@ -273,7 +273,7 @@ def experiment_pipeline(args, random_state, technique, distance_flag):
 
             # create marker files
             run_script('CreateSeedsFromAllPix_TrainSet.py', 
-                f"{img_gflim_train_file} {os.path.join(args.dataset_path, 'masks')} {markers_folder}", 
+                f"{img_gflim_train_file} {markers_folder} --mask_dir {os.path.join(args.dataset_path, 'masks')}", 
                 f"Creating marker files for {nimages} images", type="python")
         else:
             nimages += 1

@@ -96,8 +96,8 @@ class Model():
         os.makedirs(markers_folder, exist_ok=True)
         run_script(f"python3 {IFT_dir}/Scripts/CreateSeedsFromAllPix_TrainSet.py \
             {train_path} \
-            {self.dataset_path}/masks/ \
-            {markers_folder}")
+            {markers_folder} \
+            --mask_dir {self.dataset_path}/masks/")
 
         # create initial graph seeds
         if self.kernel_neighbors == "color": 
@@ -163,11 +163,14 @@ class Model():
     def extract_features(self, extract_path):
         # extracts features from the train-val set
         run_script(f"{IFT_dir}/bin/iftGFLIMExtractV3 \
-            {extract_path} \
-            {self.model_dir} 1 {self.spx} {self.initial_seeds} {self.fixed_spx} {self.graph_feat} \
-            {self.arch_file} {self.nlayers} {self.batch_size} {self.attention} {self.aggregation_opt} \
+            {extract_path} {self.model_dir} \
+            {self.arch_file} {self.nlayers} {self.batch_size} \
+            {self.attention} {self.aggregation_opt} \
+            {self.graph_feat} DISF \
+            {self.spx} {self.fixed_spx} \
             1 -1 -1 graph-adaptive \
-            {self.kernel_neighbors} {self.pool_neighbors} {self.stride_neighbors}")
+            {self.kernel_neighbors} {self.pool_neighbors} {self.stride_neighbors} \
+            {self.initial_seeds} 1")
 
     def clean_extracted_features(self, layer):
         # clean up activations and layer models to save space
@@ -263,7 +266,7 @@ def parse_args():
     # optional arguments
     parser.add_argument("--fixed_spx", help="Use fixed superpixels.", type=int, default=0)
     parser.add_argument("--random_state", help="Random state for reproducibility.", type=int, default=42)
-    parser.add_argument("--nlayers", help="Number of layers in the GFLIM model.", type=int, default=3)
+    parser.add_argument("--nlayers", help="Number of layers in the GFLIM model.", type=int, default=1)
     parser.add_argument("--batch_size", help="Batch size for training.", type=int, default=64)
     args = parser.parse_args()
     return args
@@ -320,11 +323,14 @@ if __name__ == "__main__":
 
         pre_descr = f"Split {split} with {perc}% data"
 
+        """
         C_vals = [
             "1e-6", "1e-5", "1e-4", "1e-3", "1e-2", "1e-1", "1e0", "1e1", "1e2", "1e3",
             "5e-3", "3e-3", "5e-4", "3e-4", "7e-3", "7e-4",
             "1e4", "5e4", "1e5", "5e5"
             ]
+        """
+        C_vals = ["7e-4", "5e-4", "3e-4", "1e-3"]
 
         with tqdm(range(7 + 3*len(C_vals)), desc=f"{pre_descr} - Preparing data", unit="step", leave=False) as pbar:
         

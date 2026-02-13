@@ -189,11 +189,12 @@ if __name__ == "__main__":
 
         # extracts features from the dataset
         run_script(f"{IFT_dir}/bin/iftGFLIMExtractV3 \
-            {train_csv} \
-            {model_path} 1 {spx} {initial_seeds} {fixed_spx} {graph_feat} \
+            {train_csv} {model_path} \
             {arch_file} {nlayers} {batch_size} {attention} {aggregation_opt} \
-            1 -1 -1 graph-adaptive \
-            {kernel_neighbors} {pool_neighbors} {stride_neighbors}")
+            {graph_feat} DISF {spx} {fixed_spx} \
+            0 -1 -1 graph-adaptive \
+            {kernel_neighbors} {pool_neighbors} {stride_neighbors} \
+            {initial_seeds} 1")
 
         pbar.set_description_str(f"Concatenating output layers of SVM training data")
         pbar.update(1)
@@ -236,12 +237,13 @@ if __name__ == "__main__":
             pbar.update(1)
             # extracts features from the evaluation dataset
             run_script(f"{IFT_dir}/bin/iftGFLIMExtractV3 \
-                        {set_csv} \
-                        {model_path} 1 {spx} {initial_seeds} {fixed_spx} {graph_feat} \
-                        {arch_file} {nlayers} {batch_size} {attention} {aggregation_opt} \
-                        1 -1 -1 graph-adaptive \
-                        {kernel_neighbors} {pool_neighbors} {stride_neighbors}")
-
+            {set_csv} {model_path} \
+            {arch_file} {nlayers} {batch_size} {attention} {aggregation_opt} \
+            {graph_feat} DISF {spx} {fixed_spx} \
+            0 -1 -1 graph-adaptive \
+            {kernel_neighbors} {pool_neighbors} {stride_neighbors} \
+            {initial_seeds} 1")
+            
             concatenated_output_dir = f"{model_path}/concatenated_{nlayers}layers_{setName}SVM"
             if not os.path.exists(concatenated_output_dir):
                 os.makedirs(concatenated_output_dir)

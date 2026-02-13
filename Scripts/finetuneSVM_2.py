@@ -106,8 +106,8 @@ class Model():
         os.makedirs(markers_folder, exist_ok=True)
         run_script(f"python3 {IFT_dir}/Scripts/CreateSeedsFromAllPix_TrainSet.py \
             {train_path} \
-            {self.dataset_path}/masks/ \
-            {markers_folder}")
+            {markers_folder} \
+            --mask_dir {self.dataset_path}/masks")
 
         # create initial graph seeds
         if self.kernel_neighbors == "color": 
@@ -159,11 +159,13 @@ class Model():
     def extract_features(self, extract_path):
         # extracts features from the train-val set
         run_script(f"{IFT_dir}/bin/iftGFLIMExtractV3 \
-            {extract_path} \
-            {self.model_dir} 1 {self.spx} {self.initial_seeds} {self.fixed_spx} {self.graph_feat} \
-            {self.arch_file} {self.nlayers} {self.batch_size} {self.attention} {self.aggregation_opt} \
-            1 -1 -1 graph-adaptive \
-            {self.kernel_neighbors} {self.pool_neighbors} {self.stride_neighbors}")
+            {self.arch_file} {self.nlayers} {self.batch_size} \
+            {self.attention} {self.aggregation_opt} \
+            {extract_path} {self.model_dir} \
+            {self.graph_feat} DISF {self.spx} {self.fixed_spx} \
+            0 -1 -1 graph-adaptive \
+            {self.kernel_neighbors} {self.pool_neighbors} {self.stride_neighbors} \
+            {self.initial_seeds} 1")
 
     def clean_extracted_features(self, layer):
         # clean up activations and layer models to save space

@@ -710,7 +710,7 @@ FLIMGraphConvolutionalLayer(iftGFLIMGraphArray *graph,
 
         // activation and bias
         if (arch->layer[layer].relu)
-            iftMLeakyReLU(activ, bias, true, 0.01f);
+            iftMReLU(activ, bias, true);
         else
         {
             if (bias != NULL)

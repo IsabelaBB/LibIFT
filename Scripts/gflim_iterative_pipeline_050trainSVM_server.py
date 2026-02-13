@@ -101,8 +101,8 @@ def experiment_pipeline(args, results_path, results_file, random_state, nimages)
     markers_folder = os.path.join(results_path, 'build', f'markers{args.split}')
     run_script('CreateSeedsFromAllPix_TrainSet.py', 
                 f"{img_gflim_train_file} " \
-                f"{os.path.join(args.dataset_path, 'masks')} " \
-                f"{markers_folder}", 
+                f"{markers_folder} " \
+                f"--mask_dir {os.path.join(args.dataset_path, 'masks')}", 
                 "Creating marker files", type="python")
 
     # count the number of files in the markers directory

@@ -69,7 +69,11 @@ def decoder(model_dir, arch_file, layer, d):
 
 
 def extract(model_dir, img_dir, graphs_path_src, arch_file, nlayers, batch_size):
-    vals = [img_dir, graphs_path_src+'/graphs', graphs_path_src+'/labels', model_dir, arch_file, nlayers, GRAPH_FEATS, SPX_ALG, FINAL_SPX, batch_size, STRIDE, ATTENTION, AGGREGATION, 1 if DROPOUT else 0, INIT_SEEDS]
+    vals = [img_dir, graphs_path_src+'/graphs', 
+            graphs_path_src+'/labels', model_dir, 
+            arch_file, nlayers, batch_size, STRIDE,
+            ATTENTION, AGGREGATION, 1 if DROPOUT else 0, 
+            0, -1, -1, "graph-based"]
     line = "{} {}".format("{}/iftGFLIMExtract2".format(path), " ".join([str(i) for i in vals]))
     os.system(line)
 

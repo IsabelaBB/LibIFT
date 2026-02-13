@@ -123,10 +123,12 @@ done
 # run this with the following:
 /home/isabela/Codes/LibIFT/bin/iftGFLIMExtractV3 \
     /home/isabela/Codes/LibIFT/Datasets/intestinal-parasites/helminth-eggs/build/train-val1.csv \
-    ${model_dir} 1 ${spx} ${initial_seeds} ${fixed_spx} ${graph_feat} \
-    ${arch_file} 3 64 ${attention} ${aggregation_opt} \
-    1 -1 -1 graph-adaptive \
-    ${kernel_neighbors} ${pool_neighbors} ${stride_neighbors}
+    ${model_dir} ${arch_file} 3 64 \
+    ${attention} ${aggregation_opt} \
+    ${graph_feat} DISF ${spx} ${fixed_spx} \
+    0 -1 -1 graph-adaptive \
+    ${kernel_neighbors} ${pool_neighbors} ${stride_neighbors} \
+    ${initial_seeds} 1
 
 for layer in 1 2 3; do
 	activations_dir="${model_dir}/layer${layer}_trainSVM"
@@ -154,10 +156,12 @@ done;
 
 /home/isabela/Codes/LibIFT/bin/iftGFLIMExtractV3 \
     /home/isabela/Codes/LibIFT/Datasets/intestinal-parasites/helminth-eggs/build/test1.csv \
-    ${model_dir} 1 ${spx} ${initial_seeds} ${fixed_spx} ${graph_feat} \
-    ${arch_file} 3 64 ${attention} ${aggregation_opt} \
-    1 -1 -1 graph-adaptive \
-    ${kernel_neighbors} ${pool_neighbors} ${stride_neighbors}
+    ${model_dir} ${arch_file} 3 64 \
+    ${attention} ${aggregation_opt} \
+    ${graph_feat} DISF ${spx} ${fixed_spx} \
+    0 -1 -1 graph-adaptive \
+    ${kernel_neighbors} ${pool_neighbors} ${stride_neighbors} \
+    ${initial_seeds} 1
 
 # run this with the following:
 for layer in 1 2 3; do

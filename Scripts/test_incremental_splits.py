@@ -6,6 +6,7 @@ import random
 import sys
 import shutil
 import subprocess
+import numpy as np
 
 tmp_file = "/tmp/test_incremental_splits_log.txt"
 IFT_dir="/home/isabela/Codes/LibIFT"
@@ -22,8 +23,26 @@ def run_script(cmd):
         sys.exit(process.returncode)
     return process.stdout
 
-if __name__ == "__main__":
+def strToList(s):
+    return s.split(',')
 
+def vector_from_graph(graph_data):
+    num_nodes = int(graph_data['num_nodes'])
+    num_feats = int(graph_data['num_feats'])
+    feat_matrix = np.zeros((num_nodes, num_feats))
+    for i in range(int(graph_data['num_nodes'])):
+        node_feats = graph_data['node'+str(i)]['feats']
+        feat_matrix[i, :] = np.array(node_feats)
+    
+    # sort the values of each feature column and append into a single vector
+    vector = []
+    for j in range(num_feats):
+        sorted_column = np.sort(feat_matrix[:, j])
+        vector.extend(sorted_column.tolist())
+    return vector
+
+
+def parse_args():
     parser = argparse.ArgumentParser("Train and extract GFLIM-BoFP model.")
 
     # madatory arguments
@@ -44,11 +63,22 @@ if __name__ == "__main__":
     parser.add_argument("graph_feat", help="Graph feature.", type=str) 
     parser.add_argument("aggregation_opt", help="Aggregation option.", type=str)
     parser.add_argument("attention", help="Attention.", type=str)
+    # optional arguments
     parser.add_argument("--fixed_spx", help="Use fixed superpixels.", type=int, default=0)
     parser.add_argument("--random_state", help="Random state for reproducibility.", type=int, default=42)
     parser.add_argument("--num_images_per_class", help="Number of images per class for GFLIM training.", type=int, default=1)
+    parser.add_argument("--nlayers", help="Number of layers in the GFLIM model.", type=int, default=3)
+    parser.add_argument("--batch_size", help="Batch size for training.", type=int, default=64)
+    parser.add_argument("--c_vals", help="C values for training.", type=strToList, default=["1e2"])
     args = parser.parse_args()
+    return args
 
+if __name__ == "__main__":
+    args = parse_args()
+
+    if os.path.isfile(tmp_file):
+        os.remove(tmp_file)
+    
     arch_name=f"{args.kernel_size}-1-1-{args.nkernels}-{args.pool_name}-{args.pool_size}-{args.stride_size}_3_noSkip"
 
     # check if arch file exists
@@ -79,7 +109,9 @@ if __name__ == "__main__":
     fixed_spx = args.fixed_spx
     random_state = args.random_state
     num_images_per_class = args.num_images_per_class
-    
+    nlayers = args.nlayers
+    batch_size = args.batch_size
+    c_vals = args.c_vals
     split_files = [
         f for f in os.listdir(args.inc_split_file) if f.endswith(".json")
     ]
@@ -89,14 +121,14 @@ if __name__ == "__main__":
         perc = data_descriptor_file.split('_')[-1].replace('perc','').split('.')[0]
         pre_descr = f"Split {split} with {perc}% data"
 
-        with tqdm(range(0,5), desc=f"{pre_descr} - Preparing data", unit="step", leave=False) as pbar:
+        with tqdm(range(0,4 + len(c_vals)*(1 + nlayers)), desc=f"{pre_descr} - Preparing data", unit="step", leave=False) as pbar:
         
             data_descriptor_path = os.path.join(args.inc_split_file, data_descriptor_file)
             with open(data_descriptor_path, 'r') as f:
                 data_descriptor = json.load(f)
 
             # set model directory
-            model_dir=f"{IFT_dir}/Results/helminth-eggs/gflimBoFP_incremental_splits/split{split}/perc{perc}/{arch_name}/{initial_seeds}-{spx}spx_{kernel_neighbors}-kernel_{pool_neighbors}-pool_{stride_neighbors}-stride"
+            model_dir=f"{IFT_dir}/Results/protozoan-cysts/gflimBoFP_incremental_splits_1e2/split{split}/perc{perc}/{arch_name}/{initial_seeds}-{spx}spx_{kernel_neighbors}-kernel_{pool_neighbors}-pool_{stride_neighbors}-stride"
             if fixed_spx == 1: 
                 model_dir=f"{model_dir}/fixedSPX_{graph_feat}_{aggregation_opt}_{attention}"
             else:
@@ -108,55 +140,86 @@ if __name__ == "__main__":
                 continue
 
             # clean previous data in model directory
-            for layer in range(0,4):
+            for layer in range(0,nlayers+1):
                 shutil.rmtree(f"{model_dir}/layer{layer}", ignore_errors=True)
                 shutil.rmtree(f"{model_dir}/labels{layer}", ignore_errors=True)
 
             # create csv files for train, validation and test
             test_csv = f"{model_dir}/test{split}.csv"
+            #begin comment
             with open(test_csv, 'w') as f_test:
                 for item in data_descriptor['test']:
                     f_test.write(f"{dataset_path}/images/{item}\n")
-            
+            #end comment
+
             # extract test set features and classify
             pbar.set_description_str(f"{pre_descr} - Extract features from test set")
             pbar.update(1)
             run_script(f"{IFT_dir}/bin/iftGFLIMExtractV3 \
-                {test_csv} \
-                {model_dir} 1 {spx} {initial_seeds} {fixed_spx} {graph_feat} \
-                {arch_file} 3 64 {attention} {aggregation_opt} \
+                {test_csv} {model_dir} {arch_file} \
+                {nlayers} {batch_size} {attention} {aggregation_opt} \
+                {graph_feat} DISF {spx} {fixed_spx} \
                 1 -1 -1 graph-adaptive \
-                {kernel_neighbors} {pool_neighbors} {stride_neighbors}")
+                {kernel_neighbors} {pool_neighbors} {stride_neighbors} \
+                {initial_seeds} 1")
 
-            # classify test set with trained SVMs
-            for layer in range(1,4):
-                pbar.set_description_str(f"{pre_descr} - Classify test set for layer {layer}")
-                pbar.update(1)
-
+            #begin comment
+            pbar.set_description_str(f"{pre_descr} - Converting activation graphs in dataset format")
+            pbar.update(1)
+            for layer in range(1,nlayers+1):
                 activations_dir=f"{model_dir}/layer{layer}_test"
-                svm_file=f"{model_dir}/svm_{layer}.zip"
                 run_script(f"cp -r {model_dir}/layer{layer} {activations_dir}")
-
                 run_script(f"{IFT_dir}/bin/iftGFLIMActivDataSet \
-                    {activations_dir} \
-                    {test_csv} 1 1")
+                        {activations_dir} \
+                        {test_csv} 1 1")
+            #end comment
 
-                classification_output = run_script(f"{IFT_dir}/bin/iftClassifyBySVM \
-                    {activations_dir}.zip \
-                    {svm_file} \
-                    {model_dir}/results_layer{layer}_test")
+            """
+            os.makedirs(os.path.join(model_dir,"layer1_test_vectors"), exist_ok=True)
+            for graph_file in os.listdir(f"{model_dir}/layer1"):
+                with open(os.path.join(f"{model_dir}/layer1", graph_file), "r") as gf:
+                    graph_data = json.load(gf)
+                vector = vector_from_graph(graph_data)
+                vector_file = os.path.join(model_dir,"layer1_test_vectors", graph_file.replace(".json", ".npy"))
+                np.save(vector_file, vector)
+            """
             
-                with open(f"{model_dir}/classification_layer{layer}_test.txt", "w") as f:
-                    f.write(classification_output)
+            pbar.set_description_str(f"{pre_descr} - Cleaning data layer and labels folders")
+            pbar.update(1)
+            for layer in range(1,nlayers+1):
+                shutil.rmtree(f"{model_dir}/layer{layer}_test", ignore_errors=True) #uncommented
+                shutil.rmtree(f"{model_dir}/labels{layer}", ignore_errors=True)
+                shutil.rmtree(f"{model_dir}/layer{layer}", ignore_errors=True)
+            shutil.rmtree(f"{model_dir}/layer0", ignore_errors=True)
+            shutil.rmtree(f"{model_dir}/labels0", ignore_errors=True)
+
+            #begin comment
+            for c_val in c_vals:
+
+                # classify test set with trained SVMs
+                for layer in range(1,nlayers+1):
+                    pbar.set_description_str(f"{pre_descr} - Classify test set for layer {layer}")
+                    pbar.update(1)
+                    activations_dir=f"{model_dir}/layer{layer}_test"
+                    svm_file=f"{model_dir}/svm_{layer}_{c_val}.zip"
+                    run_script(f"cp {activations_dir}.zip {activations_dir}_{c_val}.zip")
+                    classification_output = run_script(f"{IFT_dir}/bin/iftClassifyBySVM \
+                        {activations_dir}_{c_val}.zip \
+                        {svm_file} \
+                        {model_dir}/results_layer{layer}_test_{c_val}")
+                    with open(f"{model_dir}/classification_layer{layer}_test_{c_val}.txt", "w") as f:
+                        f.write(classification_output)
+
+                pbar.set_description_str(f"{pre_descr} - Cleaning data after SVM classification")
+                pbar.update(1)
+                for layer in range(1,nlayers+1):
+                    os.remove(f"{model_dir}/layer{layer}_test_{c_val}.zip")
 
             pbar.set_description_str(f"{pre_descr} - Cleaning data after test classification")
             pbar.update(1)
             # clean up activations and layer models to save space
-            for layer in range(1,4):
+            for layer in range(1,nlayers+1):
                 activations_dir=f"{model_dir}/layer{layer}_test"
                 shutil.rmtree(f"{activations_dir}", ignore_errors=True)
-                shutil.rmtree(f"{activations_dir}.zip", ignore_errors=True)
-                shutil.rmtree(f"{model_dir}/layer{layer}", ignore_errors=True)
-                shutil.rmtree(f"{model_dir}/labels{layer}", ignore_errors=True)
-            shutil.rmtree(f"{model_dir}/layer0", ignore_errors=True)
-            shutil.rmtree(f"{model_dir}/labels0", ignore_errors=True)
+                os.remove(f"{activations_dir}.zip")
+            #end comment
