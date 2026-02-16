@@ -44,4 +44,5 @@ demo/Cassification/
 baselines/
 Results/
 Scripts/
+*.code-workspace
 

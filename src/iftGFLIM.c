@@ -262,7 +262,6 @@ void iftGFLIMRelabelConnectedComponentsInPlace(iftGFLIMGraph *graph,
  * @param graph Graph with the nodes and their weights.
  * @param S set of labeled graph nodes.
  * @param kernel_size Number of neighbors to compose a kernel.
- * @param attention_opt The attention option to compute the features. @see iftGFLIMGraphAttention.
  * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return iftDataSet* kernel bank
  * @note The truelabel in the dataset is the label from the seeds.
@@ -270,7 +269,6 @@ void iftGFLIMRelabelConnectedComponentsInPlace(iftGFLIMGraph *graph,
 iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
                                         iftLabeledSet *S,
                                         int kernel_size,
-                                        iftGFLIMGraphAttention attention_opt,
                                         iftGFLIMAggregation aggregation_opt)
 {
 #ifdef IFT_DEBUG
@@ -282,7 +280,6 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
     if (S == NULL) printf("\t S: NULL \n");
     else printf("\t S size: %d \n", iftLabeledSetSize(S));
     printf("\t kernel_size: %d\n", kernel_size);
-    printf("\t attention_opt: %d\n", attention_opt);
     printf("\t aggregation_opt: %d\n", aggregation_opt);
 #endif
 
@@ -577,7 +574,6 @@ iftMatrix *LearnKernelBankGraph(iftGFLIMGraph *graph, iftLabeledSet *M,
     // Ou seja, pode conter kernels de mesmo rótulo
     // As features de cada kernel correspondem às cores da semente e de suas posições vizinhas
     iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, M, kernel_size, 
-                                            IFT_FLIMGRAPH_ATTENTION_NONE, 
                                             IFT_GFLIM_AGGREGATION_CONCAT);
 
     // vetor de matrizes de kernels, Cada matriz é banco de kernels

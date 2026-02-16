@@ -47,6 +47,7 @@ int iftGFLIMNumberOfTruelabels(int *truelabels, int n)
  * @brief Get the stride type from a string.
  * @param name The name of the stride type.
  * @return a iftGFLIMStrideType. @see iftGFLIMStrideType.
+ * @author Isabela Borlido
  */
 iftGFLIMStrideType iftGFLIMGetStrideType(const char *name)
 {
@@ -65,6 +66,7 @@ iftGFLIMStrideType iftGFLIMGetStrideType(const char *name)
  * @brief Get the decoder type from a string.
  * @param name The name of the decoder type.
  * @return a iftGFLIMDecoderType. @see iftGFLIMDecoderType.
+ * @author Isabela Borlido
  */
 iftGFLIMDecoderType iftGFLIMGetDecoderType(const char *name)
 {
@@ -84,6 +86,14 @@ iftGFLIMDecoderType iftGFLIMGetDecoderType(const char *name)
     return IFT_GFLIM_TRISTATE_DECODER;
 }
 
+/**
+ * @fn iftGFLIMDecoderToString
+ * @brief Convert a iftGFLIMDecoderType to a string.
+ * 
+ * @param decoder The decoder type to convert.
+ * @return char* The string representation of the decoder type.
+ * @author Isabela Borlido
+ */
 char *iftGFLIMDecoderToString(iftGFLIMDecoderType decoder)
 {
     char *decoder_name = iftAllocCharArray(20);
@@ -121,7 +131,14 @@ char *iftGFLIMDecoderToString(iftGFLIMDecoderType decoder)
 }
 
 /**
- * \brief Returns a list of iftGFLIMDecoderType from a comma separated string.
+ * @fn SplitDecoderList
+ * @brief Returns a list of iftGFLIMDecoderType from a comma separated string.
+ * 
+ * @param str A comma separated string with the decoder types. The options are tristate, hybrid, graph-adaptive, and gaussian.
+ * @param nvalues Pointer to an integer that will store the number of decoder types in the list.
+ * @note The function does not validade if there are copies of the same decoder type in the list. 
+ * @return iftGFLIMDecoderType* 
+ * @author Isabela Borlido
  */
 iftGFLIMDecoderType *SplitDecoderList(char *str, int *nvalues)
 {
@@ -146,7 +163,13 @@ iftGFLIMDecoderType *SplitDecoderList(char *str, int *nvalues)
 }
 
 /**
- * \brief Returns a list of integers from a comma separated string.
+ * @fn SplitIntList
+ * @brief Returns a list of integers from a comma separated string.
+ * 
+ * @param str A comma separated string with the integer values.
+ * @param nvalues Pointer to an integer that will store the number of integers in the list.
+ * @return int* The list of integers.
+ * @author Isabela Borlido
  */
 int *SplitIntList(char *str, int *nvalues)
 {
@@ -175,6 +198,7 @@ int *SplitIntList(char *str, int *nvalues)
  * @brief Get the dimensionality reduction type from a string.
  * @param name The name of the dimensionality reduction type.
  * @return a iftGFLIMDimReductionType. @see iftGFLIMDimReductionType.
+ * @author Isabela Borlido
  */
 iftGFLIMDimReductionType iftGLFLIMGetDimReductionType(const char *name)
 {
@@ -293,8 +317,8 @@ float *iftGFLIMLoadBias(char *basepath)
 /**
  * @fn iftGFLIMLoadKernelLabels
  * @brief Load the kernel labels from a txt file.
- * @param[in] basepath The base path of the file.
- * @param[out] nkernels Integer pointer to the number of kernels.
+ * @param basepath The base path of the file.
+ * @param nkernels Integer pointer to the number of kernels.
  * @return An array with the kernel labels.
  * @note The kernel labels are loaded from a txt file with the name basepath-labels.txt.
  * @note The number of kernels is stored in the first line of the file.
@@ -360,11 +384,10 @@ void iftGFLIMSaveMergedModel(char *basepath, iftMatrix *K, float *bias, int *tru
 
 /**
  * @fn iftGFLIMLoadMergedModel
- * @brief Load the kernels, bias and labels of a layer from the merged model.
+ * @brief  Load the kernels and bias of a layer from the merged model.
  * @param basepath The base path of the file.
- * @param K The kernels matrix.
- * @param bias An array with the bias values.
- * @param truelabels An array with the kernel labels.
+ * @param K A pointer to the kernels matrix.
+ * @param bias A pointer to an array that will store the bias values.
  * @note The kernels are loaded from a npy file with the name basepath-kernels.npy.
  * @note The bias values are loaded from a txt file with the name basepath-bias.txt.
  * @note The kernel labels are loaded from a txt file with the name basepath-labels.txt.
@@ -399,6 +422,7 @@ void iftGFLIMLoadMergedModel(char *basepath, iftMatrix **K, float **bias)
  * @param img_xsize The xsize of the image.
  * @param img_ysize The ysize of the image.
  * @return The set of graph markers.
+ * @author Isabela Borlido
  */
 iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
                                                   iftLabeledSet *S,
@@ -415,20 +439,7 @@ iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
         printf("\t S: NULL \n");
     else
         printf("\t S size: %d \n", iftLabeledSetSize(S));
-    switch (stride)
-    {
-    case IFT_GFLIM_NOSTRIDE:
-        printf("\t stride: IFT_GFLIM_NOSTRIDE \n");
-        break;
-
-    case IFT_GFLIM_IMAGESTRIDE:
-        printf("\t stride: IFT_GFLIM_IMAGESTRIDE \n");
-        break;
-
-    case IFT_GFLIM_GRAPHSTRIDE:
-        printf("\t stride: IFT_GFLIM_GRAPHSTRIDE \n");
-        break;
-    }
+    printf("Stride: %d \n", stride);
     printf("\t img_xsize: %d\n", img_xsize);
     printf("\t img_ysize: %d\n", img_ysize);
 #endif
@@ -512,10 +523,10 @@ iftLabeledSet *iftGFLIMImageMarkersToGraphMarkers(iftImage *label_img,
 /**
  * @fn iftGFLIMUpdateGraphMarkers
  * @brief Update graph markers considering the superpixel image size of the network's input and the current layer's input.
- * @param S The set of graph markers.
+ * @param S The set of graph markers. It will be updated by the function. 
  * @param label_img The image with the superpixels. It maps the image pixels to the graph nodes (from 1).
  * @param label_img0 The image with the superpixels in "layer 0" (network's input). It maps the image pixels to the graph nodes (from 1).
- * @return The set of updated graph markers.
+ * @author Isabela Borlido
  */
 void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage *label_img0)
 {
@@ -654,34 +665,20 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S, iftImage *label_img, iftImage 
     free(nodes_map);
     iftDestroyBMap(&visited);
     
-    /*
-    iftLabeledSet *T = NULL;
-    for (int p = 0; p < num_nodes; p++)
-    {
-        int max_class = 0;
-        int max_count = class_count[p][0];
-        for (int c = 1; c < nclasses; c++)
-        {
-            if (class_count[p][c] > max_count)
-            {
-                max_class = c;
-                max_count = class_count[p][c];
-            }
-        }
-        if (max_count > 0)
-            iftInsertLabeledSetMarkerAndHandicap(&T, p, max_class + minclass, max_class + minclass, 0);
-    }*/
-
-
     for (int i = 0; i < num_nodes; i++)
         iftFree(class_count[i]);
     iftFree(class_count);
-    
-    //    return T;
 }
 
+/**
+ * @fn iftGFLIMUpdateMarkersFromPrecomputedGraphs
+ * @brief Update graph markers considering the superpixel image size of the network's input and the current layer's input, using precomputed graphs.
+ * @param T The set of graph markers. It will be updated by the function. 
+ * @param label_img The image with the superpixels. It maps the image pixels to the graph nodes (from 1).
+ * @param label_img0 The image with the superpixels in "layer 0" (network's input). It maps the image pixels to the graph nodes (from 1).
+ * @author Isabela Borlido
+ */
 void iftGFLIMUpdateMarkersFromPrecomputedGraphs(iftLabeledSet **T,
-                                        iftGFLIMLayer layer,
                                         iftImage *label_img,
                                         iftImage *label_img0)
 {
@@ -824,6 +821,7 @@ void iftGFLIMUpdateMarkersFromPrecomputedGraphs(iftLabeledSet **T,
  * @param most_similar If true, the most similar neighbors are selected. Otherwise, the most dissimilar neighbors are selected.
  * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return The dataset with the features extracted from the graph nodes.
+ * @author Isabela Borlido
  */
 iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
                                          iftLabeledSet *S,
@@ -841,8 +839,6 @@ iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
     else
         printf("\t S size: %d \n", iftLabeledSetSize(S));
     printf("\t kernel_size: %d\n", kernel_size);
-    printf("\t most_similar: %s\n", most_similar ? "true" : "false");
-    printf("\t attention_opt: %d\n", attention_opt);
     printf("\t aggregation_opt: %d\n", aggregation_opt);
 #endif
 
@@ -892,9 +888,9 @@ iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
  * @param graph The input graph.
  * @param S The set of graph seeds.
  * @param kernel_size The kernel size for the feature extraction.
- * @param most_similar If true, the most similar neighbors are selected. Otherwise, the most dissimilar neighbors are selected.
  * @param neighbors The precomputed neighbors for each node in the graph.
  * @return The dataset with the features extracted from the graph nodes.
+ * @author Isabela Borlido
  */
 iftDataSet *iftGFLIMExtractMarkerDataSetV3(iftGFLIMGraph *graph,
                                          iftLabeledSet *S,
@@ -970,6 +966,7 @@ iftDataSet *iftGFLIMExtractMarkerDataSetV3(iftGFLIMGraph *graph,
  * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return The set of cluster centers.
  * @note The function assign a value to each connected set of labeled nodes in the marker field of the iftLabeledSet S.
+ * @author Isabela Borlido
  */
 iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph,
                                             iftLabeledSet *S,
@@ -990,7 +987,6 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph,
         printf("\t S size: %d \n", iftLabeledSetSize(S));
     printf("\t kernel_size: %d\n", kernel_size);
     printf("\t nclusters_per_marker: %d\n", nclusters_per_marker);
-    printf("\t attention_opt: %d\n", attention_opt);
     printf("\t dimReduction: %d\n", dimReduction);
     printf("\t ncomponents: %d\n", ncomponents);
     printf("\t aggregation_opt: %d\n", aggregation_opt);
@@ -1111,8 +1107,9 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph,
  * @param kernel_size The kernel size for the feature extraction.
  * @param nclusters_per_marker The number of cluster centers per marker.
  * @param neighbors The precomputed neighbors for each node in the graph.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return The set of cluster centers.
- * @note The function assign a value to each connected set of labeled nodes in the marker field of the iftLabeledSet S.
+ * @author Isabela Borlido
  */
 iftLabeledSet *iftGFLIMSelectClusterCentersV3(iftGFLIMGraph *graph,
                                             iftLabeledSet *S,
@@ -1272,6 +1269,7 @@ float *iftGFLIMComputeBias(iftMatrix *kernels, iftDataSet *Z)
  * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @note The function allocates the bias and truelabel arrays. The caller is responsible for freeing them.
  * @return The matrix with the kernels.
+ * @author Isabela Borlido
  */
 iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
                                     iftImage *label_img0, iftImage *label_img,
@@ -1301,20 +1299,7 @@ iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
         printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
     printf("\t layer: kernel_size: %d, nclusters_per_bkg_marker: %d, nclusters_per_obj_marker: %d \n", layer.kernel_size, layer.nkernels_per_marker, layer.nkernels_per_marker);
     printf("\t stdev_factor: %f\n", stdev_factor);
-    switch (stride)
-    {
-    case IFT_GFLIM_NOSTRIDE:
-        printf("\t stride: IFT_GFLIM_NOSTRIDE \n");
-        break;
-
-    case IFT_GFLIM_IMAGESTRIDE:
-        printf("\t stride: IFT_GFLIM_IMAGESTRIDE \n");
-        break;
-
-    case IFT_GFLIM_GRAPHSTRIDE:
-        printf("\t stride: IFT_GFLIM_GRAPHSTRIDE \n");
-        break;
-    }
+    printf("\t stride: %d\n", stride);
     printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
     printf("\t truelabel: %s\n", truelabel == NULL ? "NULL" : "not NULL");
     printf("\t attention_opt: %d\n", attention_opt);
@@ -1340,7 +1325,7 @@ iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
         break;
     }
 
-    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, S, layer.kernel_size, attention_opt, aggregation_opt);
+    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, S, layer.kernel_size, aggregation_opt);
 
 #ifdef PRINT_VALS
     printf("Dataset %s\n", basename);
@@ -1410,8 +1395,6 @@ iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
 #endif
 
     iftDestroyDataSet(&Z);
-    /*if (T != S) iftDestroyLabeledSet(&T);
-    else T = NULL;*/
     return kernels;
 }
 
@@ -1431,6 +1414,7 @@ iftMatrix *iftGFLIMCreateLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
  * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @note The function allocates the bias and truelabel arrays. The caller is responsible for freeing them.
  * @return The matrix with the kernels.
+ * @author Isabela Borlido
  */
 iftMatrix *iftGFLIMCreateReducedLayerModel(iftGFLIMGraph *graph, iftLabeledSet *S,
                                     iftImage *label_img0, iftImage *label_img,
@@ -1460,20 +1444,7 @@ iftMatrix *iftGFLIMCreateReducedLayerModel(iftGFLIMGraph *graph, iftLabeledSet *
         printf("\t label_img size: %d %d %d \n", label_img->xsize, label_img->ysize, label_img->zsize);
     printf("\t layer: kernel_size: %d, nclusters_per_bkg_marker: %d, nclusters_per_obj_marker: %d \n", layer.kernel_size, layer.nkernels_per_marker, layer.nkernels_per_marker);
     printf("\t stdev_factor: %f\n", stdev_factor);
-    switch (stride)
-    {
-    case IFT_GFLIM_NOSTRIDE:
-        printf("\t stride: IFT_GFLIM_NOSTRIDE \n");
-        break;
-
-    case IFT_GFLIM_IMAGESTRIDE:
-        printf("\t stride: IFT_GFLIM_IMAGESTRIDE \n");
-        break;
-
-    case IFT_GFLIM_GRAPHSTRIDE:
-        printf("\t stride: IFT_GFLIM_GRAPHSTRIDE \n");
-        break;
-    }
+    printf("\t stride: %d\n", stride);
     printf("\t bias: %s\n", bias == NULL ? "NULL" : "not NULL");
     printf("\t truelabel: %s\n", truelabel == NULL ? "NULL" : "not NULL");
     printf("\t attention_opt: %d\n", attention_opt);
@@ -1499,7 +1470,7 @@ iftMatrix *iftGFLIMCreateReducedLayerModel(iftGFLIMGraph *graph, iftLabeledSet *
         break;
     }
 
-    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, S, layer.kernel_size, attention_opt, aggregation_opt);
+    iftDataSet *Z = iftGFLIMExtractLabelDataSet(graph, S, layer.kernel_size, aggregation_opt);
 
 #ifdef PRINT_VALS
     printf("Dataset %s\n", basename);
@@ -1525,7 +1496,6 @@ iftMatrix *iftGFLIMCreateReducedLayerModel(iftGFLIMGraph *graph, iftLabeledSet *
             if (Z->sample[i].truelabel == Z->sample[j].truelabel)
             {
                 float cosine_distance = iftCosineDistance2(Z->sample[i].feat, Z->sample[j].feat, Z->nfeats);
-                printf("Cosine distance between kernel %d and %d: %f\n", i, j, cosine_distance);
                 if (cosine_distance < threshold)
                 {
                     min_cosine_distance = cosine_distance;
@@ -1631,8 +1601,10 @@ iftMatrix *iftGFLIMCreateReducedLayerModel(iftGFLIMGraph *graph, iftLabeledSet *
  * @param[out] truelabel A pointer to an array. After the function, it will be filled with the bias values. Is allocated inside the function.
  * @param neighbors The precomputed neighbors for each node in the graph.
  * @param kernel_neighbors The type of kernel neighbors to be used ("color" or "spatial").
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @note The function allocates the bias and truelabel arrays. The caller is responsible for freeing them.
  * @return The matrix with the kernels.
+ * @author Isabela Borlido
  */
 iftMatrix *iftGFLIMCreateLayerModelV3(iftGFLIMGraph *graph, iftLabeledSet *S,
                                     iftGFLIMLayer layer, float stdev_factor,
@@ -1660,6 +1632,7 @@ iftMatrix *iftGFLIMCreateLayerModelV3(iftGFLIMGraph *graph, iftLabeledSet *S,
     else
         printf("\t neighbors: %d x %d\n", neighbors->nrows, neighbors->ncols);
     printf("\t kernel_neighbors: %s\n", kernel_neighbors);
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
 #endif
 
     iftDataSet *Z = NULL;
@@ -1670,7 +1643,6 @@ iftMatrix *iftGFLIMCreateLayerModelV3(iftGFLIMGraph *graph, iftLabeledSet *S,
     else
         Z = iftGFLIMExtractLabelDataSet(graph, S, 
                                     layer.kernel_size, 
-                                    IFT_FLIMGRAPH_ATTENTION_NONE, 
                                     aggregation_opt);
 
 
@@ -1798,6 +1770,7 @@ int union_set(int x, int y, int *parent, int *rank)
  * @param output_labels The output labels image.
  * @param stride The stride value.
  * @return The output graph after stride.
+ * @author Isabela Borlido
  */
 iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
                                   iftImage *input_labels,
@@ -1962,6 +1935,7 @@ iftGFLIMGraph *iftGFLIMImageStride(iftGFLIMGraph *graph,
  * @return The graph after stride.
  * @note nodes_map must be allocated with graph->num_nodes elements.
  * @note The function will fill nodes_map with the mapping from the input graph to the output graph.
+ * @author Isabela Borlido
  */
 iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *nodes_map)
 {
@@ -1995,7 +1969,7 @@ iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *node
         {
             double val = 0;
             for (int j = 0; j < graph->num_feats; j++)
-            { // euclidean distance
+            { 
                 val += (node->feats[j] - graph->nodes[adj->elem].feats[j]) * (node->feats[j] - graph->nodes[adj->elem].feats[j]);
             }
             val = sqrt(val);
@@ -2083,6 +2057,16 @@ iftGFLIMGraph *iftGFLIMGraphStride(iftGFLIMGraph *graph, float stride, int *node
     return output_graph;
 }
 
+/**
+ * @fn iftGFLIMStrideBatch
+ * @brief Apply stride to a batch of graphs and labels images. The stride can be applied to the graph, to the image, or not applied at all.
+ * 
+ * @param graph The input graph array. The function will modify the graphs in-place.
+ * @param layer The layer configuration, which contains the stride value.
+ * @param labels_img The input labels image array. The function will modify the images in-place if stride is IFT_GFLIM_IMAGESTRIDE.
+ * @param stride The stride type to be applied.
+ * @author Isabela Borlido
+ */
 void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftGFLIMLayer layer,
                             iftImageArray *labels_img, iftGFLIMStrideType stride)
 {
@@ -2132,6 +2116,17 @@ void iftGFLIMStrideBatch(iftGFLIMGraphArray *graph, iftGFLIMLayer layer,
     }
 }
 
+/**
+ * @brief Compute the precomputed stride mapping between two graphs according to the intersection of their superpixels in the original and resized label images.
+ * 
+ * @param graph The input graph.
+ * @param graph_resized The resized graph. It must have the same number of features as graph, but can have a different number of nodes.
+ * @param label_img The original labels image, which was used to create graph.
+ * @param label_img_resized The resized labels image, which was used to create graph_resized. It must have the same dimensions as label_img, but with different superpixels.
+ * @param scale The scale factor used to resize the label image. It is an array of 3 floats, with the scale factor for each dimension (x, y, z).
+ * @note The function will transfer the features from graph to graph_resized according to the intersection of their superpixels in the original and resized label images. The features of each superpixel in graph
+ * @author Isabela Borlido
+ */
 void iftGFLIMStridePrecomputed(iftGFLIMGraph *graph,
                             iftGFLIMGraph *graph_resized,
                             iftImage *label_img,
@@ -2247,6 +2242,7 @@ void iftGFLIMStridePrecomputed(iftGFLIMGraph *graph,
  * @param maintain_kernels Used with reduce option. Vector with nnodes size in which each position indicates whether the channel should be maintained or not.
  * @param reduce If true, use attention values to remove some channels from the output graph.
  * @return A mimage with the convolution result.
+ * @author Isabela Borlido
  */
 iftMImage *iftGFLIMConvLayer(iftGFLIMGraph *graph, iftMatrix *kernels,
                              int kernel_size, iftGFLIMGraphAttention attention_opt,
@@ -2391,9 +2387,7 @@ iftMImage *iftGFLIMConvLayer(iftGFLIMGraph *graph, iftMatrix *kernels,
             XJ = XA;
             XA = NULL;
         }
-    }/*else{
-        printf("Attention matrix is NULL\n");
-    }*/
+    }
 
 #ifdef PRINT_VALS
     printf("XJ: %d %d \n", XJ->nrows, XJ->ncols);
@@ -2421,16 +2415,6 @@ iftMImage *iftGFLIMConvLayer(iftGFLIMGraph *graph, iftMatrix *kernels,
     printf("\n");
 #endif
 
-    /*if(activ->n > 249)
-    {
-        printf("Node 249 values after matrix to mimg: ");
-        for(int j = 0; j < activ->m; j++)
-        {
-            printf("%.4f ", activ->val[249][j]);
-        }
-        printf("\n");
-    }*/
-
     iftDestroyMatrix(&XJ);
     return activ;
 }
@@ -2442,8 +2426,11 @@ iftMImage *iftGFLIMConvLayer(iftGFLIMGraph *graph, iftMatrix *kernels,
  * @param kernels The set of kernels.
  * @param attention_opt The attention option. @see iftGFLIMGraphAttention.
  * @param kernel_labels The kernel labels.
+ * @param kernel_size The kernel size.
  * @param neighbors Matrix of size (graph->num_nodes,k) with the k nearest neighbors of each graph node.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return A mimage with the convolution result.
+ * @author Isabela Borlido
  */
 iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph, 
                             iftMatrix *kernels,
@@ -2495,10 +2482,6 @@ iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph,
         iftDestroyIntArray(&neighbors_arr);
         free(feature_vector);
 
-        //    double *feats = graph->nodes[(int)iftMatrixElem(neighbors, i, p)].feats;
-        //    for (int f = 0; f < graph->num_feats; f++)
-        //        iftMatrixElem(XI, i * graph->num_feats + f, p) = feats[f];
-        
     }
 
 #ifdef PRINT_VALS
@@ -2512,11 +2495,9 @@ iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph,
     printf("\n");
 #endif
 
-    //printf("Performing matrix multiplication... \n");
     iftMatrix *XJ = iftMultMatrices(XI, kernels);
     iftMatrix *A = NULL;
     
-    //printf("Computing attention... \n");
     switch (attention_opt)
     {
     case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST:
@@ -2547,18 +2528,14 @@ iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph,
     // no need for a default case here, since some attention strategies are applied before the convolution
     }
 
-    //printf("Applying attention... \n");
     if (A != NULL)
     {
-        //printf("Attention matrix is NOT NULL\n");
         iftMatrix *XA = iftMatricesMultiplicationPointWise(XJ, A);
         iftDestroyMatrix(&A);
         iftDestroyMatrix(&XJ);
         XJ = XA;
         XA = NULL;
-    }/*else{
-        printf("Attention matrix is NULL\n");
-    }*/
+    }
 
 #ifdef PRINT_VALS
     printf("XJ: %d %d \n", XJ->nrows, XJ->ncols);
@@ -2571,7 +2548,6 @@ iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph,
     printf("\n");
 #endif
 
-    //printf("Converting to mimage... \n");
     iftDestroyMatrix(&XI);
     iftMImage *activ = iftMatrixToMImage(XJ, XJ->nrows,
                                          1, 1,
@@ -2587,7 +2563,6 @@ iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph,
     printf("\n");
 #endif
 
-    //printf("Destroying XJ... \n");
     iftDestroyMatrix(&XJ);
     return activ;
 }
@@ -2601,6 +2576,7 @@ iftMImage *iftGFLIMConvLayerV2(iftGFLIMGraph *graph,
  * @param kernel_labels The kernel labels.
  * @param neighbors Vector of matrices, each of size (graph->num_nodes,k) with the k nearest neighbors of each graph node.
  * @return The mimage array with the convolution result.
+ * @author Isabela Borlido
  */
 iftMImageArray *iftGFLIMConvLayerBatchV2(iftGFLIMGraphArray *graph, 
                                     iftMatrix *kernels,
@@ -2624,10 +2600,8 @@ iftMImageArray *iftGFLIMConvLayerBatchV2(iftGFLIMGraphArray *graph,
     printf("\t aggregation_opt: %d\n", aggregation_opt);
 #endif
 
-    //printf("iftGFLIMConvLayerBatchV2 ... \n");
     iftMImageArray *activ = iftCreateMImageArray(graph->n);
     for (int i = 0; i < graph->n; i++){
-        //printf("Processing graph %d/%d \n", i+1, graph->n);
         activ->val[i] = iftGFLIMConvLayerV2(graph->val[i], kernels, 
                                         attention_opt, kernel_labels, 
                                         kernel_size, neighbors[i],
@@ -2642,6 +2616,7 @@ iftMImageArray *iftGFLIMConvLayerBatchV2(iftGFLIMGraphArray *graph,
  * @param mimgArray The input mimage array.
  * @param bias The bias to be summed.
  * @param inplace If true, the bias is summed in place.
+ * @author Isabela Borlido
  */
 iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, float *bias,
                                                  bool inplace)
@@ -2675,7 +2650,12 @@ iftMImageArray *iftGFLIMSumMImgArrayToFloatArray(iftMImageArray *mimgArray, floa
  * @param graph The input graph.
  * @param kernels The set of kernels.
  * @param kernel_size The kernel size.
+ * @param attention_opt The attention option. @see iftGFLIMGraphAttention.
+ * @param kernel_labels The kernel labels.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
+ * @param reduce If true, use attention values to remove some channels from the output graph.
  * @return The mimage array with the convolution result.
+ * @author Isabela Borlido
  */
 iftMImageArray *iftGFLIMConvLayerBatch(iftGFLIMGraphArray *graph, iftMatrix *kernels, int kernel_size,
                                        iftGFLIMGraphAttention attention_opt, int *kernel_labels,
@@ -2692,13 +2672,15 @@ iftMImageArray *iftGFLIMConvLayerBatch(iftGFLIMGraphArray *graph, iftMatrix *ker
     else
         printf("\t kernels size: %d %d \n", kernels->nrows, kernels->ncols);
     printf("\t kernel_size: %d\n", kernel_size);
+    printf("\t attention_opt: %d\n", attention_opt);
+    printf("\t kernel_labels: %s\n", kernel_labels == NULL ? "NULL" : "not NULL");
+    printf("\t aggregation_opt: %d\n", aggregation_opt);
+    printf("\t reduce: %s\n", reduce ? "true" : "false");
 #endif
 
     iftMImageArray *activ = iftCreateMImageArray(graph->n);
-    //printf("iftGFLIMConvLayerBatch... \n");
     for (int i = 0; i < graph->n; i++)
     {
-        //printf("Processing graph %d/%d \n", i+1, graph->n);
         activ->val[i] = iftGFLIMConvLayer(graph->val[i], kernels, kernel_size, attention_opt, kernel_labels, aggregation_opt, reduce);
     }
     return activ;
@@ -2712,6 +2694,7 @@ iftMImageArray *iftGFLIMConvLayerBatch(iftGFLIMGraphArray *graph, iftMatrix *ker
  * @param pool_type The pooling type.
  * @param pool_size The pooling size.
  * @note The pooling is applied to the graph nodes.
+ * @author Isabela Borlido
  */
 void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph,
                           char *pool_type, int pool_size)
@@ -2746,6 +2729,7 @@ void iftGFLIMPoolingArray(iftMImageArray *activ_array, iftGFLIMGraphArray *graph
  * @param pool_size The pooling size.
  * @param neighbors Matrix of size (graph->num_nodes,k) with the k nearest neighbors of each graph node.
  * @note The pooling is applied to the graph nodes.
+ * @author Isabela Borlido
  */
 void iftGFLIMPoolingArrayV2(iftMImageArray *activ_array, iftGFLIMGraphArray *graph,
                           char *pool_type, int pool_size, iftMatrix **neighbors)
@@ -2767,7 +2751,6 @@ void iftGFLIMPoolingArrayV2(iftMImageArray *activ_array, iftGFLIMGraphArray *gra
 
     for (int i = 0; i < activ_array->n; i++)
     {
-        //printf("Pooling graph %d/%d \n", i+1, activ_array->n);
         iftMImageToGFLIMGraphInplace(activ_array->val[i], graph->val[i]);
         iftGFLIMPoolingLayerV2(graph->val[i], pool_type, pool_size, neighbors[i]);
     }
@@ -2780,14 +2763,13 @@ void iftGFLIMPoolingArrayV2(iftMImageArray *activ_array, iftGFLIMGraphArray *gra
  * @param[in] Kernels The set of kernels.
  * @param[in] bias The bias.
  * @param[in] layer The layer configuration.
- * @param[in] stride The stride.
- * @param[in] input_labels The image with the superpixels of the input graph. It maps the image pixels to the graph nodes (from 1).
- * @param[out] output_labels A pointer to an iftImage*. Is allocated inside the function. After the function, it will be filled with the image-graph mapping values (from 1).
  * @param[in] attention_opt The attention option. @see iftGFLIMGraphAttention.
  * @param[in] kernel_labels The kernel labels.
  * @param[in] neighbors The neighbors matrix.
+ * @param[in] kernel_neighbors The kernel neighbors.
+ * @param[in] pool_neighbors The pooling neighbors.
+ * @param[in] aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return The output graph after encoding the layer.
- * @note If stride is IFT_GFLIM_NOSTRIDE the input_labels and output_labels can be NULL.
  */
 iftGFLIMGraph *iftGFLIMEncodeLayerV2(iftGFLIMGraph *graph,
                                   iftMatrix *Kernels, 
@@ -2953,7 +2935,7 @@ iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
     iftDestroyMImage(&activ_relu);
     iftGFLIMPoolingLayer(pooling_graph, layer.pool_type, layer.pool_size);
 
-    /* stride model */
+    /* stride model: tried to perform stride through a function call, but it didnt work :( */
     /*iftGFLIMGraphArray *input = iftCreateGFLIMGraphArray(1);
     input->val[0] = pooling_graph;
     iftImageArray *labels_img = iftCreateImageArray(1);
@@ -3008,6 +2990,23 @@ iftGFLIMGraph *iftGFLIMEncodeLayer(iftGFLIMGraph *graph,
     return output_graph;
 }
 
+/**
+ * @fn iftGFLIMEncodeLayerBatch
+ * @brief Encode a layer batch. It computes the convolution, pooling and stride (if any) for a batch of graphs.
+ * 
+ * @param input The input graph array.
+ * @param Kmerged The kernels matrix
+ * @param layer The layer configuration.
+ * @param labels_img The image array with the superpixels of the input graphs. It maps the image pixels to the graph nodes (from 1).
+ * @param bias_merged The bias array.
+ * @param stride The stride type. @see iftGFLIMStrideType.
+ * @param attention_opt The attention option. @see iftGFLIMGraphAttention.
+ * @param kernel_labels The kernel labels. It is used in some attention strategies. It maps each kernel to a label.
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
+ * @param reduce If true, use attention values to remove some channels from the output graph.
+ * @note If stride is IFT_GFLIM_NOSTRIDE the labels_img can be NULL.
+ * @author Isabela Borlido
+ */
 void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
                                  iftMatrix *Kmerged, iftGFLIMLayer layer,
                                  iftImageArray *labels_img,
@@ -3038,11 +3037,9 @@ void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
     printf("\t reduce: %s\n", reduce ? "true" : "false");
 #endif
 
-    //printf("Convolution...\n");
     /* convolution */
     iftMImageArray *activ = iftGFLIMConvLayerBatch(input, Kmerged, layer.kernel_size, attention_opt, kernel_labels, aggregation_opt, /*maintain_kernels,*/ reduce);
 
-    //printf("Relu + Bias...\n");
     /* activation and bias */
     iftMImageArray *activ_relu = activ;
 
@@ -3055,16 +3052,30 @@ void iftGFLIMEncodeLayerBatch(iftGFLIMGraphArray *input,
     }
     activ = NULL;
 
-    //printf("Pooling...\n");
     /* pooling */
     iftGFLIMPoolingArray(activ_relu, input, layer.pool_type, layer.pool_size);
     iftDestroyMImageArray(&activ_relu);
 
-    //printf("Stride...\n");
     /* stride */
     iftGFLIMStrideBatch(input, layer, labels_img, stride);
 }
 
+/**
+ * @fn iftGFLIMEncodeLayerBatchV2
+ * @brief Encode a layer batch. It computes the convolution, pooling and stride (if any) for a batch of graphs.
+ * 
+ * @param input The input graph array.
+ * @param Kmerged The kernels matrix
+ * @param layer The layer configuration.
+ * @param bias_merged The bias array.
+ * @param attention_opt The attention option. @see iftGFLIMGraphAttention.
+ * @param kernel_labels The kernel labels. It is used in some attention strategies. It maps each kernel to a label.
+ * @param neighbors Vector of matrices, each of size (graph->num_nodes,k) with the k nearest neighbors of each graph node. It is used in some attention and pooling strategies.
+ * @param kernel_neighbors The kernel neighbors type. It can be "color" or "act". 
+ * @param pool_neighbors The pooling neighbors type. It can be "color" or "act". 
+ * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
+ * @note If stride is IFT_GFLIM_NOSTRIDE the labels_img can be NULL.
+ */
 void iftGFLIMEncodeLayerBatchV2(iftGFLIMGraphArray *input,
                                  iftMatrix *Kmerged, 
                                  iftGFLIMLayer layer,
@@ -3100,7 +3111,6 @@ void iftGFLIMEncodeLayerBatchV2(iftGFLIMGraphArray *input,
 
     iftMImageArray *activ = NULL;
 
-    //printf("Convolution...\n");
     /* convolution */
     if(strcmp(kernel_neighbors, "color") == 0)
         activ = iftGFLIMConvLayerBatchV2(input, Kmerged, 
@@ -3116,7 +3126,6 @@ void iftGFLIMEncodeLayerBatchV2(iftGFLIMGraphArray *input,
     /* activation and bias */
     iftMImageArray *activ_relu = activ;
 
-    //printf("Relu + Bias...\n");
     if (layer.relu)
         activ_relu = iftMReLUArray(activ, bias_merged, true);
     else
@@ -3126,7 +3135,6 @@ void iftGFLIMEncodeLayerBatchV2(iftGFLIMGraphArray *input,
     }
     activ = NULL;
 
-    //printf("Pooling...\n");
     /* pooling */
     if(strcmp(pool_neighbors, "color") == 0)
         iftGFLIMPoolingArrayV2(activ_relu, input, layer.pool_type, layer.pool_size, neighbors);
@@ -3138,6 +3146,15 @@ void iftGFLIMEncodeLayerBatchV2(iftGFLIMGraphArray *input,
 
 // ============ FUNCTIONS TO PROCESS RESIDUAL CONNECTIONS ============ //
 
+/**
+ * @fn iftGFLIMGetFinerResidualLayer
+ * @brief Given the architecture of the GFLIM, return an array with the finer layer that has a skip connection to each layer. 
+ * If there is no skip connection to a layer, return the layer itself (from 1).
+ * 
+ * @param arch The architecture of the GFLIM. It contains the information about the layers and the skip connections.
+ * @return int* An array of size arch->nlayers, where the value at index i is the finer layer that has a skip connection to layer i (from 1). 
+ * If there is no skip connection to layer i, the value is i+1.
+ */
 int* iftGFLIMGetFinerResidualLayer(iftGFLIMArch *arch)
 {
     /*
@@ -3161,6 +3178,18 @@ int* iftGFLIMGetFinerResidualLayer(iftGFLIMArch *arch)
     return finer_layer;
 }
 
+/**
+ * @fn iftGFLIMUpsampleFeatureMatrix
+ * @brief Upsample a feature matrix X to a new number of nodes (nnodes) and features (nfeats) using the provided nodes_map and kernels_map.
+ * 
+ * @param X The input feature matrix of size (nfeats_in, nnodes_in).
+ * @param nodes_map An array of size nnodes that maps each node in the upsampled matrix to a node in the original matrix (from 0).
+ * @param kernels_map An array of size nfeats that maps each feature in the upsampled matrix to a feature in the original matrix (from 0).
+ * @param nnodes The number of nodes in the upsampled matrix.
+ * @param nfeats The number of features in the upsampled matrix.
+ * @return iftMatrix* The upsampled feature matrix of size (nfeats, nnodes).
+ * @note The values of the upsampled matrix are obtained by copying the values from the original matrix according to the nodes_map and kernels_map. 
+ */
 iftMatrix *iftGFLIMUpsampleFeatureMatrix(iftMatrix *X, 
                                     int *nodes_map, iftIntArray *kernels_map, 
                                     int nnodes, int nfeats)
@@ -3194,6 +3223,14 @@ iftMatrix *iftGFLIMUpsampleFeatureMatrix(iftMatrix *X,
     return X_up;
 }
 
+/**
+ * @fn iftGFLIMOtsuFromFeatureMatrix
+ * @brief Compute the Otsu threshold for each feature/channel of the feature matrix X. 
+ * The Otsu threshold is a way to separate foreground bands from background bands in the feature space.
+ * 
+ * @param X The input feature matrix of size (nfeats, nnodes) with values in the range [0,1].
+ * @return float* An array of size nfeats with the Otsu threshold for each feature/channel. The values are in the range [0,1].
+ */
 float *iftGFLIMOtsuFromFeatureMatrix(iftMatrix *X)
 {
     /*
@@ -3225,6 +3262,16 @@ float *iftGFLIMOtsuFromFeatureMatrix(iftMatrix *X)
     return otsu_thresholds;
 }
 
+/**
+ * @fn iftGFLIMSumValueConditionToFeatureMatrix
+ * @brief Sum a value to all elements of the feature matrix X that are above a certain threshold. 
+ * The thresholds are given in the values array, where each value corresponds to a feature/channel of X.
+ * 
+ * @param X The input feature matrix of size (nfeats, nnodes).
+ * @param values An array of size nfeats with the threshold values for each feature/channel. The values are in the range [0,1].
+ * @note This function is used to add a certain value to the features that are above the Otsu threshold, 
+ * in order to enhance the foreground bands in the feature space.
+ */
 void iftGFLIMSumValueConditionToFeatureMatrix(iftMatrix *X, float *values)
 {
     /*
@@ -3244,6 +3291,16 @@ void iftGFLIMSumValueConditionToFeatureMatrix(iftMatrix *X, float *values)
     }
 }
 
+/**
+ * @fn iftGFLIMStdFromFeatureMatrix
+ * @brief Compute the standard deviation for each node and channel across multiple feature matrices.
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param n The number of feature matrices in the array X.
+ * @param finer_scale The index of the finer scale layer in the array X. 
+ * @return float** A 2D array of size (nnodes, nfeats) with the standard deviation for each node and channel across the feature matrices at the finer scale layer. 
+ * The values are in the range [0,1].
+ */
 float **iftGFLIMStdFromFeatureMatrix(iftMatrix **X, int n, int finer_scale)
 {
     /*
@@ -3275,6 +3332,18 @@ float **iftGFLIMStdFromFeatureMatrix(iftMatrix **X, int n, int finer_scale)
     return stds;
 }
 
+/**
+ * @fn iftGFLIMMergeMatrices_dotProd
+ * @brief Merge multiple feature matrices by dot product.
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param n The number of feature matrices in the array X.
+ * @param finer_scale The index of the finer scale layer in the array X. 
+ * @param use_otsu If true, compute the Otsu threshold for each feature/channel of the feature matrices and sum it to the features that are above the threshold before merging.
+ * @param use_std If true, compute the standard deviation for each node and channel across the feature matrices at the finer scale layer and multiply it to the merged matrix.
+ * @return iftMatrix* The merged feature matrix of size (nfeats, nnodes) obtained by merging the feature matrices in X by dot product.
+ * The values are in the range [0,1].
+ */
 iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n,  
                                         int finer_scale, bool use_otsu, bool use_std)
 {
@@ -3331,6 +3400,18 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd(iftMatrix **X, int n,
     return merged;
 }
 
+/**
+ * @fn iftGFLIMMergeMatrices_dotProd_sumScale0
+ * @brief Merge multiple feature matrices by dot product and sum it with the finer scale layer (index 0).
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param n The number of feature matrices in the array X.
+ * @param finer_scale The index of the finer scale layer in the array X.
+ * @param use_otsu If true, compute the Otsu threshold for each feature/channel of the feature matrices and sum it to the features that are above the threshold before merging.
+ * @param use_std If true, compute the standard deviation for each node and channel across the feature matrices at the finer scale layer and multiply it to the merged matrix.
+ * @return iftMatrix* The merged feature matrix of size (nfeats, nnodes) obtained by merging the feature matrices in X by dot product and summing it with the finer scale layer (index 0).
+ * The values are in the range [0,1].
+ */
 iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n, 
                                         int finer_scale, bool use_otsu, bool use_std)
 {
@@ -3394,6 +3475,17 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScale0(iftMatrix **X, int n,
     return merged;
 }
 
+/**
+ * @fn iftGFLIMMergeMatrices_dotProd_sumScalei
+ * @brief Merge multiple feature matrices by dot product and sum it with the finer scale layer (index i).
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param n The number of feature matrices in the array X.
+ * @param finer_scale The index of the finer scale layer in the array X.
+ * @param use_otsu If true, compute the Otsu threshold for each feature/channel of the feature matrices and sum it to the features that are above the threshold before merging.
+ * @param use_std If true, compute the standard deviation for each node and channel across the feature matrices at the finer scale layer and multiply it to the merged matrix.
+ * @return iftMatrix* The merged feature matrix of size (nfeats, nnodes) obtained by merging the feature matrices in X by dot product and summing it with the finer scale layer (index i).
+ */
 iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n,  
                                         int finer_scale, bool use_otsu, bool use_std)
 {
@@ -3457,6 +3549,18 @@ iftMatrix *iftGFLIMMergeMatrices_dotProd_sumScalei(iftMatrix **X, int n,
     return merged;
 }
 
+/**
+ * @fn iftGFLIMMergeMatrices_sum
+ * @brief Merge multiple feature matrices by sum.
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param n The number of feature matrices in the array X.
+ * @param finer_scale The index of the finer scale layer in the array X.
+ * @param use_otsu If true, compute the Otsu threshold for each feature/channel of the feature matrices and sum it to the features that are above the threshold before merging.
+ * @param use_std If true, compute the standard deviation for each node and channel across the feature matrices at the finer scale layer and multiply it to the merged matrix.
+ * @param reinforce_scale If >= 0, the index of the scale layer in the array X to reinforce by summing it to the merged matrix at the end.
+ * @return iftMatrix* The merged feature matrix of size (nfeats, nnodes) obtained by merging the feature matrices in X by sum.
+ */
 iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n, 
                                         int finer_scale, bool use_otsu, bool use_std,
                                         int reinforce_scale)
@@ -3523,6 +3627,17 @@ iftMatrix *iftGFLIMMergeMatrices_sum(iftMatrix **X, int n,
     return merged;
 }
 
+/**
+ * @fn iftGFLIMMergeMatrices_sum_att
+ * @brief Merge multiple feature matrices by sum with attention. The attention is computed based on the normalized feature values and the average strength of each label across the scales. The attention values are used to enhance the features that are more dominant in their label and suppress the features that are less dominant.
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param n The number of feature matrices in the array X.
+ * @param kernel_labels An array of size nfeats that contains the label of each kernel/feature. 
+ * @param finer_scale The index of the finer scale layer in the array X. 
+ * @param graph The graph structure of the GFLIM. 
+ * @return iftMatrix* The merged feature matrix of size (nfeats, nnodes) obtained by merging the feature matrices in X by sum with attention.
+ */
 iftMatrix *iftGFLIMMergeMatrices_sum_att(iftMatrix **X, int n, 
                                         int *kernel_labels,
                                         int finer_scale,
@@ -3664,7 +3779,19 @@ iftMatrix *iftGFLIMMergeMatrices_sum_att(iftMatrix **X, int n,
     return merged;
 }
 
-
+/**
+ * @fn iftGFLIMMergeMatrices_concat_att
+ * @brief Merge multiple feature matrices by concatenation with attention. 
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param Adjacency_lists An array of adjacency lists for each scale/layer in the GFLIM. Each adjacency list contains the neighbors of each node in the corresponding scale/layer.
+ * @param n The number of feature matrices in the array X.
+ * @param nodes_map An array of size n, where each element is an array that maps the nodes of the finer scale to the nodes of the current scale. 
+ * @param kernel_labels An array of size n, where each element is an array that contains the label of each kernel/feature for the corresponding scale/layer. 
+ * @param finer_scale The index of the finer scale layer in the array X. 
+ * @param kernels_maps An array of size n, where each element is an array that maps the kernels/features of the finer scale to the kernels/features of the current scale. 
+ * @return iftMatrix* The merged feature matrix of size (sum of nfeats across scales, nnodes of finer scale) obtained by merging the feature matrices in X by concatenation with attention.
+ */
 iftMatrix *iftGFLIMMergeMatrices_concat_att(iftMatrix **X, iftGFLIMAdjacencyList **Adjacency_lists, 
                                         int n, int **nodes_map,  
                                         int **kernel_labels, 
@@ -3933,6 +4060,16 @@ int getLayersToConcat(iftGFLIMArch *arch, int layer, int skip_layer, iftIntArray
     return index;
 }
 
+/**
+ * @fn iftGFLIMMergeMatrices_concat
+ * @brief Merge multiple feature matrices by concatenation.
+ * 
+ * @param X An array of feature matrices of size n, where each matrix is of size (nfeats, nnodes) with values in the range [0,1].
+ * @param n The number of feature matrices in the array X.
+ * @param nodes_map An array of size n, where each element is an array that maps the nodes of the finer scale to the nodes of the current scale.
+ * @param finer_scale The index of the finer scale layer in the array X.
+ * @return iftMatrix* The merged feature matrix of size (sum of nfeats across scales, nnodes of finer scale) obtained by merging the feature matrices in X by concatenation.
+ */
 iftMatrix *iftGFLIMMergeMatrices_concat(iftMatrix **X, int n, 
                                         int **nodes_map,  int finer_scale)
 {
@@ -3960,121 +4097,12 @@ iftMatrix *iftGFLIMMergeMatrices_concat(iftMatrix **X, int n,
     return merged;
 }
 
-iftIntArray **iftGFLIMCompute_kernel_maps_bkp(char *filename, int *nscales)
-{
-    FILE *fp = fopen(filename, "r");
-    if (fp == NULL)
-        iftError("Could not read file: %s",  __func__, filename);
-    
-    int c;
-    int nch = 0;
-    int size = 256;
-    char *buf = malloc(size);
-    int nspaces = 0, nlines = 0;
-    if(buf == NULL)
-        iftError("out of memory", __func__);
-
-    // read the file and reallocate buffer if needed
-    while((c = getchar()) != EOF)
-    {
-        if(nch >= size-1)
-        {
-            size += 256;
-            buf = realloc(buf, size);
-            if(buf == NULL)
-                iftError("out of memory", __func__);
-        }
-        if(c == ' ') nspaces++;
-        if(c == '\n') nlines++;
-        buf[nch++] = c;
-    }
-    buf[nch++] = '\0';
-    fclose(fp);
-
-    // convert the buffer into a matrix of kernels
-    int **kernel_maps_scale0 = iftAlloc(nlines, sizeof(int *));
-    int pos = 0; // character index in the buffer
-    int kernels_count = 0; // kernel index in the current line
-    int lines_count = 0; // current line index
-    int nkernels0 = nspaces/nlines + 1; // number of kernels in the first line
-    kernel_maps_scale0[0] = iftAllocIntArray(nkernels0);
-    while(pos < nch && buf[pos] != '\n')
-    {
-        int end = pos; // end of the current number
-
-        // find the end of the current number
-        while(end < nch && buf[end] != '\n' && buf[end] != ' ') end++;
-        
-        if(buf[end] == ' ') // convert in int
-        {
-            buf[end] = '\0';
-            kernel_maps_scale0[lines_count][kernels_count++] = atoi(&buf[pos]);
-            buf[end] = ' ';
-        }
-        else{ // last element of the line
-            if(lines_count < nlines - 1)
-            {
-                lines_count++;
-                kernel_maps_scale0[lines_count] = iftAllocIntArray(nkernels0);
-                kernels_count = 0;
-            }
-        }
-        pos = end + 1;
-    }
-    free(buf);
-
-    iftIntArray **kernel_maps = iftAlloc(nlines, sizeof(iftIntArray *));
-    *nscales = nlines;
-    // compute the kernel maps for all scales
-    int nkernelsi = 0;
-    kernel_maps[0] = iftCreateIntArray(nkernels0);
-    for(int i=0; i < nkernels0; i++)
-    {
-        int k0 = kernel_maps_scale0[0][i] - 1;
-        if(k0 == i)
-        {
-            kernel_maps[0]->val[nkernelsi] = nkernelsi;
-            nkernelsi++;
-        }else
-            kernel_maps[0]->val[nkernelsi] = kernel_maps[0]->val[k0];
-    }
-
-    for(int l = 1; l < nlines; l++)
-    {
-        nkernelsi = 0;
-        kernel_maps[l] = iftCreateIntArray(nkernels0);
-        for(int i=0; i < nkernels0; i++)
-        {
-            int k0 = kernel_maps_scale0[l][i] - 1;
-            int k0_prev = kernel_maps_scale0[l-1][i] - 1;
-            if(k0_prev == i)
-            {
-                if(k0 == k0_prev)
-                {
-                    kernel_maps[l]->val[nkernelsi] = nkernelsi;
-                    nkernelsi++;
-                }else{
-                    int j = 0, k = k0;
-                    while(j < l)
-                    {
-                        k = kernel_maps[j]->val[k];
-                        j++;
-                    }
-                    k = kernel_maps[l]->val[k];
-                    kernel_maps[l]->val[nkernelsi] = k;
-                    nkernelsi++;
-                }
-            }
-        }
-        iftResizeIntArray(&(kernel_maps[l]), nkernelsi);
-    }
-    for(int l = 0; l < nlines; l++)
-        iftFree(kernel_maps_scale0[l]);
-    iftFree(kernel_maps_scale0);
-
-    return kernel_maps;
-}
-
+/**
+ * @brief Auxiliary function to read the content of a file into a string. 
+ * 
+ * @param filename The name of the file to be read.
+ * @return char* A string containing the content of the file. 
+ */
 char* read_file(const char* filename) { 
     FILE* file = fopen(filename, "r"); 
     if (!file) { 
@@ -4122,6 +4150,15 @@ char* read_file(const char* filename) {
     return content; 
 } 
 
+/**
+ * @fn iftGFLIMCompute_kernel_maps
+ * @brief Compute the kernel maps for each scale/layer of the GFLIM from a file. 
+ * The file should contain the kernel maps for each scale/layer, 
+ * 
+ * @param filename The name of the file containing the kernel maps for each scale/layer. The file should have the following format:
+ * @param nscales Output parameter to store the number of scales/layers in the GFLIM.
+ * @return iftIntArray** An array of size nscales, where each element is an iftIntArray containing the kernel map for the corresponding scale/layer. 
+ */
 iftIntArray **iftGFLIMCompute_kernel_maps(char *filename, int *nscales)
 {
     
@@ -4245,7 +4282,15 @@ iftIntArray **iftGFLIMCompute_kernel_maps(char *filename, int *nscales)
     return kernel_maps;
 }
 
-
+/**
+ * @fn iftGFLIMMaxNormGraph
+ * @brief Normalize the features of the graph nodes by max normalization. 
+ * Each feature is divided by the maximum value of that feature across all nodes, 
+ * resulting in values in the range [0,1]. 
+ * If the maximum value of a feature is 0, all values of that feature are set to 0 to avoid division by zero.
+ * 
+ * @param graph The GFLIM graph whose node features will be normalized.
+ */
 void iftGFLIMMaxNormGraph(iftGFLIMGraph *graph)
 {
     // Compute max values for normalization
@@ -4276,6 +4321,17 @@ void iftGFLIMMaxNormGraph(iftGFLIMGraph *graph)
     iftFree(max_features);
 }
 
+/**
+ * @fn iftGFLIMMergeKernelScales
+ * @brief Merge the kernel maps of multiple scales/layers of the GFLIM into a 
+ * single kernel map that maps the kernels of the finer scale to those of the coarser scale.
+ * 
+ * @param kernel_maps An array of size nscales, where each element is an iftIntArray containing the kernel map for the corresponding scale/layer.
+ * @param nscales The number of scales/layers in the GFLIM.
+ * @param init The index of the finer scale/layer to be merged (inclusive).
+ * @param end The index of the coarser scale/layer to be merged (exclusive).
+ * @return iftIntArray* An iftIntArray containing the merged kernel map that maps the kernels of the finer scale to those of the coarser scale.
+ */
 iftIntArray *iftGFLIMMergeKernelScales(iftIntArray **kernel_maps, int nscales, 
                                     int init, int end)
 {
@@ -4312,7 +4368,14 @@ iftIntArray *iftGFLIMMergeKernelScales(iftIntArray **kernel_maps, int nscales,
     return merged_map;
 }
 
-
+/**
+ * @fn iftGFLIMComputeNodeMap
+ * @brief Compute a mapping from the nodes of one superpixel image (spx_img0) to the nodes of another superpixel image (spx_imgi).
+ * 
+ * @param spx_imgi The superpixel image whose nodes will be mapped to the nodes of spx_img0. 
+ * @param spx_img0 The superpixel image whose nodes will be used as reference for the mapping.
+ * @return int* An array of size equal to the maximum label in spx_img0.
+ */
 int *iftGFLIMComputeNodeMap(iftImage *spx_imgi, iftImage *spx_img0){
     /*
     Compute a mapping from the nodes of spx_img0 to the nodes of spx_imgi.
@@ -4331,6 +4394,16 @@ int *iftGFLIMComputeNodeMap(iftImage *spx_imgi, iftImage *spx_img0){
     return node_map;
 }
 
+/**
+ * @fn iftGFLIMSkipConnection
+ * @brief Compute the skip connection for a given layer of the GFLIM architecture.
+ * 
+ * @param arch The GFLIM architecture containing the information about the layers and their skip connections.
+ * @param layer The index of the layer for which the skip connection will be computed (starting from 1).
+ * @param kernels_file The name of the file containing the kernel maps for each scale/layer of the GFLIM.
+ * @param model_dir The directory containing the model files for each layer of the GFLIM.
+ * @param fs The file set containing the superpixel images for each layer of the GFLIM.
+ */
 void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file, 
                             char *model_dir, iftFileSet *fs)
 {
@@ -4632,6 +4705,20 @@ void iftGFLIMSkipConnection(iftGFLIMArch *arch, int layer, char *kernels_file,
     iftFree(finer_layers);
 }
 
+/**
+ * @fn iftGFLIMSkipConnectionBatch
+ * @brief Compute the skip connection for a given layer of the GFLIM architecture for a batch of input graphs and label images.
+ * 
+ * @param input The array of input graphs for the batch.
+ * @param label_imgs The array of label images for the batch.
+ * @param fs The file set containing the superpixel images for each layer of the GFLIM.
+ * @param first The index of the first graph in the batch.
+ * @param last The index of the last graph in the batch.
+ * @param layer The index of the layer for which the skip connection will be computed (starting from 1).
+ * @param arch The GFLIM architecture containing the information about the layers and their skip connections.
+ * @param kernels_file The name of the file containing the kernel maps for each scale/layer of the GFLIM.
+ * @param model_dir The directory containing the model files for each layer of the GFLIM.
+ */
 void iftGFLIMSkipConnectionBatch(iftGFLIMGraphArray *input, iftImageArray *label_imgs,
                             iftFileSet *fs, int first, int last, int layer, 
                             iftGFLIMArch *arch, char *kernels_file, 

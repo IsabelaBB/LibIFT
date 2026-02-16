@@ -84,7 +84,6 @@ void iftGFLIMUpdateGraphMarkers(iftLabeledSet *S,
                                         iftImage *label_img, 
                                         iftImage *label_img0);
 void iftGFLIMUpdateMarkersFromPrecomputedGraphs(iftLabeledSet **T,
-                                        iftGFLIMLayer layer,
                                         iftImage *label_img,
                                         iftImage *label_img0);
 // ============ CONVERT FROM SEEDS/GRAPH TO DATASET ============ //

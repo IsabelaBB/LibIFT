@@ -67,7 +67,6 @@ void iftGFLIMRelabelConnectedComponentsInPlace(iftGFLIMGraph *graph,
 iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
         iftLabeledSet *S,
         int kernel_size,
-        iftGFLIMGraphAttention attention_opt,
         iftGFLIMAggregation aggregation_opt);
         
 iftDataSet *iftGFLIMExtractLabelDataSetV3(iftGFLIMGraph *graph,
