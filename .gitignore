@@ -45,4 +45,7 @@ baselines/
 Results/
 Scripts/
 *.code-workspace
-
+#Datasets/intestinal-parasites
+#Datasets/cells2
+#Datasets/cells_dataset
+#Datasets/schisto
