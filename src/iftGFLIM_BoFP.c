@@ -61,12 +61,12 @@ iftGFLIMStrideType iftGFLIMGetStrideType(const char *name)
 }
 
 /**
- * @fn iftGLFLIMGetDecoderType
+ * @fn iftGFLIMGetDecoderType
  * @brief Get the decoder type from a string.
  * @param name The name of the decoder type.
  * @return a iftGFLIMDecoderType. @see iftGFLIMDecoderType.
  */
-iftGFLIMDecoderType iftGLFLIMGetDecoderType(const char *name)
+iftGFLIMDecoderType iftGFLIMGetDecoderType(const char *name)
 {
     if (strcmp(name, "tristate") == 0)
         return IFT_GFLIM_TRISTATE_DECODER;
@@ -82,6 +82,92 @@ iftGFLIMDecoderType iftGLFLIMGetDecoderType(const char *name)
         return IFT_GFLIM_MEAN_DECODER;
     iftError("Invalid decoder type: %s. The options are tristate, hybrid, graph-adaptive, and gaussian", __func__, name);
     return IFT_GFLIM_TRISTATE_DECODER;
+}
+
+char *iftGFLIMDecoderToString(iftGFLIMDecoderType decoder)
+{
+    char *decoder_name = iftAllocCharArray(20);
+    switch (decoder)
+    {
+    case IFT_GFLIM_TRISTATE_DECODER:
+        sprintf(decoder_name, "tristate");
+        break;
+
+    case IFT_GFLIM_HYBRID_DECODER:
+        sprintf(decoder_name, "hybrid");
+        break;
+
+    case IFT_GFLIM_GRAPHADAPTIVE_DECODER:
+        sprintf(decoder_name, "graph-adaptive");
+        break;
+
+    case IFT_GFLIM_GAUSSIAN_DECODER:
+        sprintf(decoder_name, "gaussian");
+        break;
+
+    case IFT_GFLIM_TEST_DECODER:
+        sprintf(decoder_name, "test");
+        break;
+
+    case IFT_GFLIM_MEAN_DECODER:
+        sprintf(decoder_name, "mean");
+        break;
+
+    default:
+        iftError("Invalid decoder type: %d", __func__, decoder);
+        return NULL;
+    }
+    return decoder_name;
+}
+
+/**
+ * \brief Returns a list of iftGFLIMDecoderType from a comma separated string.
+ */
+iftGFLIMDecoderType *SplitDecoderList(char *str, int *nvalues)
+{
+    *nvalues = 100;
+    iftGFLIMDecoderType *values = (iftGFLIMDecoderType *)iftAlloc(*nvalues, sizeof(iftGFLIMDecoderType));
+    char *token = strtok(str, ",");
+    int i = 0;
+    while (token != NULL && i < *nvalues)
+    {
+        if(i == *nvalues)
+        {
+            *nvalues += 100;
+            values = (iftGFLIMDecoderType *)iftRealloc(values, *nvalues * sizeof(iftGFLIMDecoderType));
+        }
+        values[i++] = iftGFLIMGetDecoderType(token);
+        token = strtok(NULL, ",");
+    }
+    if(i != *nvalues)
+        values = (iftGFLIMDecoderType *)iftRealloc(values, i * sizeof(iftGFLIMDecoderType));
+    *nvalues = i;
+    return values;
+}
+
+/**
+ * \brief Returns a list of integers from a comma separated string.
+ */
+int *SplitIntList(char *str, int *nvalues)
+{
+    *nvalues = 100;
+    int *values = (int *)iftAlloc(*nvalues, sizeof(int));
+    char *token = strtok(str, ",");
+    int i = 0;
+    while (token != NULL && i < *nvalues)
+    {
+        if(i == *nvalues)
+        {
+            *nvalues += 100;
+            values = (int *)iftRealloc(values, *nvalues * sizeof(int));
+        }
+        values[i++] = atoi(token);
+        token = strtok(NULL, ",");
+    }
+    if(i != *nvalues)
+        values = (int *)iftRealloc(values, i * sizeof(int));
+    *nvalues = i;
+    return values;
 }
 
 /**
@@ -736,14 +822,12 @@ void iftGFLIMUpdateMarkersFromPrecomputedGraphs(iftLabeledSet **T,
  * @param S The set of graph seeds.
  * @param kernel_size The kernel size for the feature extraction.
  * @param most_similar If true, the most similar neighbors are selected. Otherwise, the most dissimilar neighbors are selected.
- * @param attention_opt The attention option to compute the features. @see iftGFLIMGraphAttention.
  * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
  * @return The dataset with the features extracted from the graph nodes.
  */
 iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
                                          iftLabeledSet *S,
                                          int kernel_size,
-                                         iftGFLIMGraphAttention attention_opt,
                                          iftGFLIMAggregation aggregation_opt)
 {
 #ifdef IFT_DEBUG
@@ -783,7 +867,7 @@ iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
         if (Z->sample[s].truelabel > Z->nclasses)
             Z->nclasses = Z->sample[s].truelabel;
 
-        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(seed->elem, graph, kernel_neighbors, 1, true, attention_opt);
+        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(seed->elem, graph, kernel_neighbors, 1, true);
         double *feature_vector = iftGFLIMGraphAggregateFeatures(seed->elem, neighbors, graph, kernel_size, aggregation_opt);
 
         for (int i = 0; i < tensor_size; i++)
@@ -881,7 +965,6 @@ iftDataSet *iftGFLIMExtractMarkerDataSetV3(iftGFLIMGraph *graph,
  * @param S The set of graph seeds.
  * @param kernel_size The kernel size for the feature extraction.
  * @param nclusters_per_marker The number of cluster centers per marker.
- * @param attention_opt The attention option. @see iftGFLIMGraphAttention.
  * @param dimReduction The dimensionality reduction option. @see iftGFLIMDimReductionType.
  * @param ncomponents The number of components/dimensions for the dimensionality reduction.
  * @param aggregation_opt The aggregation option. @see iftGFLIMAggregation.
@@ -892,7 +975,6 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph,
                                             iftLabeledSet *S,
                                             int kernel_size,
                                             int nclusters_per_marker,
-                                            iftGFLIMGraphAttention attention_opt,
                                             iftGFLIMDimReductionType dimReduction, int ncomponents,
                                             iftGFLIMAggregation aggregation_opt)
 {
@@ -944,9 +1026,8 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph,
         }
     }
 
-    //printf("Extracting features from markers...\n");
     // extract neighbor information and compute the iftDataSet
-    iftDataSet *Z = iftGFLIMExtractMarkerDataSet(graph, S, kernel_size, attention_opt, aggregation_opt);
+    iftDataSet *Z = iftGFLIMExtractMarkerDataSet(graph, S, kernel_size, aggregation_opt);
 
     // not using it
     if (dimReduction == IFT_GFLIM_DIMREDUCTION_PCA)
@@ -961,7 +1042,6 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph,
     if (dimReduction == IFT_GFLIM_DIMREDUCTION_TSNE && (ncomponents < 2 || ncomponents > 3))
         iftError("Invalid number of components for tSNE: %d. The options are 2 or 3", __func__, ncomponents);
 
-    //printf("Estimating cluster centers per marker...\n");
     /* Estimate the given number of cluster centers per marker */
     for (int c = 1; c <= Z->nclasses; c++)
     {

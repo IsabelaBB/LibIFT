@@ -108,7 +108,7 @@ typedef enum {
     IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_RELSIZE_HARALICK,     // concatenate the mean color with (superpixel size / neighborhood size) and with haralick features
     IFT_FLIMGRAPH_FEATURE_SUM_MULT_RELSIZE_CONCAT_HARALICK, // sum of color multiplied by 1 + (superpixel size / image size) and concatenated with haralick features
     IFT_FLIMGRAPH_FEATURE_SUM_CONCAT_HARALICK,              // concatenated sum of color with haralick features
-    IFT_FLIMGRAPH_FEATURE_RBD,                               // RBD descriptor 
+    //IFT_FLIMGRAPH_FEATURE_RBD,                              // RBD descriptor 
     IFT_FLIMGRAPH_FEATURE_MEAN_CONCAT_STD_SIZE              // concatenate the mean color with standard deviation of color and superpixel size
 } iftGFLIMGraphNodeFeature;
 
@@ -236,11 +236,9 @@ iftMatrix * iftGFLIMGraphAttentionClassDominance_v2(iftMatrix *H, iftGFLIMGraph 
 iftMatrix * iftGFLIMGraphAttentionClassDominance(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels);
 iftMatrix *iftGFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftGFLIMGraph *graph, int *kernel_labels);
 
-double *iftGFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftGFLIMGraph *graph, iftGFLIMGraphAttention *attention_opt);
-
 /* --------------------- FLIMGraph neighbor features ----------------------------- */
 iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index, iftGFLIMGraph *graph, int k,
-                           int dilation, bool most_similar, iftGFLIMGraphAttention attention_opt);
+                           int dilation, bool most_similar);
 double *iftGFLIMGraphAggregateFeatures(int p, 
     iftIntArray *neighbors, 
     iftGFLIMGraph *graph,

@@ -7,7 +7,7 @@
 - BLAS + LAPACK
 - OpenMP
 
-## Build, compile, and install
+## Build, compile, and install the IFT Library
 
 ```shell
 mkdir build; cd build; cmake ..; make; make install;
@@ -25,40 +25,4 @@ The following files are required to create a model:
 
 ### Scripts
 
-[Scripts_GFLIM](Scripts_GFLIM) provide bash scripts to train a model using GFLIM and GFLIM-BoFP and extract features from a trained model. These scripts require the GFLIM and GFLIM-BoFP files.
-
-#### Train GFLIM
-
-- File: [train_gflim.sh](Scripts_GFLIM/train_gflim.sh)
-- Train example:
-
-```bash
-bash train_gflim.sh -a -s 1 -i 20000 ../Datasets/schisto/image-splits2d ../Datasets/schisto/stroke_markers SUM DISF arch1_noStride.json 3
-```
-
-#### Extract features from GFLIM model
-
-- File: [extract_gflim.sh](Scripts_GFLIM/extract_gflim.sh)
-- Extract features example:
-
-```bash
-bash extract_gflim.sh -s 1 -i 20000 ../Datasets/schisto/image-splits2d stroke_markers SUM DISF arch1_noStride.json 3 64
-```
-
-#### Train GFLIM-BoFP
-
-- File: [train_gflim-BoFP.sh](Scripts_GFLIM/train_gflim-BoFP.sh)
-- Train example:
-
-```bash
-bash train_gflim-BoFP.sh -a -s 1 -i 20000 ../Datasets/schisto/image-splits2d ../Datasets/schisto/stroke_markers SUM DISF arch1.json 3 graph-based hybrid CLASS_DOMINANCE CONCAT 
-```
-
-#### Extract features from GFLIM-BoFP model
-
-- File: [extract_gflim-BoFP.sh](Scripts_GFLIM/extract_gflim-BoFP.sh)
-- Extract features example:
-
-```bash
-bash extract_gflim-BoFP.sh -s 1 -i 20000 ../Datasets/schisto/image-splits2d stroke_markers SUM DISF arch1.json 3 graph-based hybrid CLASS_DOMINANCE CONCAT 64
-```
+[pyGFLIM](pyGFLIM) provide python scripts to train a model, extract features from a trained model, and more. These scripts require the GFLIM files.

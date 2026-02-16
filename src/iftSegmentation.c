@@ -4841,7 +4841,7 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
     // DISF with random sampling of initial seeds
     int *root_map;
     double *cost_map;
-    iftImage *label_img, *mask_img;
+    iftImage *label_img, *mask_img = NULL;
     iftDHeap *heap;
     iftSet *seeds;
     float decrement_rate = (float) num_superpixels / (float) num_init_seeds;
@@ -4894,10 +4894,8 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
       }
       iftDestroyBMap(&components_bitmap);
     }else 
-        components_roots[pred_mask->val[0]] = mask_img->n; // whole image is one component
-    
-    //printf("Number of components in the mask: %d\n", ncomponents);
-    //printf("Number of pixels in the mask: %d\n", nmask_pixels);
+        components_roots[0] = 1; // whole image is one component
+
     
     if(nmask_pixels < num_superpixels)
         iftError("Number of superpixels %d is greater than number of valid pixels in the mask %d.",
@@ -4911,7 +4909,6 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
 
     seeds = NULL;
     int remaining_seeds = num_init_seeds;
-    //printf("Seeds: ");
     for(int c = 0; c < ncomponents; c++){
         int *pixels = (int*)iftAlloc(mask_img->n, sizeof(int)); // armazena os pixels de um componente
         int ncomp_pixels = 0;
@@ -4925,7 +4922,6 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
         nseeds_comp = iftMax(1, nseeds_comp); // at least one seed per component
         nseeds_comp = iftMin(nseeds_comp, remaining_seeds);
         remaining_seeds -= nseeds_comp;
-        //printf("Component %d: size=%d, seeds=%d\n", c, ncomp_pixels, nseeds_comp);
         for(int p_index = 0; p_index < nseeds_comp; p_index++)
         {
           int r = rand() % ncomp_pixels;
@@ -4936,9 +4932,7 @@ iftImage *iftDISFRandom(iftMImage *mimg, iftAdjRel *A, int num_init_seeds, int n
           // swap selected pixel with the last in the array
           pixels[r] = pixels[ncomp_pixels - 1];
           ncomp_pixels--;
-          //printf("%d ", p);
         }
-        //printf("\n");
         free(pixels);
     }
     

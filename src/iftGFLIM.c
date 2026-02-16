@@ -321,7 +321,7 @@ iftDataSet *iftGFLIMExtractLabelDataSet(iftGFLIMGraph *graph,
 
         // find the k most similar neighbors
         iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, kernel_neighbors,
-                                                           1, true, attention_opt);
+                                                           1, true);
 
         // aggregate the features of the neighbors and fill missing neighbors with the values in band_filling
         double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors,
@@ -1210,7 +1210,7 @@ iftMImage *iftGFLIMGraphAtrousAveragePooling(iftGFLIMGraph *graph,
         // find the k most similar neighbors of the node p
         iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph,
                                                         pool_size, atrous_factor,
-                                                        true, IFT_FLIMGRAPH_ATTENTION_NONE);
+                                                        true);
 
         // aggregate the features of the neighbors 
         double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors,
@@ -1294,8 +1294,7 @@ iftMImage *iftGFLIMGraphAtrousMaxPooling(iftGFLIMGraph *graph,
     {
         // find the k most similar neighbors of the node p
         iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, pool_size,
-                                                           atrous_factor, true, 
-                                                           IFT_FLIMGRAPH_ATTENTION_NONE);
+                                                           atrous_factor, true);
 
         // aggregate the features of the neighbors 
         double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors,
@@ -1377,22 +1376,15 @@ iftMImage *iftGFLIMGraphSoftMaxPool(iftGFLIMGraph *graph,
     for (int p = 0; p < graph->num_nodes; p++)
     {
         iftIntArray *neighbors = NULL;
-        /*if(pool_size > 0)
+        neighbors = iftCreateIntArray(graph->nodes[p].numNeighbors + 1);
+        iftSet *neigh = graph->nodes[p].adj;
+        int idx = 0;
+        neighbors->val[idx++] = p; // include self
+        while (neigh != NULL)
         {
-            // find the k most similar neighbors of the node p
-            neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, pool_size,
-                                                           atrous_factor, true, 
-                                                           IFT_FLIMGRAPH_ATTENTION_NONE);
-        }else{*/
-            neighbors = iftCreateIntArray(graph->nodes[p].numNeighbors+1);
-            iftSet *neigh = graph->nodes[p].adj;
-            int idx = 0;
-            neighbors->val[idx++] = p; // include self
-            while(neigh != NULL){
-                neighbors->val[idx++] = neigh->elem;
-                neigh = neigh->next;
-            }
-        //}
+            neighbors->val[idx++] = neigh->elem;
+            neigh = neigh->next;
+        }
 
         // aggregate the features of the neighbors
         double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors,
@@ -1412,7 +1404,6 @@ iftMImage *iftGFLIMGraphSoftMaxPool(iftGFLIMGraph *graph,
         }
 
         float sigma = (float)pool_size / 10.0f;
-        //printf("Sigma: %f\n", sigma);
 
         for (int i = 0, j = 0; i < neighbors->n; i++)
         {
@@ -1422,7 +1413,6 @@ iftMImage *iftGFLIMGraphSoftMaxPool(iftGFLIMGraph *graph,
         
         for (int b = 0; b < graph->num_feats; b++)
         {
-            //pool->val[p][b] = -log(expf((float)graph->nodes[p].feats[b] / (max_feat[b] + 1e-5)) / (sum_exp[b] + 1e-5));
             pool->val[p][b] = expf((float)graph->nodes[p].feats[b] / (max_feat[b] * sigma + 1e-5)) / (sum_exp[b] + 1e-5);
         }
         

@@ -34,15 +34,14 @@
 # folders
 bin/
 build/
-lib/
+lib/lib.a
 Scripts_GFLIM/schisto
 Datasets/
 Results/
 .vscode/
 demo/Qt
 demo/Cassification/
-Datasets_server/
 baselines/
-Results_server/
 Results/
+Scripts/
 

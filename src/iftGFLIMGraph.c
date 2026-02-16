@@ -2956,8 +2956,7 @@ iftMatrix *iftGFLIMConstructGraphRelation(iftImage *orig_img,
     for(int p = 0; p < graph->num_nodes; p++)
     {
         iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, num_neighbors, 
-                                                                    1, true, 
-                                                                    IFT_FLIMGRAPH_ATTENTION_NONE);
+                                                                    1, true);
         for(int n = 0; n < neighbors->n; n++)
             iftMatrixElem(neighbors_matrix, n, p) = neighbors->val[n];
         iftDestroyIntArray(&neighbors);
@@ -4223,75 +4222,6 @@ iftMatrix *iftGFLIMGraphAttentionClassDominancePower2(iftMatrix *H, iftGFLIMGrap
     return attention_vals;
 }
 
-/**
- * @fn iftGFLIMGraphGetAttentionValues
- * @brief Compute the attention values for the nodes in `neighbors`
- * @param neighbors: indexes of the neighbors
- * @param graph: graph with node relations and features
- * @param attention_opt: attention option
- * @return double*: attention values for the neighbors
- */
-double *iftGFLIMGraphGetAttentionValues(iftIntArray *neighbors, iftGFLIMGraph *graph, iftGFLIMGraphAttention *attention_opt)
-{
-    double *attention_vals = NULL;
-
-    switch (*attention_opt)
-    {
-    case IFT_FLIMGRAPH_ATTENTION_NONE:
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE:
-        attention_vals = iftGFLIMGraphAttentionRelNodeSize(graph, neighbors);
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_NODE_SIZE:
-        attention_vals = iftGFLIMGraphAttentionNodeSize(graph, neighbors);
-        break;
-
-    /*case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;*/
-
-    case IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE:
-        attention_vals = iftGFLIMGraphAttentionNodeSize(graph, neighbors);
-        // double *attention_vals_simil = iftGFLIMGraphAttentionNeighborSimilarity(graph, neighbors);
-        /*for(int j = 0; j < neighbors->n; j++)
-            attention_vals[j] += attention_vals_simil[j];
-        iftFree(attention_vals_simil);*/
-        iftWarning("Attention partially implemented.", __func__);
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_TEST:
-        /*attention_opt = IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIMIL;
-        attention_vals = iftGFLIMGraphAttentionNeighborSimilarity(graph, neighbors);*/
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_POWER2:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_CLASS_DOMINANCE_SOFTMAX_NEIGHB:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        break;
-
-    case IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY:
-        attention_vals = iftGFLIMGraphAttentionCosineSimilarity(graph, neighbors);
-        break;
-
-    default:
-        *attention_opt = IFT_FLIMGRAPH_ATTENTION_NONE;
-        iftWarning("Attention option not implemented. Using IFT_FLIMGRAPH_ATTENTION_NONE", __func__);
-        break;
-    }
-
-    return attention_vals;
-}
-
 /** @} */
 
 /* --------------------- GFLIMGraph Neighborhood features ----------------------------- */
@@ -4391,49 +4321,39 @@ void iftGetNeighborsGFLIMGraph(iftGFLIMGraph *graph, int *roots, int num_roots,
  */
 iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index,
                                        iftGFLIMGraph *graph, int k,
-                                       int dilation, bool most_similar, 
-                                       iftGFLIMGraphAttention attention_opt)
+                                       int dilation, bool most_similar)
 {
     if(graph == NULL)
         iftError("Graph is NULL", __func__);
     if(graph->num_nodes < 1)
         iftError("Graph has no nodes: %d", __func__, graph->num_nodes);
 
-    //printf("Getting %d neighbors for node %d with dilation %d (most_similar=%d)\n", k, node_index, dilation, most_similar);
     double *dissimilarity = (double *)malloc(graph->num_nodes * sizeof(double));
-    //printf("Number of nodes: %d\n", graph->num_nodes);
     iftIntArray *neighbors = iftCreateIntArray(k);
-    //printf("Neighbors array created with size %d\n", k);
-
+    
     for(int i = 0; i < graph->num_nodes; i++)
         dissimilarity[i] = IFT_INFINITY_DBL_NEG;
-    //printf("Dissimilarity array initialized\n");
-
+    
     // MaxHeap para armazenar até k vizinhos mais similares.
     // Se a quantidade de vizinhos for maior que k, remove o menos similar
     // do heap (que está no topo) usando "pop" e verifica quem é o mais similar
     // para nova inserção.
     iftDHeap *auxiliaryHeap = iftCreateDHeap(graph->num_nodes, dissimilarity);
-    //printf("Auxiliary heap created\n");
     iftDHeap *heap = iftCreateDHeap(graph->num_nodes, dissimilarity);
-    //printf("Heap created\n");
     if (most_similar)
         auxiliaryHeap->removal_policy = MAXVALUE;
     else
         heap->removal_policy = MAXVALUE;
-    //printf("Heaps removal policy set\n");
-
+    
     if(node_index < 0 || node_index >= graph->num_nodes)
         iftError("Node index out of bounds: %d", __func__, node_index);
 
-    //printf("  Initializing dissimilarity for node %d\n", node_index);
     dissimilarity[node_index] = 0.0;
     iftInsertDHeap(auxiliaryHeap, node_index);
     iftRemoveDHeap(auxiliaryHeap);
     neighbors->val[0] = node_index;
     neighbors->n = 1;
     iftInsertDHeap(heap, node_index);
-    //printf("  Starting neighbor search loop\n");
 
     int skips_performed = 1;
     int roots[k];
@@ -4441,11 +4361,9 @@ iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index,
     roots[0] = node_index;
     int i = 1; // number of values in root
 
-    //printf("  Starting neighbor search loop\n");
     while (neighbors->n < k)
     {
         int miss_neighbors = k - neighbors->n;
-        //printf("    Getting up to %d neighbors (skips performed: %d)\n", miss_neighbors, skips_performed);
         iftGetNeighborsGFLIMGraph(graph, roots, i,
                                  miss_neighbors,
                                  dissimilarity,
@@ -4458,7 +4376,6 @@ iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index,
 
         i = 0;
         int found_neighbors = auxiliaryHeap->last + 1;
-        //printf("    Found %d neighbors\n", found_neighbors);
         // adiciona os k vizinhos selecionados (no auxiliaryHeap) em um minHeap
         while (!iftEmptyDHeap(auxiliaryHeap))
         {
@@ -4466,54 +4383,33 @@ iftIntArray *iftFLIMGraphGetKNeighborsAggregation(int node_index,
             if (skips_performed == dilation)
             {
                 roots[i] = id;
-                //printf("      Adding neighbor %d to roots for next iteration\n", id);
                 iftInsertDHeap(heap, id);
                 i++;
             }
         }
         neighbors->n += found_neighbors;
-        //printf("    Total neighbors found: %ld\n", neighbors->n);
         if (skips_performed != dilation)
             skips_performed++;
         else
             skips_performed = 1;
     }
 
-    //printf("  Finalizing neighbor selection\n");
     i = 0;
     while (i < neighbors->n)
     {
         neighbors->val[i] = iftRemoveDHeap(heap);
-        //printf("    Neighbor %d: %d\n", i, neighbors->val[i]);
         i++;
     }
     while(i < k){
         neighbors->val[i] = node_index;
-        //printf("    Neighbor %d: %d (filled)\n", i, neighbors->val[i]);
         i++;
     }
     neighbors->n = k;
     
-    //printf("  Cleaning up\n");
     free(dissimilarity);
     iftDestroyDHeap(&auxiliaryHeap);
     iftDestroyDHeap(&heap);
-    
-    //printf("Applying attention mechanism: %d\n", attention_opt);
-    if (attention_opt == IFT_FLIMGRAPH_ATTENTION_NODE_RELSIZE ||
-        attention_opt == IFT_FLIMGRAPH_ATTENTION_NODE_SIZE ||
-        attention_opt == IFT_FLIMGRAPH_ATTENTION_NEIGHB_SIZE ||
-        attention_opt == IFT_FLIMGRAPH_ATTENTION_COSINE_SIMILARITY)
-    {
-        double *attention_vals = iftGFLIMGraphGetAttentionValues(neighbors, graph, &attention_opt);
-        for (int i = 0; i < neighbors->n; i++)
-            neighbors->val[i] *= attention_vals[i];
-        
-        if (attention_vals != NULL)
-            iftFree(attention_vals);
-    }
 
-    //printf("Finished getting neighbors for node %d\n", node_index);
     return neighbors;
 }
 
@@ -4733,7 +4629,7 @@ iftMatrix *iftGFLIMGraphToNeighborhoodFeatureMatrix(iftGFLIMGraph *graph,
     //printf("iftGFLIMGraphToNeighborhoodFeatureMatrix \n");
     for (int p = 0; p < graph->num_nodes; p++)
     {
-        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, num_adj, 1, true, attention_opt);
+        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, num_adj, 1, true);
 
         double *feature_vector = iftGFLIMGraphAggregateFeatures(p, neighbors, graph, num_adj, aggregation_opt);        
 
@@ -4764,7 +4660,7 @@ iftMatrix *iftGFLIMGraphToNeighborhoodMatrix(iftGFLIMGraph *graph, int num_adj)
 
     for (int p = 0; p < graph->num_nodes; p++)
     {
-        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, num_adj, 1, true, IFT_FLIMGRAPH_ATTENTION_NONE);
+        iftIntArray *neighbors = iftFLIMGraphGetKNeighborsAggregation(p, graph, num_adj, 1, true);
 
         for (int b = 0; b < num_adj; b++)
                 iftMatrixElem(matrix, b, p) = (float)neighbors->val[b];

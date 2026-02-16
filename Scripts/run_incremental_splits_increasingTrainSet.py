@@ -96,10 +96,10 @@ class Model():
         # create image seeds with all superpixels
         markers_folder = f"{self.model_dir}/img_seeds"
         os.makedirs(markers_folder, exist_ok=True)
-        run_script(f"python3 {IFT_dir}/Scripts/CreateSeedsFromAllPix_TrainSet.py \
+        run_script(f"python3 {IFT_dir}/demo/GFLIM/CreateSeedsFromAllPix.py \
             {train_path} \
             {markers_folder} \
-            --mask_dir {self.dataset_path}/masks")
+            --use_mask 1")
 
         # create initial graph seeds
         if self.kernel_neighbors == "color": 
@@ -112,7 +112,7 @@ class Model():
                 {self.model_dir} \
                 {markers_folder} \
                 {self.n_kernels} {self.kernel_size} \
-                {self.attention} {self.aggregation_opt}")
+                {self.aggregation_opt}")
 
     def train_gflim(self):
         

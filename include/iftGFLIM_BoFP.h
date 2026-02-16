@@ -61,7 +61,10 @@ int iftGFLIMNumberOfTruelabels(int *truelabels, int n);
 
 // ============ FUNCTIONS TO VALIDATE TYPES ============ //
 iftGFLIMStrideType iftGFLIMGetStrideType(const char *name);
-iftGFLIMDecoderType iftGLFLIMGetDecoderType(const char *name);
+iftGFLIMDecoderType iftGFLIMGetDecoderType(const char *name);
+char *iftGFLIMDecoderToString(iftGFLIMDecoderType decoder);
+iftGFLIMDecoderType *SplitDecoderList(char *str, int *nvalues);
+int *SplitIntList(char *str, int *nvalues);
 iftGFLIMDimReductionType iftGLFLIMGetDimReductionType(const char *name);
 
 // ============ FUNCTIONS TO READ AND SAVE MODEL FILES ============ //
@@ -89,14 +92,12 @@ iftLabeledSet *iftGFLIMSelectClusterCenters(iftGFLIMGraph *graph,
                                             iftLabeledSet *S, 
                                             int kernel_size, 
                                             int nclusters_per_marker, 
-                                            iftGFLIMGraphAttention attention_opt,
                                             iftGFLIMDimReductionType dimReduction, 
                                             int ncomponents,
                                             iftGFLIMAggregation aggregation_opt);
 iftDataSet *iftGFLIMExtractMarkerDataSet(iftGFLIMGraph *graph,
                                               iftLabeledSet *S,
                                               int kernel_size,
-                                              iftGFLIMGraphAttention attention_opt,
                                               iftGFLIMAggregation aggregation_opt);
 iftLabeledSet *iftGFLIMSelectClusterCentersV3(iftGFLIMGraph *graph,
                                             iftLabeledSet *S,
